@@ -38,8 +38,13 @@ function questionsListByProduct($conn, int $productId, int $limit = 5, int $offs
     $stmt = $conn->prepare(
         "SELECT q.*, u.nome AS user_nome, u.avatar AS user_avatar
          FROM product_questions q
-         LEFT JOIN users u ON u.id = q.user_id
+                 INNER JOIN products p ON p.id = q.product_id
+                 INNER JOIN users seller ON seller.id = p.vendedor_id
+                 INNER JOIN users u ON u.id = q.user_id
          WHERE q.product_id = ? AND q.status = 'ativo'
+                     AND q.criado_em >= COALESCE(p.criado_em, q.criado_em)
+                     AND q.criado_em >= COALESCE(seller.criado_em, q.criado_em)
+                     AND q.criado_em >= COALESCE(u.criado_em, q.criado_em)
          ORDER BY q.criado_em DESC
          LIMIT ? OFFSET ?"
     );
@@ -54,10 +59,34 @@ function questionsListByProduct($conn, int $productId, int $limit = 5, int $offs
 function questionsCountByProduct($conn, int $productId): int
 {
     questionsEnsureTable($conn);
-    $stmt = $conn->prepare("SELECT COUNT(*) total FROM product_questions WHERE product_id = ? AND status = 'ativo'");
+    $stmt = $conn->prepare(
+        "SELECT COUNT(*) total
+         FROM product_questions q
+         INNER JOIN products p ON p.id = q.product_id
+         INNER JOIN users seller ON seller.id = p.vendedor_id
+         INNER JOIN users u ON u.id = q.user_id
+         WHERE q.product_id = ? AND q.status = 'ativo'
+           AND q.criado_em >= COALESCE(p.criado_em, q.criado_em)
+           AND q.criado_em >= COALESCE(seller.criado_em, q.criado_em)
+           AND q.criado_em >= COALESCE(u.criado_em, q.criado_em)"
+    );
     $stmt->bind_param('i', $productId);
     $stmt->execute();
     return (int)($stmt->get_result()->fetch_assoc()['total'] ?? 0);
+}
+
+function questionsValidJoinSql(): string
+{
+    return "INNER JOIN products p ON p.id = q.product_id
+            INNER JOIN users seller ON seller.id = p.vendedor_id
+            INNER JOIN users asker ON asker.id = q.user_id";
+}
+
+function questionsValidWhereSql(): string
+{
+    return "q.criado_em >= COALESCE(p.criado_em, q.criado_em)
+            AND q.criado_em >= COALESCE(seller.criado_em, q.criado_em)
+            AND q.criado_em >= COALESCE(asker.criado_em, q.criado_em)";
 }
 
 /**
@@ -66,6 +95,13 @@ function questionsCountByProduct($conn, int $productId): int
 function questionsAsk($conn, int $productId, int $userId, string $pergunta): array
 {
     questionsEnsureTable($conn);
+    if ($productId <= 0 || $userId <= 0) return [false, 'Produto ou usuário inválido.'];
+
+    $pStmt = $conn->prepare("SELECT p.id FROM products p INNER JOIN users seller ON seller.id = p.vendedor_id WHERE p.id = ? LIMIT 1");
+    $pStmt->bind_param('i', $productId);
+    $pStmt->execute();
+    if (!$pStmt->get_result()->fetch_assoc()) return [false, 'Produto não encontrado.'];
+
     $pergunta = trim($pergunta);
     if ($pergunta === '') return [false, 'A pergunta não pode estar vazia.'];
     if (mb_strlen($pergunta) > 1000) return [false, 'Pergunta muito longa (máximo 1000 caracteres).'];
@@ -178,7 +214,7 @@ function questionsTimeAgo(string $datetime): string
 function questionsListByVendor($conn, int $vendorId, array $filters = [], int $page = 1, int $pp = 10): array
 {
     questionsEnsureTable($conn);
-    $where  = 'p.vendedor_id = ?';
+    $where  = 'p.vendedor_id = ? AND ' . questionsValidWhereSql();
     $params = [$vendorId];
     $types  = 'i';
 
@@ -208,7 +244,7 @@ function questionsListByVendor($conn, int $vendorId, array $filters = [], int $p
     }
 
     // Count
-    $countSql = "SELECT COUNT(*) total FROM product_questions q LEFT JOIN products p ON p.id = q.product_id WHERE $where";
+    $countSql = "SELECT COUNT(*) total FROM product_questions q " . questionsValidJoinSql() . " WHERE $where";
     $countStmt = $conn->prepare($countSql);
     if ($types && $params) {
         $countStmt->bind_param($types, ...$params);
@@ -223,7 +259,9 @@ function questionsListByVendor($conn, int $vendorId, array $filters = [], int $p
 
     $sql = "SELECT q.*, p.nome AS produto_nome, p.imagem AS produto_imagem, u.nome AS user_nome_full, u.avatar AS user_avatar
             FROM product_questions q
-            LEFT JOIN products p ON p.id = q.product_id
+            INNER JOIN products p ON p.id = q.product_id
+            INNER JOIN users seller ON seller.id = p.vendedor_id
+            INNER JOIN users asker ON asker.id = q.user_id
             LEFT JOIN users u ON u.id = q.user_id
             WHERE $where
             ORDER BY q.resposta IS NULL DESC, q.criado_em DESC
@@ -255,7 +293,11 @@ function questionsUnansweredCount($conn, int $vendorId): int
 {
     questionsEnsureTable($conn);
     $stmt = $conn->prepare(
-        "SELECT COUNT(*) total FROM product_questions q LEFT JOIN products p ON p.id = q.product_id WHERE p.vendedor_id = ? AND q.resposta IS NULL AND q.status = 'ativo'"
+                "SELECT COUNT(*) total
+                 FROM product_questions q
+                 " . questionsValidJoinSql() . "
+                 WHERE p.vendedor_id = ? AND q.resposta IS NULL AND q.status = 'ativo'
+                     AND " . questionsValidWhereSql()
     );
     $stmt->bind_param('i', $vendorId);
     $stmt->execute();
@@ -270,7 +312,7 @@ function questionsUnansweredCount($conn, int $vendorId): int
 function questionsListByUser($conn, int $userId, array $filters = [], int $page = 1, int $pp = 10): array
 {
     questionsEnsureTable($conn);
-    $where  = 'q.user_id = ?';
+    $where  = 'q.user_id = ? AND ' . questionsValidWhereSql();
     $params = [$userId];
     $types  = 'i';
 
@@ -294,7 +336,7 @@ function questionsListByUser($conn, int $userId, array $filters = [], int $page 
     $where .= " AND q.status = 'ativo'";
 
     // Count
-    $countSql = "SELECT COUNT(*) total FROM product_questions q LEFT JOIN products p ON p.id = q.product_id WHERE $where";
+    $countSql = "SELECT COUNT(*) total FROM product_questions q " . questionsValidJoinSql() . " WHERE $where";
     $countStmt = $conn->prepare($countSql);
     if ($types && $params) {
         $countStmt->bind_param($types, ...$params);
@@ -310,7 +352,9 @@ function questionsListByUser($conn, int $userId, array $filters = [], int $page 
     $sql = "SELECT q.*, p.nome AS produto_nome, p.imagem AS produto_imagem,
                    u_resp.nome AS respondido_por_nome
             FROM product_questions q
-            LEFT JOIN products p ON p.id = q.product_id
+            INNER JOIN products p ON p.id = q.product_id
+            INNER JOIN users seller ON seller.id = p.vendedor_id
+            INNER JOIN users asker ON asker.id = q.user_id
             LEFT JOIN users u_resp ON u_resp.id = q.respondido_por
             WHERE $where
             ORDER BY q.criado_em DESC
@@ -342,7 +386,11 @@ function questionsAnsweredCountByUser($conn, int $userId): int
 {
     questionsEnsureTable($conn);
     $stmt = $conn->prepare(
-        "SELECT COUNT(*) total FROM product_questions WHERE user_id = ? AND resposta IS NOT NULL AND status = 'ativo'"
+                "SELECT COUNT(*) total
+                 FROM product_questions q
+                 " . questionsValidJoinSql() . "
+                 WHERE q.user_id = ? AND q.resposta IS NOT NULL AND q.status = 'ativo'
+                     AND " . questionsValidWhereSql()
     );
     $stmt->bind_param('i', $userId);
     $stmt->execute();
@@ -358,7 +406,11 @@ function questionsTotalByUser($conn, int $userId): int
 {
     questionsEnsureTable($conn);
     $stmt = $conn->prepare(
-        "SELECT COUNT(*) total FROM product_questions WHERE user_id = ? AND status = 'ativo'"
+                "SELECT COUNT(*) total
+                 FROM product_questions q
+                 " . questionsValidJoinSql() . "
+                 WHERE q.user_id = ? AND q.status = 'ativo'
+                     AND " . questionsValidWhereSql()
     );
     $stmt->bind_param('i', $userId);
     $stmt->execute();
