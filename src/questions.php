@@ -143,6 +143,7 @@ function questionsTimeAgo(string $datetime): string
 
         $tz = new \DateTimeZone('America/Sao_Paulo');
         $date = new \DateTime($datetime, $tz);
+        $date->setTimezone($tz);
         $now = new \DateTime('now', $tz);
         $seconds = $now->getTimestamp() - $date->getTimestamp();
 

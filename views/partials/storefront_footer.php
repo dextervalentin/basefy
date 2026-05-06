@@ -14,11 +14,11 @@ $_ftLoggedIn = !empty($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
                 <div class="flex items-center gap-2">
                     <a href="https://www.instagram.com/basefy.io" target="_blank" rel="noopener noreferrer" aria-label="Instagram da Basefy" title="Instagram"
                        class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-greenx/40 hover:text-greenx hover:bg-greenx/[0.06] transition-all">
-                        <i data-lucide="instagram" class="w-4 h-4"></i>
+                        <span class="h-4 w-4 bg-current" style="-webkit-mask:url('https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/instagram.svg') center/contain no-repeat;mask:url('https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/instagram.svg') center/contain no-repeat;"></span>
                     </a>
                     <a href="https://wa.me/554796709178" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp da Basefy" title="WhatsApp"
                        class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-greenx/40 hover:text-greenx hover:bg-greenx/[0.06] transition-all">
-                        <i data-lucide="message-circle" class="w-4 h-4"></i>
+                        <span class="h-4 w-4 bg-current" style="-webkit-mask:url('https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/whatsapp.svg') center/contain no-repeat;mask:url('https://cdn.jsdelivr.net/npm/simple-icons@v13/icons/whatsapp.svg') center/contain no-repeat;"></span>
                     </a>
                 </div>
             </div>

@@ -113,6 +113,7 @@ function decidirVenda($conn, int $vendaId, int $adminId, string $acao, string $m
     // to avoid UPSERTs inside the PG transaction (which taint it on failure)
     $preRules = escrowRules($conn);
     $preAdminReceiver = intval(escrowResolveAdminReceiver($conn));
+    sellerLevelsEnsure($conn);
 
     $conn->begin_transaction();
     try {
