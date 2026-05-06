@@ -75,6 +75,8 @@ switch ($action) {
         foreach ($questions as &$_q) {
             $rawAvatar = trim((string)($_q['user_avatar'] ?? ''));
             $_q['user_avatar_url'] = $rawAvatar !== '' ? mediaResolveUrl($rawAvatar) : '';
+            $_q['criado_em_label'] = questionsTimeAgo((string)($_q['criado_em'] ?? ''));
+            $_q['respondido_em_label'] = !empty($_q['respondido_em']) ? questionsTimeAgo((string)$_q['respondido_em']) : '';
         }
         unset($_q);
 

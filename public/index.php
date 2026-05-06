@@ -37,7 +37,7 @@ $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'
 ));
-$homeCategorias = array_slice($categorias, 0, 5);
+$homeCategorias = $categorias;
 
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 $homeFeaturedCategory = null;
@@ -215,7 +215,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     </h1>
 
                     <p class="hero-copy mt-5 text-zinc-400" style="font-family:Gotham,Montserrat,sans-serif;font-weight:325;letter-spacing:0;max-width: 39ch;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-                        Contas, gift cards e muito mais. Pix instantâneo mais liberação só após confirmação.
+                        Contas, serviços e muito mais. Pagamento via escrow, liberado só após confirmação da entrega.
                     </p>
 
                     <div class="hero-actions mt-7 flex flex-wrap items-center gap-3">
@@ -302,29 +302,27 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
             <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver todas <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
-        <?php
-            $catIcons = ['gamepad-2','swords','crown','gem','box','tag','music','film','book-open','cpu','palette','globe'];
-        ?>
-        <div class="flex gap-2.5 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:gap-5 sm:overflow-visible">
+        <div class="flex flex-nowrap gap-2.5 sm:gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0">
             <?php foreach ($homeCategorias as $i => $cat):
-                $icon = $catIcons[$i % count($catIcons)];
                 $catImg = trim((string)($cat['imagem'] ?? ''));
                 $catImgUrl = ($catImg !== '' && $catImg !== 'https://placehold.co/1200x800/111827/9ca3af?text=Produto') ? sfImageUrl($catImg) : '';
             ?>
             <a href="<?= sfCategoryUrl($cat) ?>"
-               class="cat-card group relative flex flex-col items-center justify-end text-center rounded-2xl border border-white/[0.06] bg-blackx2 overflow-hidden hover:border-greenx/30 transition-all duration-500 animate-fade-in stagger-<?= min($i + 1, 6) ?> min-w-[140px] sm:min-w-0 snap-start <?= $catImgUrl ? 'aspect-[4/3]' : 'py-6 px-3 sm:py-8 sm:px-4' ?>">
+               class="cat-card group relative flex flex-col items-center justify-end text-center rounded-2xl border border-white/[0.06] bg-blackx2 overflow-hidden hover:border-greenx/30 transition-all duration-500 animate-fade-in stagger-<?= min($i + 1, 6) ?> min-w-[132px] sm:min-w-[150px] lg:min-w-[144px] xl:min-w-[156px] h-[108px] sm:h-[122px] snap-start">
                 <?php if ($catImgUrl): ?>
                 <img src="<?= htmlspecialchars($catImgUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-110 transition-all duration-700" loading="lazy">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/20"></div>
                 <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-t from-greenx/20 via-transparent to-transparent"></div>
-                <div class="relative z-10 w-full pb-5 px-4">
-                    <span class="inline-block px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-sm sm:text-base font-bold text-white keep-white group-hover:bg-greenx/90 group-hover:border-greenx/50 transition-all duration-300 cat-name-pill"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></span>
+                <div class="relative z-10 w-full px-3 pb-3">
+                    <span class="inline-block max-w-full px-2.5 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-[12px] sm:text-sm font-bold text-white keep-white group-hover:bg-greenx/90 group-hover:border-greenx/50 transition-all duration-300 cat-name-pill line-clamp-2 leading-tight"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></span>
                 </div>
                 <?php else: ?>
-                <div class="w-14 h-14 rounded-2xl bg-greenx/10 border border-greenx/20 flex items-center justify-center mb-4 group-hover:bg-greenx/20 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                    <i data-lucide="<?= $icon ?>" class="w-6 h-6 text-greenx"></i>
+                <div class="absolute inset-0 bg-gradient-to-br from-greenx/16 via-purple-500/10 to-fuchsia-500/10"></div>
+                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-t from-greenx/15 via-transparent to-transparent"></div>
+                <div class="relative z-10 w-full px-3 py-4 flex flex-col items-center justify-center h-full">
+                    <p class="text-[12px] sm:text-sm font-bold group-hover:text-greenx transition-colors line-clamp-2 leading-tight"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></p>
+                    <span class="mt-1 text-[10px] text-zinc-500">Explorar</span>
                 </div>
-                <p class="text-sm font-bold group-hover:text-greenx transition-colors line-clamp-2 leading-tight"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></p>
                 <?php endif; ?>
             </a>
             <?php endforeach; ?>

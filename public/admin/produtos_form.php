@@ -57,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dataEntrega = trim((string)($_POST['data_entrega'] ?? '')) !== '' ? (string)$_POST['data_entrega'] : null;
     $customSlug = trim((string)($_POST['slug'] ?? ''));
     $variantes = trim((string)($_POST['variantes'] ?? '')) !== '' ? (string)$_POST['variantes'] : null;
+    $productFeeOverrideEnabled = !empty($_POST['product_fee_override_enabled']);
+    $productFeePercent = trim((string)($_POST['product_fee_percent'] ?? '')) !== '' ? (float)str_replace(',', '.', (string)$_POST['product_fee_percent']) : null;
 
     [$ok, $msg] = salvarProduto(
         $conn, $idPost,
@@ -66,7 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         (string)($_POST['descricao'] ?? ''),
         $preco, $imagemFinal,
         $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $customSlug, $variantes,
-        isset($_POST['destaque'])
+        isset($_POST['destaque']),
+        $productFeeOverrideEnabled,
+        $productFeePercent
     );
 
     if ($ok) {
@@ -138,6 +142,8 @@ $variantesAtual = $produto ? (string)($produto['variantes'] ?? '[]') : '[]';
 if (!$variantesAtual || $variantesAtual === '') $variantesAtual = '[]';
 $prazoAtual = $produto['prazo_entrega_dias'] ?? '';
 $dataEntregaAtual = $produto['data_entrega'] ?? '';
+$productFeeOverrideAtual = !empty($produto['product_fee_override_enabled']);
+$productFeePercentAtual = $produto['product_fee_percent'] ?? '';
 ?>
 
 <!-- Quill.js CDN (100% free, MIT license) -->
@@ -265,6 +271,19 @@ $dataEntregaAtual = $produto['data_entrega'] ?? '';
                         <span class="block text-xs text-zinc-500 mt-0.5">Produtos destacados alimentam a seção Em destaque; se nenhum estiver marcado, a home usa os mais recentes.</span>
                     </span>
                 </label>
+                <div class="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-4">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" name="product_fee_override_enabled" value="1" <?= $productFeeOverrideAtual ? 'checked' : '' ?> class="mt-1 h-4 w-4 rounded border-blackx3 accent-amber-500">
+                        <span>
+                            <span class="block text-sm font-semibold text-zinc-200">Taxa personalizada deste produto</span>
+                            <span class="block text-xs text-zinc-500 mt-0.5">Quando ativa, substitui a taxa personalizada do vendedor e os níveis globais somente neste produto.</span>
+                        </span>
+                    </label>
+                    <div class="mt-3 max-w-xs">
+                        <label class="block text-xs mb-1.5 text-zinc-500 font-medium">Taxa da plataforma (%)</label>
+                        <input type="number" name="product_fee_percent" min="0" max="100" step="0.01" value="<?= htmlspecialchars($productFeePercentAtual !== '' && $productFeePercentAtual !== null ? number_format((float)$productFeePercentAtual, 2, '.', '') : '') ?>" class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-amber-400 outline-none transition-colors" placeholder="Ex: 12.99">
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div x-show="tipo !== 'dinamico'" x-transition>
                         <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Valor (R$)</label>

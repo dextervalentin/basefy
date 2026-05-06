@@ -11,6 +11,16 @@ $_ftLoggedIn = !empty($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
                 <p class="text-sm text-zinc-500 leading-relaxed">
                     Marketplace digital com pagamento via PIX, carteira integrada e moderação segura.
                 </p>
+                <div class="flex items-center gap-2">
+                    <a href="https://www.instagram.com/basefy.io" target="_blank" rel="noopener noreferrer" aria-label="Instagram da Basefy" title="Instagram"
+                       class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-greenx/40 hover:text-greenx hover:bg-greenx/[0.06] transition-all">
+                        <i data-lucide="instagram" class="w-4 h-4"></i>
+                    </a>
+                    <a href="https://wa.me/554796709178" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp da Basefy" title="WhatsApp"
+                       class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-greenx/40 hover:text-greenx hover:bg-greenx/[0.06] transition-all">
+                        <i data-lucide="message-circle" class="w-4 h-4"></i>
+                    </a>
+                </div>
             </div>
 
             <!-- Acesso Rápido -->
@@ -63,7 +73,7 @@ $_ftLoggedIn = !empty($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
         </div>
 
         <div class="mt-10 pt-6 border-t border-white/[0.06] flex items-center justify-center">
-            <p class="text-xs text-zinc-600">&copy; <?= date('Y') ?> MercadoAdmin. Todos os direitos reservados.</p>
+            <p class="text-xs text-zinc-600">&copy; <?= date('Y') ?> Basefy. Todos os direitos reservados.</p>
         </div>
     </div>
 </footer>

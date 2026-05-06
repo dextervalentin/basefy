@@ -116,7 +116,7 @@ function decidirVenda($conn, int $vendaId, int $adminId, string $acao, string $m
 
     $conn->begin_transaction();
     try {
-        $sql = "SELECT oi.id, oi.order_id, oi.subtotal, oi.quantidade, oi.preco_unit, oi.moderation_status,
+        $sql = "SELECT oi.id, oi.order_id, oi.product_id, oi.subtotal, oi.quantidade, oi.preco_unit, oi.moderation_status,
                        oi.vendedor_id, o.user_id AS comprador_id
                 FROM order_items oi
                 INNER JOIN orders o ON o.id = oi.order_id
@@ -138,7 +138,7 @@ function decidirVenda($conn, int $vendaId, int $adminId, string $acao, string $m
             $orderId = (int)$row['order_id'];
 
             // Use seller-level-based fee calculation
-            $feeInfo    = sellerFeeCalc($conn, $uid, $gross);
+            $feeInfo    = sellerFeeCalc($conn, $uid, $gross, (int)$row['product_id']);
             $feePercent = $feeInfo['total_fee_percent'];
             $feeAmount  = $feeInfo['total_fee_amount'];
             $netAmount  = $feeInfo['net_amount'];

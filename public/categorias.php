@@ -151,13 +151,11 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 'from-orange-600/40 to-orange-900/40',
                 'from-pink-600/40 to-pink-900/40',
             ];
-            $catIcons = ['gamepad-2','swords','trophy','crown','star','box','zap','flame','shield','gem','target','rocket','cpu','monitor','headphones','music'];
             foreach ($categorias as $ci => $cat):
                 $catCount = $catCounts[(int)$cat['id']] ?? 0;
                 $catCountLabel = $catCount !== 1 ? 'produtos' : 'produto';
                 $catLink = sfCategoryUrl($cat);
                 $grad = $catGradients[$ci % count($catGradients)];
-                $icon = $catIcons[$ci % count($catIcons)];
             ?>
             <a href="<?= $catLink ?>"
                class="group relative bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden hover:border-greenx/30 transition-all animate-fade-in-up stagger-<?= min($ci + 1, 8) ?>">
@@ -166,9 +164,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <img src="<?= htmlspecialchars($catImg, ENT_QUOTES, 'UTF-8') ?>" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-300">
                     <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                     <?php endif; ?>
-                    <div class="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/[0.08] backdrop-blur-sm border border-white/[0.1] flex items-center justify-center group-hover:bg-white/[0.12] transition-colors">
-                        <i data-lucide="<?= $icon ?>" class="w-7 h-7 sm:w-8 sm:h-8 text-white/90"></i>
-                    </div>
                     <div class="relative z-10 text-center">
                         <p class="font-bold text-sm sm:text-base text-white line-clamp-2"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></p>
                         <p class="text-[10px] sm:text-xs text-white/60 mt-0.5"><?= $catCount ?> <?= $catCountLabel ?></p>

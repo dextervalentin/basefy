@@ -40,6 +40,7 @@ function sellerLevelsEnsure($conn): void
     }
 
     sellerFeeOverrideEnsureColumns($conn);
+    sellerProductFeeOverrideEnsureColumns($conn);
 }
 
 function sellerFeeOverrideEnsureColumns($conn): void
@@ -133,6 +134,59 @@ function sellerFeeOverrideSave($conn, int $vendorId, bool $enabled, ?float $perc
     $stUp->execute();
 
     return [true, $enabled ? 'Taxa personalizada salva para o vendedor.' : 'Vendedor voltou a herdar as taxas globais.'];
+}
+
+function sellerProductFeeOverrideEnsureColumns($conn): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+
+    try {
+        $st = $conn->prepare("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'products' AND column_name IN ('product_fee_override_enabled', 'product_fee_percent')");
+        if (!$st) return;
+        $st->execute();
+        $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $found = [];
+        foreach ($rows as $row) {
+            $name = (string)($row['column_name'] ?? '');
+            if ($name !== '') $found[$name] = true;
+        }
+
+        if (!isset($found['product_fee_override_enabled'])) {
+            $conn->query('ALTER TABLE products ADD COLUMN IF NOT EXISTS product_fee_override_enabled BOOLEAN NOT NULL DEFAULT FALSE');
+        }
+        if (!isset($found['product_fee_percent'])) {
+            $conn->query('ALTER TABLE products ADD COLUMN IF NOT EXISTS product_fee_percent NUMERIC(5,2) DEFAULT NULL');
+        }
+    } catch (\Throwable $e) {
+        error_log('[SellerLevels] Falha ao garantir colunas de taxa por produto: ' . $e->getMessage());
+    }
+}
+
+function sellerProductFeeOverrideGet($conn, int $productId): array
+{
+    sellerProductFeeOverrideEnsureColumns($conn);
+
+    if ($productId <= 0) {
+        return ['enabled' => false, 'percent' => null];
+    }
+
+    $st = $conn->prepare('SELECT product_fee_override_enabled, product_fee_percent FROM products WHERE id = ? LIMIT 1');
+    if (!$st) {
+        return ['enabled' => false, 'percent' => null];
+    }
+    $st->bind_param('i', $productId);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc() ?: [];
+
+    $percent = $row['product_fee_percent'] ?? null;
+    $enabled = sellerBool($row['product_fee_override_enabled'] ?? false) && $percent !== null && $percent !== '';
+
+    return [
+        'enabled' => $enabled,
+        'percent' => $percent !== null && $percent !== '' ? max(0.0, min(100.0, (float)$percent)) : null,
+    ];
 }
 
 /**
@@ -249,9 +303,24 @@ function sellerLevelCalc($conn, int $vendorId): array
  *
  * @return array{fee_percent: float, lead_fee_percent: float, total_fee_percent: float, fee_amount: float, lead_fee_amount: float, total_fee_amount: float, net_amount: float, level: int, label: string}
  */
-function sellerFeeCalc($conn, int $vendorId, float $gross): array
+function sellerFeeCalc($conn, int $vendorId, float $gross, ?int $productId = null): array
 {
-    $info = sellerLevelCalc($conn, $vendorId);
+    $productOverride = $productId !== null && $productId > 0
+        ? sellerProductFeeOverrideGet($conn, $productId)
+        : ['enabled' => false, 'percent' => null];
+
+    if ($productOverride['enabled']) {
+        $feePct = (float)$productOverride['percent'];
+        $info = [
+            'level' => 0,
+            'label' => 'Personalizada por produto',
+            'fee_percent' => $feePct,
+            'lead_fee_percent' => 0.0,
+            'total_fee_percent' => $feePct,
+        ];
+    } else {
+        $info = sellerLevelCalc($conn, $vendorId);
+    }
 
     $levelFeeAmount = round($gross * ($info['fee_percent'] / 100), 2);
     $leadFeeAmount  = round($gross * ($info['lead_fee_percent'] / 100), 2);

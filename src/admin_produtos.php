@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/media.php';
 require_once __DIR__ . '/storefront.php';
+require_once __DIR__ . '/seller_levels.php';
 
 function colunaExiste($conn, string $tabela, string $coluna): bool
 {
@@ -119,7 +120,7 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
     ];
 }
 
-function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $destaque = false): array
+function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $destaque = false, bool $productFeeOverrideEnabled = false, ?float $productFeePercent = null): array
 {
     if ($vendedorId <= 0 || $categoriaId <= 0 || trim($nome) === '') return [false, 'Dados inválidos.'];
     if (!in_array($tipo, ['produto', 'servico', 'dinamico'], true)) $tipo = 'produto';
@@ -162,24 +163,32 @@ function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string
     // Auto-migrate: ensure variantes column exists
     try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS variantes TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
     _sfEnsureSlugColumn($conn);
+    sellerProductFeeOverrideEnsureColumns($conn);
     $destaqueInt = $destaque ? 1 : 0;
+    $productFeeOverrideInt = $productFeeOverrideEnabled ? 1 : 0;
+    if ($productFeeOverrideEnabled) {
+        if ($productFeePercent === null) return [false, 'Informe a taxa personalizada do produto.'];
+        $productFeePercent = max(0.0, min(100.0, $productFeePercent));
+    } else {
+        $productFeePercent = null;
+    }
 
     if ($id > 0) {
         $slug = trim($customSlug) !== '' ? sfCreateUniqueSlug($conn, $customSlug, $id) : sfCreateUniqueSlug($conn, $nome, $id);
         if ($imagem) {
-            $st = $conn->prepare("UPDATE products SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?, imagem=?, tipo=?, quantidade=?, prazo_entrega_dias=?, data_entrega=?, slug=?, variantes=?, destaque=? WHERE id=?");
-            $st->bind_param('iissdssiisssii', $vendedorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $id);
+            $st = $conn->prepare("UPDATE products SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?, imagem=?, tipo=?, quantidade=?, prazo_entrega_dias=?, data_entrega=?, slug=?, variantes=?, destaque=?, product_fee_override_enabled=?, product_fee_percent=? WHERE id=?");
+            $st->bind_param('iissdssiisssiidi', $vendedorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $productFeeOverrideInt, $productFeePercent, $id);
         } else {
-            $st = $conn->prepare("UPDATE products SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?, tipo=?, quantidade=?, prazo_entrega_dias=?, data_entrega=?, slug=?, variantes=?, destaque=? WHERE id=?");
-            $st->bind_param('iissdsiisssii', $vendedorId, $categoriaId, $nome, $descricao, $preco, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $id);
+            $st = $conn->prepare("UPDATE products SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?, tipo=?, quantidade=?, prazo_entrega_dias=?, data_entrega=?, slug=?, variantes=?, destaque=?, product_fee_override_enabled=?, product_fee_percent=? WHERE id=?");
+            $st->bind_param('iissdsiisssiidi', $vendedorId, $categoriaId, $nome, $descricao, $preco, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $productFeeOverrideInt, $productFeePercent, $id);
         }
         $st->execute();
         return [true, 'Produto atualizado.'];
     }
 
     $slug = trim($customSlug) !== '' ? sfCreateUniqueSlug($conn, $customSlug) : sfCreateUniqueSlug($conn, $nome);
-    $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, ativo, tipo, quantidade, prazo_entrega_dias, data_entrega, slug, variantes, destaque) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?,?)");
-    $st->bind_param('iissdssiisssi', $vendedorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt);
+    $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, ativo, tipo, quantidade, prazo_entrega_dias, data_entrega, slug, variantes, destaque, product_fee_override_enabled, product_fee_percent) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?)");
+    $st->bind_param('iissdssiisssiid', $vendedorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $productFeeOverrideInt, $productFeePercent);
     $st->execute();
     return [true, 'Produto criado.'];
 }

@@ -1266,7 +1266,7 @@ function questionsGoPage(page){
             }
             html += '</div><div class="flex-1 min-w-0">';
             html += '<div class="flex items-center gap-2 mb-1.5 flex-wrap"><span class="font-semibold text-sm text-purple-300">'+escH(qa.user_nome || 'Usuário')+'</span>';
-            if(qa.criado_em) html += '<span class="text-[10px] text-zinc-500">'+escH(qa.criado_em)+'</span>';
+            if(qa.criado_em || qa.criado_em_label) html += '<span class="text-[10px] text-zinc-500">'+escH(qa.criado_em_label || qa.criado_em)+'</span>';
             if(!qa.resposta) html += '<span class="ml-auto px-2 py-0.5 rounded-full bg-orange-500/15 border border-orange-400/30 text-orange-400 text-[9px] font-bold uppercase">Aguardando</span>';
             html += '</div>';
             html += '<div class="qa-bubble-question rounded-xl rounded-tl-sm bg-purple-500/8 border border-purple-500/15 px-3.5 py-2.5"><p class="text-sm leading-relaxed">'+escH(qa.pergunta)+'</p></div>';
@@ -1278,7 +1278,7 @@ function questionsGoPage(page){
                 html += '</div><div class="flex-1 min-w-0">';
                 html += '<div class="flex items-center gap-2 mb-1.5 flex-wrap"><span class="font-semibold text-sm text-greenx"><?= htmlspecialchars($vendorName) ?></span>';
                 html += '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-greenx text-white">Vendedor</span>';
-                if(qa.respondido_em) html += '<span class="text-[10px] text-zinc-500">'+escH(qa.respondido_em)+'</span>';
+                if(qa.respondido_em || qa.respondido_em_label) html += '<span class="text-[10px] text-zinc-500">'+escH(qa.respondido_em_label || qa.respondido_em)+'</span>';
                 html += '</div>';
                 html += '<div class="qa-bubble-answer rounded-xl rounded-tl-sm bg-greenx/8 border border-greenx/15 px-3.5 py-2.5"><p class="text-sm leading-relaxed text-zinc-300">'+escH(qa.resposta)+'</p></div>';
                 html += '</div></div>';

@@ -139,15 +139,35 @@ function questionsGetById($conn, int $id): ?array
 function questionsTimeAgo(string $datetime): string
 {
     try {
-        $diff = (new \DateTime())->diff(new \DateTime($datetime));
-        if ($diff->y > 0) return 'há ' . $diff->y . ($diff->y > 1 ? ' anos' : ' ano');
-        if ($diff->m > 0) return 'há ' . $diff->m . ($diff->m > 1 ? ' meses' : ' mês');
-        if ($diff->d > 0) return 'há ' . $diff->d . ($diff->d > 1 ? ' dias' : ' dia');
-        if ($diff->h > 0) return 'há ' . $diff->h . ($diff->h > 1 ? ' horas' : ' hora');
-        if ($diff->i > 0) return 'há ' . $diff->i . ($diff->i > 1 ? ' minutos' : ' minuto');
-        return 'agora';
+        if (trim($datetime) === '') return '';
+
+        $tz = new \DateTimeZone('America/Sao_Paulo');
+        $date = new \DateTime($datetime, $tz);
+        $now = new \DateTime('now', $tz);
+        $seconds = $now->getTimestamp() - $date->getTimestamp();
+
+        if ($seconds <= 0) return 'agora';
+        if ($seconds < 60) return 'agora';
+        if ($seconds < 3600) {
+            $minutes = (int)floor($seconds / 60);
+            return 'há ' . $minutes . ($minutes > 1 ? ' minutos' : ' minuto');
+        }
+        if ($seconds < 86400) {
+            $hours = (int)floor($seconds / 3600);
+            return 'há ' . $hours . ($hours > 1 ? ' horas' : ' hora');
+        }
+        if ($seconds < 604800) {
+            $days = (int)floor($seconds / 86400);
+            return 'há ' . $days . ($days > 1 ? ' dias' : ' dia');
+        }
+        if ($seconds < 2592000) {
+            $weeks = (int)floor($seconds / 604800);
+            return 'há ' . $weeks . ($weeks > 1 ? ' semanas' : ' semana');
+        }
+
+        return $date->format('d/m/Y H:i');
     } catch (\Throwable $e) {
-        return '';
+        return 'agora';
     }
 }
 
