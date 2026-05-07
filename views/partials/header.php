@@ -55,8 +55,8 @@ if ($_themeConn !== null) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title><?= htmlspecialchars($pageTitle ?? APP_NAME) ?></title>
   <meta name="description" content="Marketplace digital com pagamento via PIX e carteira integrada.">
-  <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/assets/img/logo123.png">
-  <link rel="apple-touch-icon" href="<?= BASE_PATH ?>/assets/img/logo123.png">
+  <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/assets/img/02.png">
+  <link rel="apple-touch-icon" href="<?= BASE_PATH ?>/assets/img/02.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">

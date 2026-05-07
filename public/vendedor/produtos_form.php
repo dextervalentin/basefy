@@ -197,6 +197,18 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
     </div>
     <?php endif; ?>
 
+    <div class="mb-4 rounded-2xl border border-amber-400/35 bg-amber-400/[0.08] px-4 py-4 text-amber-100 shadow-xl shadow-black/10">
+        <div class="flex gap-3">
+            <div class="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
+                <i data-lucide="shield-alert" class="h-5 w-5"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-amber-200">Contato externo não é permitido</h3>
+                <p class="mt-1 text-sm leading-relaxed text-amber-100/80">Não inclua WhatsApp, Instagram, Telegram, e-mail, telefone ou links externos no produto. Toda comunicação e entrega devem acontecer dentro da Basefy para manter o pagamento protegido.</p>
+            </div>
+        </div>
+    </div>
+
     <form method="post" enctype="multipart/form-data" class="space-y-5" id="produto-form">
         <?php if ($produto): ?><input type="hidden" name="id" value="<?= (int)$produto['id'] ?>"><?php endif; ?>
         <input type="hidden" name="form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
