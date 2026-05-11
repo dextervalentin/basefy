@@ -63,10 +63,10 @@ $homeFeaturedProducts = $homeFeaturedCategory
     ? sfListProducts($conn, ['limit' => 5, 'category_id' => (int)$homeFeaturedCategory['id']])
     : [];
 $topVendedores = sfListTopVendors($conn, 5);
-$homeBannerPcPath = __DIR__ . '/uploads/categories/BannerPC.png';
-$homeBannerMobilePath = __DIR__ . '/uploads/categories/Bannermobile.png';
-$homeBannerPcUrl = BASE_PATH . '/uploads/categories/BannerPC.png' . (is_file($homeBannerPcPath) ? '?v=' . filemtime($homeBannerPcPath) : '');
-$homeBannerMobileUrl = BASE_PATH . '/uploads/categories/Bannermobile.png' . (is_file($homeBannerMobilePath) ? '?v=' . filemtime($homeBannerMobilePath) : '');
+$homeBannerPcPath = __DIR__ . '/assets/img/home-banner-pc-20260511.png';
+$homeBannerMobilePath = __DIR__ . '/assets/img/home-banner-mobile-20260511.png';
+$homeBannerPcUrl = BASE_PATH . '/assets/img/home-banner-pc-20260511.png' . (is_file($homeBannerPcPath) ? '?v=' . filemtime($homeBannerPcPath) : '');
+$homeBannerMobileUrl = BASE_PATH . '/assets/img/home-banner-mobile-20260511.png' . (is_file($homeBannerMobilePath) ? '?v=' . filemtime($homeBannerMobilePath) : '');
 $cartCount  = sfCartCount();
 
 $currentPage = 'home';
