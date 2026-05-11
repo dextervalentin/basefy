@@ -56,7 +56,7 @@ include __DIR__.'/../../views/partials/vendor_layout_start.php';
         </thead>
         <tbody>
           <?php foreach ($itens as $p): ?>
-            <tr class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+            <tr id="vendor-prod-row-<?= (int)$p['id'] ?>" class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
               <td class="py-3 pr-3">#<?= (int)$p['id'] ?></td>
               <td class="py-3 pr-3">
                 <img
@@ -78,9 +78,14 @@ include __DIR__.'/../../views/partials/vendor_layout_start.php';
                 </span>
               </td>
               <td class="py-3">
-                <a href="<?= BASE_PATH ?>/vendedor/produtos_form?id=<?= (int)$p['id'] ?>" class="text-greenx hover:underline">
-                  Editar
-                </a>
+                <div class="flex items-center gap-2">
+                  <a href="<?= BASE_PATH ?>/vendedor/produtos_form?id=<?= (int)$p['id'] ?>" class="inline-flex items-center gap-1 rounded-lg bg-blackx border border-blackx3 hover:border-greenx px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white transition">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editar
+                  </a>
+                  <button type="button" class="js-vendor-prod-delete inline-flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-400/30 text-red-300 hover:bg-red-500/20 px-2.5 py-1.5 text-xs font-medium transition" title="Excluir produto" aria-label="Excluir produto" data-id="<?= (int)$p['id'] ?>">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -95,6 +100,62 @@ include __DIR__.'/../../views/partials/vendor_layout_start.php';
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  function vendorToast(message, type = 'success') {
+    let box = document.getElementById('vendor-toast');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'vendor-toast';
+      box.className = 'fixed top-8 right-4 z-[9999] px-4 py-2 rounded-lg border text-sm shadow-lg transition-opacity duration-200 opacity-0';
+      document.body.appendChild(box);
+    }
+
+    box.classList.remove('border-greenx/40','bg-greenx/10','text-greenx','border-red-500/40','bg-red-500/10','text-red-300');
+    box.classList.add(...(type === 'error' ? ['border-red-500/40','bg-red-500/10','text-red-300'] : ['border-greenx/40','bg-greenx/10','text-greenx']));
+    box.textContent = message;
+    box.style.opacity = '1';
+    clearTimeout(window.__vendorToastTimer);
+    window.__vendorToastTimer = setTimeout(() => { box.style.opacity = '0'; }, 2400);
+  }
+
+  document.querySelectorAll('.js-vendor-prod-delete').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = Number(btn.dataset.id || 0);
+      if (!id) return;
+      if (!confirm('Excluir este produto? A exclusão só será concluída se ele não estiver vinculado a pedidos.')) return;
+
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append('id', String(id));
+        fd.append('action', 'delete');
+
+        const res = await fetch('api_produto_action', {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        const raw = await res.text();
+        let data = {};
+        try { data = JSON.parse(raw); } catch { throw new Error('Resposta inválida do servidor.'); }
+        if (!res.ok || !data.ok) throw new Error(data.msg || 'Erro ao excluir produto.');
+
+        const row = document.getElementById('vendor-prod-row-' + id);
+        if (row) row.remove();
+        vendorToast(data.msg || 'Produto excluído com sucesso.', 'success');
+      } catch (e) {
+        vendorToast(e.message || 'Erro ao excluir produto.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>
 <?php
 
 include __DIR__ . '/../../views/partials/vendor_layout_end.php';

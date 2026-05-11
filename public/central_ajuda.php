@@ -165,7 +165,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     </div>
                     <p class="text-sm text-zinc-400 mb-2">
                         E-mail comercial para assuntos não relacionados ao suporte:<br>
-                        <a href="mailto:contato@mercadoadmin.com.br" class="text-greenx hover:underline font-medium">contato@mercadoadmin.com.br</a>
+                        <a href="mailto:contato@basefy.io" class="text-greenx hover:underline font-medium">contato@basefy.io</a>
                     </p>
                     <p class="text-xs text-zinc-500 bg-yellow-500/5 border border-yellow-500/10 rounded-lg px-3 py-2 mt-3">
                         E-mail exclusivo para tratativas comerciais, parcerias e semelhantes. Assuntos relacionados a suporte <strong>não</strong> serão respondidos.

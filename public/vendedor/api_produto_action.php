@@ -1,5 +1,4 @@
 <?php
-// filepath: c:\xampp\htdocs\mercado_admin\public\vendedor\api_produto_action.php
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/auth.php';
@@ -11,7 +10,7 @@ exigirVendedor();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['ok' => false, 'msg' => 'MÃ©todo nÃ£o permitido.']);
+    echo json_encode(['ok' => false, 'msg' => 'Método não permitido.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -20,16 +19,29 @@ $conn = $db->connect();
 
 $uid = (int)($_SESSION['user_id'] ?? 0);
 $id = (int)($_POST['id'] ?? 0);
-$ativo = (int)($_POST['ativo'] ?? -1);
+$action = (string)($_POST['action'] ?? $_POST['acao'] ?? 'toggle');
 
-if ($id <= 0 || !in_array($ativo, [0, 1], true)) {
-    echo json_encode(['ok' => false, 'msg' => 'ParÃ¢metros invÃ¡lidos.']);
+if ($id <= 0) {
+    echo json_encode(['ok' => false, 'msg' => 'Parâmetros inválidos.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-[$ok, $msg] = toggleMeuProdutoAtivo($conn, $uid, $id, $ativo);
-echo json_encode(['ok' => $ok, 'msg' => $msg, 'id' => $id, 'ativo' => $ativo]);
+if ($action === 'delete') {
+    [$ok, $msg] = excluirMeuProduto($conn, $uid, $id);
+    echo json_encode(['ok' => $ok, 'msg' => $msg, 'id' => $id], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
-// ...existing code...
-include __DIR__ . '/../../views/partials/vendor_layout_end.php';
-include __DIR__ . '/../../views/partials/footer.php';
+if ($action === 'toggle') {
+    $ativo = (int)($_POST['ativo'] ?? -1);
+    if (!in_array($ativo, [0, 1], true)) {
+        echo json_encode(['ok' => false, 'msg' => 'Parâmetros inválidos.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    [$ok, $msg] = toggleMeuProdutoAtivo($conn, $uid, $id);
+    echo json_encode(['ok' => $ok, 'msg' => $msg, 'id' => $id, 'ativo' => $ativo], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+echo json_encode(['ok' => false, 'msg' => 'Ação inválida.'], JSON_UNESCAPED_UNICODE);

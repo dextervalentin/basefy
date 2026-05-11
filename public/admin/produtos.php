@@ -194,6 +194,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                   <span class="js-knob inline-block h-4 w-4 rounded-full bg-white transition <?= $isAtivo ? 'translate-x-6' : 'translate-x-1' ?>"></span>
                 </button>
                 <button type="button" class="js-prod-delete inline-flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-400/30 text-red-300 hover:bg-red-500/20 px-2.5 py-1.5 text-xs font-medium transition"
+                  title="Excluir produto" aria-label="Excluir produto"
                   data-id="<?= (int)$row['id'] ?>">
                   <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                 </button>
@@ -292,6 +293,42 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         adminToast(data.msg || 'Status atualizado.', 'success');
       } catch (e) {
         adminToast(e.message || 'Erro ao atualizar status.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('.js-prod-delete').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = Number(btn.dataset.id || 0);
+      if (!id) return;
+      if (!confirm('Excluir este produto? Esta ação só será concluída se ele não estiver vinculado a pedidos.')) return;
+
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append('id', String(id));
+        fd.append('action', 'delete');
+
+        const res = await fetch('api_produto_action', {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        const raw = await res.text();
+        let data = {};
+        try { data = JSON.parse(raw); } catch { throw new Error('Resposta inválida do servidor.'); }
+
+        if (!res.ok || !data.ok) throw new Error(data.msg || 'Erro ao excluir produto.');
+
+        const row = document.getElementById('prod-row-' + id);
+        if (row) row.remove();
+        adminToast(data.msg || 'Produto excluído.', 'success');
+      } catch (e) {
+        adminToast(e.message || 'Erro ao excluir produto.', 'error');
       } finally {
         btn.disabled = false;
       }

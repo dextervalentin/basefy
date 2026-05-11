@@ -1229,6 +1229,57 @@ function sfVendorSalesCount($conn, int $vendorId): int
 }
 
 /**
+ * List featured sellers for the storefront ranking.
+ */
+function sfListTopVendors($conn, int $limit = 5): array
+{
+    $limit = max(1, min(10, $limit));
+    _sfBackfillVendorSlugs($conn);
+
+    $sql = "SELECT u.id, u.nome, u.avatar, u.slug,
+                   COALESCE(NULLIF(TRIM(sp.nome_loja), ''), u.nome) AS nome_loja,
+                   COALESCE(ps.produtos_ativos, 0) AS produtos_ativos,
+                   COALESCE(os.vendas_total, 0) AS vendas_total,
+                   COALESCE(os.volume_total, 0) AS volume_total
+            FROM users u
+            LEFT JOIN seller_profiles sp ON sp.user_id = u.id
+            LEFT JOIN (
+                SELECT vendedor_id, COUNT(*) AS produtos_ativos
+                FROM products
+                WHERE ativo = 1
+                GROUP BY vendedor_id
+            ) ps ON ps.vendedor_id = u.id
+            LEFT JOIN (
+                SELECT vendedor_id,
+                       COUNT(*) AS vendas_total,
+                       COALESCE(SUM(subtotal), 0) AS volume_total
+                FROM order_items
+                WHERE moderation_status = 'aprovada'
+                GROUP BY vendedor_id
+            ) os ON os.vendedor_id = u.id
+            WHERE u.ativo = 1
+                            AND (
+                                    u.role = 'vendedor'
+                                    OR u.is_vendedor = true
+                                    OR u.status_vendedor = 'aprovado'
+                                    OR COALESCE(ps.produtos_ativos, 0) > 0
+                                    OR COALESCE(os.vendas_total, 0) > 0
+                            )
+            ORDER BY COALESCE(os.vendas_total, 0) DESC,
+                     COALESCE(os.volume_total, 0) DESC,
+                     COALESCE(ps.produtos_ativos, 0) DESC,
+                     u.id DESC
+            LIMIT $limit";
+
+    try {
+        $rs = $conn->query($sql);
+        return $rs ? ($rs->fetch_all(MYSQLI_ASSOC) ?: []) : [];
+    } catch (\Throwable) {
+        return [];
+    }
+}
+
+/**
  * Avatar URL resolver for vendor.
  */
 function sfAvatarUrl(?string $raw): string
