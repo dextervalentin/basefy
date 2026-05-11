@@ -63,6 +63,10 @@ $homeFeaturedProducts = $homeFeaturedCategory
     ? sfListProducts($conn, ['limit' => 5, 'category_id' => (int)$homeFeaturedCategory['id']])
     : [];
 $topVendedores = sfListTopVendors($conn, 5);
+$homeBannerPcPath = __DIR__ . '/uploads/categories/BannerPC.png';
+$homeBannerMobilePath = __DIR__ . '/uploads/categories/Bannermobile.png';
+$homeBannerPcUrl = BASE_PATH . '/uploads/categories/BannerPC.png' . (is_file($homeBannerPcPath) ? '?v=' . filemtime($homeBannerPcPath) : '');
+$homeBannerMobileUrl = BASE_PATH . '/uploads/categories/Bannermobile.png' . (is_file($homeBannerMobilePath) ? '?v=' . filemtime($homeBannerMobilePath) : '');
 $cartCount  = sfCartCount();
 
 $currentPage = 'home';
@@ -181,12 +185,23 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 }
 
 .home-banner-frame {
-    aspect-ratio: 1080 / 420;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    display: block;
+    width: 100vw;
+    max-width: none;
+    margin-left: -50vw;
+    margin-right: -50vw;
 }
-@media (min-width: 640px) {
-    .home-banner-frame {
-        aspect-ratio: 1440 / 320;
-    }
+.home-banner-picture {
+    display: block;
+    width: 100%;
+}
+.home-banner-image {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 </style>
 
@@ -345,67 +360,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
     <?php if ($q === ''): ?>
     <!-- =========== HOME BANNER =========== -->
-    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <a href="<?= BASE_PATH ?>/categorias" class="home-banner-frame group relative block overflow-hidden rounded-2xl border border-white/[0.08] bg-blackx2 shadow-2xl shadow-purple-950/20">
-            <picture>
-                <source media="(max-width: 639px)" srcset="<?= BASE_PATH ?>/uploads/categories/Bannermobile.png">
-                <img src="<?= BASE_PATH ?>/uploads/categories/BannerPC.png" alt="" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.015]" loading="lazy">
+    <section class="py-6 sm:py-8">
+        <a href="<?= BASE_PATH ?>/categorias" class="home-banner-frame group overflow-hidden">
+            <picture class="home-banner-picture">
+                <source media="(max-width: 639px)" srcset="<?= htmlspecialchars($homeBannerMobileUrl, ENT_QUOTES, 'UTF-8') ?>">
+                <img src="<?= htmlspecialchars($homeBannerPcUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Banner promocional da Basefy" class="home-banner-image transition-transform duration-700 group-hover:scale-[1.01]" decoding="async" fetchpriority="high">
             </picture>
-            <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/[0.05]"></div>
         </a>
-    </section>
-    <?php endif; ?>
-
-    <?php if ($topVendedores && $q === ''): ?>
-    <!-- =========== RANKING DE VENDEDORES =========== -->
-    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div class="flex items-center justify-between mb-8 sm:mb-10">
-            <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="trophy" class="w-3 h-3"></i>
-                    Ranking
-                </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">Vendedores em destaque</h2>
-                <p class="text-sm text-zinc-500 mt-1">Top 5 lojas com melhor desempenho na Basefy</p>
-            </div>
-            <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Explorar lojas <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-            <?php foreach ($topVendedores as $i => $vendor):
-                $rank = $i + 1;
-                $vendorName = trim((string)($vendor['nome_loja'] ?? $vendor['nome'] ?? 'Vendedor'));
-                $salesTotal = (int)($vendor['vendas_total'] ?? 0);
-                $productTotal = (int)($vendor['produtos_ativos'] ?? 0);
-            ?>
-            <a href="<?= htmlspecialchars(sfVendorUrl($vendor), ENT_QUOTES, 'UTF-8') ?>" class="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.06]">
-                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" style="background:radial-gradient(420px 220px at 50% 0%, rgba(var(--t-accent-rgb),0.12), transparent 65%);"></div>
-                <div class="relative flex items-start justify-between gap-3">
-                    <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-xl <?= $rank === 1 ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-zinc-300 border border-white/[0.08]' ?> text-xs font-black">#<?= $rank ?></span>
-                    <?php if ($rank === 1): ?>
-                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-400/10 border border-amber-400/20 px-2 py-1 text-[10px] font-bold text-amber-300"><i data-lucide="crown" class="w-3 h-3"></i> Top</span>
-                    <?php endif; ?>
-                </div>
-                <div class="relative mt-5 flex items-center gap-3">
-                    <img src="<?= htmlspecialchars(sfAvatarUrl((string)($vendor['avatar'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" alt="" class="h-12 w-12 rounded-2xl border border-white/[0.08] object-cover bg-blackx" loading="lazy">
-                    <div class="min-w-0">
-                        <h3 class="truncate text-sm font-bold text-white group-hover:text-greenx transition-colors"><?= htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') ?></h3>
-                        <p class="mt-1 text-xs text-zinc-500">Vendedor verificado</p>
-                    </div>
-                </div>
-                <div class="relative mt-5 grid grid-cols-2 gap-2 text-center">
-                    <div class="rounded-xl border border-white/[0.06] bg-blackx/60 px-2 py-2">
-                        <p class="text-sm font-black text-greenx"><?= $salesTotal ?></p>
-                        <p class="text-[10px] text-zinc-500">vendas</p>
-                    </div>
-                    <div class="rounded-xl border border-white/[0.06] bg-blackx/60 px-2 py-2">
-                        <p class="text-sm font-black text-zinc-200"><?= $productTotal ?></p>
-                        <p class="text-[10px] text-zinc-500">produtos</p>
-                    </div>
-                </div>
-            </a>
-            <?php endforeach; ?>
-        </div>
     </section>
     <?php endif; ?>
 
@@ -562,6 +523,59 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         </div>
         <?php endif; ?>
     </section>
+
+    <?php if ($topVendedores && $q === ''): ?>
+    <!-- =========== RANKING DE VENDEDORES =========== -->
+    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <div class="flex items-center justify-between mb-8 sm:mb-10">
+            <div>
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
+                    <i data-lucide="trophy" class="w-3 h-3"></i>
+                    Ranking
+                </div>
+                <h2 class="text-2xl sm:text-3xl font-bold">Vendedores em destaque</h2>
+                <p class="text-sm text-zinc-500 mt-1">Top 5 lojas com melhor desempenho na Basefy</p>
+            </div>
+            <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Explorar lojas <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+            <?php foreach ($topVendedores as $i => $vendor):
+                $rank = $i + 1;
+                $vendorName = trim((string)($vendor['nome_loja'] ?? $vendor['nome'] ?? 'Vendedor'));
+                $salesTotal = (int)($vendor['vendas_total'] ?? 0);
+                $productTotal = (int)($vendor['produtos_ativos'] ?? 0);
+            ?>
+            <a href="<?= htmlspecialchars(sfVendorUrl($vendor), ENT_QUOTES, 'UTF-8') ?>" class="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.06]">
+                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" style="background:radial-gradient(420px 220px at 50% 0%, rgba(var(--t-accent-rgb),0.12), transparent 65%);"></div>
+                <div class="relative flex items-start justify-between gap-3">
+                    <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-xl <?= $rank === 1 ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-zinc-300 border border-white/[0.08]' ?> text-xs font-black">#<?= $rank ?></span>
+                    <?php if ($rank === 1): ?>
+                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-400/10 border border-amber-400/20 px-2 py-1 text-[10px] font-bold text-amber-300"><i data-lucide="crown" class="w-3 h-3"></i> Top</span>
+                    <?php endif; ?>
+                </div>
+                <div class="relative mt-5 flex items-center gap-3">
+                    <img src="<?= htmlspecialchars(sfAvatarUrl((string)($vendor['avatar'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" alt="" class="h-12 w-12 rounded-2xl border border-white/[0.08] object-cover bg-blackx" loading="lazy">
+                    <div class="min-w-0">
+                        <h3 class="truncate text-sm font-bold text-white group-hover:text-greenx transition-colors"><?= htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') ?></h3>
+                        <p class="mt-1 text-xs text-zinc-500">Vendedor verificado</p>
+                    </div>
+                </div>
+                <div class="relative mt-5 grid grid-cols-2 gap-2 text-center">
+                    <div class="rounded-xl border border-white/[0.06] bg-blackx/60 px-2 py-2">
+                        <p class="text-sm font-black text-greenx"><?= $salesTotal ?></p>
+                        <p class="text-[10px] text-zinc-500">vendas</p>
+                    </div>
+                    <div class="rounded-xl border border-white/[0.06] bg-blackx/60 px-2 py-2">
+                        <p class="text-sm font-black text-zinc-200"><?= $productTotal ?></p>
+                        <p class="text-[10px] text-zinc-500">produtos</p>
+                    </div>
+                </div>
+            </a>
+            <?php endforeach; ?>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <!-- =========== COMO FUNCIONA — Timeline flow =========== -->
     <?php if ($q === ''): ?>

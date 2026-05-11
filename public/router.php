@@ -33,25 +33,16 @@ if (in_array($method, ['GET', 'HEAD'], true) && str_contains($uri, '.php')) {
     }
 }
 
-$uri     = '/' . ltrim($uri, '/');
-$docRoot = __DIR__;
+$uri     = '/' . ltrim(rawurldecode($uri), '/');
+$docRoot = realpath(__DIR__) ?: __DIR__;
+$docRootPrefix = rtrim($docRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
 
 // --- Static asset pass-through ---
-$target = realpath($docRoot . $uri);
-if ($target !== false && str_starts_with($target, $docRoot) && is_file($target)) {
+$target = realpath($docRoot . DIRECTORY_SEPARATOR . ltrim($uri, '/'));
+if ($target !== false && str_starts_with($target, $docRootPrefix) && is_file($target)) {
     $ext = strtolower(pathinfo($target, PATHINFO_EXTENSION));
-    $mime = [
-        'css'  => 'text/css; charset=utf-8',
-        'js'   => 'application/javascript; charset=utf-8',
-        'json' => 'application/json; charset=utf-8',
-        'png'  => 'image/png',  'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-        'gif'  => 'image/gif',  'svg' => 'image/svg+xml',
-        'ico'  => 'image/x-icon', 'webp' => 'image/webp',
-    ];
     if ($ext !== 'php') {
-        if (isset($mime[$ext])) header('Content-Type: ' . $mime[$ext]);
-        readfile($target);
-        return true;
+        return false;
     }
     // Exact .php file hit (POST to API endpoints etc.)
     $_SERVER['SCRIPT_NAME'] = $uri;
