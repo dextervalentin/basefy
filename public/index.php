@@ -185,18 +185,16 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 }
 
 .home-banner-frame {
-    position: relative;
-    left: 50%;
-    right: 50%;
     display: block;
-    width: 100vw;
-    max-width: none;
-    margin-left: -50vw;
-    margin-right: -50vw;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 1.25rem;
 }
 .home-banner-picture {
     display: block;
     width: 100%;
+    overflow: hidden;
+    border-radius: inherit;
 }
 .home-banner-image {
     display: block;
@@ -358,18 +356,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     </section>
     <?php endif; ?>
 
-    <?php if ($q === ''): ?>
-    <!-- =========== HOME BANNER =========== -->
-    <section class="py-6 sm:py-8">
-        <a href="<?= BASE_PATH ?>/categorias" class="home-banner-frame group overflow-hidden">
-            <picture class="home-banner-picture">
-                <source media="(max-width: 639px)" srcset="<?= htmlspecialchars($homeBannerMobileUrl, ENT_QUOTES, 'UTF-8') ?>">
-                <img src="<?= htmlspecialchars($homeBannerPcUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Banner promocional da Basefy" class="home-banner-image transition-transform duration-700 group-hover:scale-[1.01]" decoding="async" fetchpriority="high">
-            </picture>
-        </a>
-    </section>
-    <?php endif; ?>
-
     <!-- =========== DESTAQUES POR CATEGORIA =========== -->
     <?php if ($homeFeaturedCategory && $homeFeaturedProducts && $q === ''): ?>
     <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
@@ -436,6 +422,18 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         <div class="mt-5 text-center sm:hidden">
             <a href="<?= sfCategoryUrl($homeFeaturedCategory) ?>" class="text-xs text-greenx hover:underline font-semibold inline-flex items-center gap-1">Ver categoria <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($q === ''): ?>
+    <!-- =========== HOME BANNER =========== -->
+    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <a href="<?= BASE_PATH ?>/categorias" class="home-banner-frame group border border-white/[0.06] bg-blackx2 shadow-lg shadow-black/20">
+            <picture class="home-banner-picture">
+                <source media="(max-width: 639px)" srcset="<?= htmlspecialchars($homeBannerMobileUrl, ENT_QUOTES, 'UTF-8') ?>">
+                <img src="<?= htmlspecialchars($homeBannerPcUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Banner promocional da Basefy" class="home-banner-image transition-transform duration-700 group-hover:scale-[1.01]" decoding="async" fetchpriority="high">
+            </picture>
+        </a>
     </section>
     <?php endif; ?>
 
