@@ -17,7 +17,7 @@ require_once $ROOT . '/src/auth.php';
 require_once $ROOT . '/src/config.php';
 require_once $ROOT . '/src/media.php';
 require_once $ROOT . '/src/storefront.php';
-require_once $ROOT . '/src/blackcat_api.php';
+require_once $ROOT . '/src/m5_api.php';
 
 if (!usuarioLogado()) {
     header('Location: ' . BASE_PATH . '/login');
@@ -54,7 +54,7 @@ $debugInfo   = '';
 try {
 
 /* ── Check for existing payment_transaction ── */
-$stTx = $conn->prepare("SELECT id, raw_response, status FROM payment_transactions WHERE provider='blackcat' AND order_id=? ORDER BY id DESC LIMIT 1");
+$stTx = $conn->prepare("SELECT id, raw_response, status FROM payment_transactions WHERE provider IN ('m5','blackcat') AND order_id=? ORDER BY id DESC LIMIT 1");
 $stTx->bind_param('i', $orderId);
 $stTx->execute();
 $existingTx = $stTx->get_result()->fetch_assoc();
@@ -66,7 +66,7 @@ if ($existingTx && !empty($existingTx['raw_response'])) {
     $b64 = (string)($pd['qrCodeBase64'] ?? '');
     if ($b64 !== '') {
         $qrCodeImage = str_starts_with($b64, 'data:') ? $b64 : ('data:image/png;base64,' . $b64);
-        $pixCode = (string)($pd['pixCode'] ?? $pd['qrCode'] ?? $pd['copyPaste'] ?? '');
+        $pixCode = (string)($pd['copyPaste'] ?? $pd['qrCode'] ?? $pd['pixCode'] ?? '');
     }
 }
 
@@ -82,29 +82,16 @@ if (!$alreadyPaid && $qrCodeImage === '') {
     $amountCentavos = (int)round(((float)$order['total']) * 100);
     $externalRef = 'order:' . $orderId;
 
-    $payload = [
-        'amount'        => $amountCentavos,
-        'currency'      => 'BRL',
-        'paymentMethod' => 'pix',
-        'items'         => [[
-            'title'     => 'Pedido #' . $orderId,
-            'unitPrice' => $amountCentavos,
-            'quantity'  => 1,
-            'tangible'  => false,
-        ]],
-        'customer' => [
-            'name'     => (string)$buyer['nome'],
-            'email'    => (string)$buyer['email'],
-            'phone'    => '11999999999',
-            'document' => ['number' => '00000000000', 'type' => 'cpf'],
-        ],
-        'pix'         => ['expiresInDays' => 1],
-        'postbackUrl' => APP_URL . '/webhooks/blackcat',
-        'externalRef' => $externalRef,
-        'metadata'    => 'Pedido #' . $orderId,
-    ];
+    // Webhook URL absoluto (a M5 só aceita http/https)
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') $scheme = 'https';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? parse_url(APP_URL, PHP_URL_HOST) ?? 'localhost');
+    $webhookUrl = $scheme . '://' . $host . BASE_PATH . '/webhooks/m5';
 
-    [$okApi, $resp] = blackcatCreatePixSale($payload);
+    $description = 'Pedido #' . $orderId . ' - Basefy';
+
+    // M5 exige UUID em external_id; não passamos — guardamos $externalRef internamente.
+    [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
 
     if ($okApi) {
         $data   = $resp['data'] ?? [];
@@ -115,7 +102,7 @@ if (!$alreadyPaid && $qrCodeImage === '') {
         // Simple INSERT — no nullable int columns to avoid PgCompat issues
         $ins = $conn->prepare("INSERT INTO payment_transactions
             (provider, order_id, user_id, external_ref, provider_transaction_id, status, payment_method, amount_centavos, raw_response)
-            VALUES ('blackcat', ?, ?, ?, ?, ?, 'pix', ?, ?)
+            VALUES ('m5', ?, ?, ?, ?, ?, 'pix', ?, ?)
             ON DUPLICATE KEY UPDATE
               status = VALUES(status),
               raw_response = VALUES(raw_response),
@@ -123,21 +110,19 @@ if (!$alreadyPaid && $qrCodeImage === '') {
         $ins->bind_param('iisssis', $orderId, $uid, $externalRef, $provId, $st, $amountCentavos, $rawJ);
         $ins->execute();
 
-        // Extract QR data — try multiple possible field names
+        // Extract QR data — M5 retorna paymentData.qrCode / qrCodeBase64 / copyPaste
         $pd  = (array)($data['paymentData'] ?? []);
         $b64 = (string)($pd['qrCodeBase64'] ?? '');
         if ($b64 !== '') {
             $qrCodeImage = str_starts_with($b64, 'data:') ? $b64 : ('data:image/png;base64,' . $b64);
-            $pixCode = (string)($pd['pixCode'] ?? $pd['qrCode'] ?? $pd['copyPaste'] ?? '');
+            $pixCode = (string)($pd['copyPaste'] ?? $pd['qrCode'] ?? $pd['pixCode'] ?? '');
         } else {
-            // API succeeded but no QR data — show diagnostic
             $pixError = 'API retornou sucesso mas sem dados de QR Code.';
             $debugInfo = htmlspecialchars(substr($rawJ, 0, 1000), ENT_QUOTES, 'UTF-8');
         }
     } else {
-        // API error — show everything
         $errMsg = (string)($resp['message'] ?? 'Erro desconhecido');
-        $pixError = 'Erro BlackCat: ' . $errMsg;
+        $pixError = 'Erro M5: ' . $errMsg;
         $debugInfo = htmlspecialchars(json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), ENT_QUOTES, 'UTF-8');
     }
 }
@@ -370,7 +355,7 @@ include $ROOT . '/views/partials/storefront_nav.php';
 
   // Poll
   pi=setInterval(function(){
-    fetch('<?= BASE_PATH ?>/api/blackcat_status?order_id='+OID,{credentials:'same-origin'})
+    fetch('<?= BASE_PATH ?>/api/m5_status?order_id='+OID,{credentials:'same-origin'})
       .then(function(r){return r.json()})
       .then(function(d){if(d.ok&&['pago','paid','enviado','entregue'].indexOf((d.orderStatus||'').toLowerCase())>=0)ok();})
       .catch(function(){});

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/blackcat_api.php';
+require_once __DIR__ . '/m5_api.php';
 require_once __DIR__ . '/notifications.php';
 
 /**
@@ -575,17 +576,54 @@ function walletSaqueImediatoAdmin($conn, int $adminUserId, float $valor, string 
             'description' => $observacao !== '' ? $observacao : 'Saque admin via painel',
         ];
 
-        [$okApi, $resp] = blackcatCreateWithdrawal($payload);
+        // ── M5 Open PIX ── (substitui BlackCat)
+        $amountCentavos = (int)round($valor * 100);
+        $description    = $observacao !== '' ? mb_substr($observacao, 0, 100) : 'Saque admin via painel';
+
+        // Webhook absoluto
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') $scheme = 'https';
+        $host = (string)($_SERVER['HTTP_HOST'] ?? parse_url(APP_URL, PHP_URL_HOST) ?? 'localhost');
+        $webhookUrl = $scheme . '://' . $host . BASE_PATH . '/webhooks/m5';
+
+        // Normalizar tipo da chave: nosso painel usa CPF/CNPJ/Email/Telefone/Aleatoria → M5 espera cpf/cnpj/email/phone/evp (ou omitir)
+        $tcLower = strtolower(trim($tipoChave));
+        $m5KeyType = match($tcLower) {
+            'cpf' => 'cpf',
+            'cnpj' => 'cnpj',
+            'email' => 'email',
+            'telefone', 'phone' => 'phone',
+            'aleatoria', 'aleatória', 'evp', 'chave aleatoria', 'chave aleatória' => 'evp',
+            default => '',
+        };
+        // Phone na M5 precisa apenas dos dígitos (E.164 é normalizado automaticamente)
+        $keyForM5 = $m5KeyType === 'phone' ? preg_replace('/\D+/', '', $pixKey) : $pixKey;
+
+        [$okApi, $confirmResp, $initiateResp] = m5TransferSend(
+            (string)$keyForM5,
+            $amountCentavos,
+            $description,
+            $webhookUrl,
+            $m5KeyType
+        );
+
         if (!$okApi) {
             $conn->rollback();
-            $msg = (string)($resp['message'] ?? 'Falha no saque via API');
-            return [false, $msg];
+            $msg = (string)($confirmResp['message'] ?? 'Falha no saque via API');
+            return [false, 'M5: ' . $msg];
         }
 
-        $apiData = $resp['data'] ?? [];
-        $apiId = (string)($apiData['id'] ?? '');
+        // M5 retorna { data: { pix_id, status: 'processing', ... } } no confirm
+        $apiData   = $confirmResp['data'] ?? [];
+        $apiId     = (string)($apiData['pix_id'] ?? $apiData['id'] ?? ($initiateResp['data']['id'] ?? ''));
         $apiStatus = strtolower((string)($apiData['status'] ?? 'processing'));
-        $obsFinal = trim($observacao . ' | blackcat_withdrawal_id=' . $apiId);
+        // Mapeia status M5 → status interno (apenas 'pago' será setado depois pelo webhook)
+        $internalStatus = match($apiStatus) {
+            'confirmed' => 'pago',
+            'error', 'failed', 'rejected', 'refused', 'denied', 'cancelled' => 'recusado',
+            default => 'processando',
+        };
+        $obsFinal = trim($observacao . ' | m5_pix_id=' . $apiId);
 
         $up = $conn->prepare('UPDATE users SET wallet_saldo = wallet_saldo - ? WHERE id = ?');
         $up->bind_param('di', $valor, $adminUserId);
@@ -594,7 +632,7 @@ function walletSaqueImediatoAdmin($conn, int $adminUserId, float $valor, string 
         $trxId = walletGerarTrxId();
         $tipoChave = trim($tipoChave);
         $ins = $conn->prepare('INSERT INTO wallet_withdrawals (user_id, valor, status, chave_pix, tipo_chave, observacao, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $ins->bind_param('idsssss', $adminUserId, $valor, $apiStatus, $pixKey, $tipoChave, $obsFinal, $trxId);
+        $ins->bind_param('idsssss', $adminUserId, $valor, $internalStatus, $pixKey, $tipoChave, $obsFinal, $trxId);
         $ins->execute();
         $withdrawalId = (int)$conn->insert_id;
 
