@@ -50,9 +50,10 @@ function walletCriarRecargaPix($conn, int $userId, float $valor): array
         return [false, 'Valor inválido.', 0];
     }
 
-    $externalRef = 'wallet_topup:' . $userId . ':' . time() . ':' . bin2hex(random_bytes(4));
+    $topupCode = bin2hex(random_bytes(4));
+    $externalRef = 'wallet_topup:' . $userId . ':' . time() . ':' . $topupCode;
     $webhookUrl  = rtrim(APP_URL, '/') . '/webhooks/m5';
-    $description = 'Recarga de carteira usuário #' . $userId . ' [' . $externalRef . ']';
+    $description = 'Wallet topup #' . $userId . ' ' . $topupCode;
 
     [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
     if (!$okApi) {

@@ -99,7 +99,7 @@ try {
         $tx = $stTx->get_result()->fetch_assoc();
         $stTx->close();
 
-        // Fallback: tentar achar por description "Pedido #N" ou "[wallet_topup:N:...]"
+        // Fallback: tentar achar por description "Pedido #N", "[wallet_topup:N:...]" ou "Wallet topup #N TOKEN"
         if (!$tx && $description !== '' && preg_match('/Pedido\s*#(\d+)/i', $description, $m)) {
             $orderRef = (int)$m[1];
             $stTx2 = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND order_id = ? ORDER BY id DESC LIMIT 1");
@@ -115,6 +115,16 @@ try {
             $stTx3->execute();
             $tx = $stTx3->get_result()->fetch_assoc();
             $stTx3->close();
+        }
+        if (!$tx && $description !== '' && preg_match('/Wallet topup #(\d+) ([a-f0-9]{8})/i', $description, $m)) {
+            $walletUserId = (int)$m[1];
+            $walletToken = strtolower($m[2]);
+            $likeRef = 'wallet_topup:' . $walletUserId . ':%:' . $walletToken;
+            $stTx4 = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND user_id = ? AND external_ref LIKE ? ORDER BY id DESC LIMIT 1");
+            $stTx4->bind_param('is', $walletUserId, $likeRef);
+            $stTx4->execute();
+            $tx = $stTx4->get_result()->fetch_assoc();
+            $stTx4->close();
         }
 
         if (!$tx) {

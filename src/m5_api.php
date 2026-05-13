@@ -57,6 +57,22 @@ function m5DetectOutboundIp(): string
     return trim((string)$body);
 }
 
+function m5NormalizeDescription(string $description, int $maxLength = 39): string
+{
+    $description = trim((string)preg_replace('/\s+/', ' ', $description));
+    if ($description === '') {
+        $description = 'Pix Basefy';
+    }
+
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        return mb_strlen($description, 'UTF-8') > $maxLength
+            ? mb_substr($description, 0, $maxLength, 'UTF-8')
+            : $description;
+    }
+
+    return strlen($description) > $maxLength ? substr($description, 0, $maxLength) : $description;
+}
+
 /**
  * Baixo nível: faz request HTTP autenticada. Retorna [bool ok, array body].
  *
@@ -147,7 +163,7 @@ function m5CreatePixQrCode(int $amountCentavos, string $description, string $web
 {
     $body = [
         'amount'      => $amountCentavos,
-        'description' => $description,
+        'description' => m5NormalizeDescription($description, 39),
     ];
     if ($webhookUrl !== '') $body['webhook_url'] = $webhookUrl;
     if ($externalId)        $body['external_id'] = $externalId;
