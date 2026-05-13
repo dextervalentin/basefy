@@ -32,6 +32,31 @@ if (!defined('M5_WEBHOOK_SECRET')) {
     define('M5_WEBHOOK_SECRET', (string)envValue('M5_WEBHOOK_SECRET', ''));
 }
 
+function m5DetectOutboundIp(): string
+{
+    $ch = curl_init('https://api.ipify.org?format=json');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $body = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+
+    if ($body === false || $err !== '') {
+        return '';
+    }
+
+    $json = json_decode((string)$body, true);
+    if (is_array($json) && !empty($json['ip'])) {
+        return (string)$json['ip'];
+    }
+
+    return trim((string)$body);
+}
+
 /**
  * Baixo nível: faz request HTTP autenticada. Retorna [bool ok, array body].
  *
@@ -84,7 +109,17 @@ function m5Request(string $method, string $path, ?array $payload = null): array
     if ($status < 200 || $status >= 300 || ($json['success'] ?? null) === false) {
         // Mensagem amigável
         $msg = $json['message'] ?? $json['error'] ?? 'Erro desconhecido na M5';
-        return [false, $json + ['statusCode' => $status, 'message' => (string)$msg]];
+        $msg = (string)$msg;
+        $outboundIp = '';
+
+        if (str_contains(strtolower($msg), 'ip') || str_contains(strtolower($msg), 'autoriz')) {
+            $outboundIp = m5DetectOutboundIp();
+            if ($outboundIp !== '') {
+                $msg .= ' IP de saída do servidor: ' . $outboundIp . '. Cadastre este IP na M5 (não o IP do seu computador) ou desative a restrição de IP.';
+            }
+        }
+
+        return [false, $json + ['statusCode' => $status, 'message' => $msg, 'outboundIp' => $outboundIp]];
     }
 
     return [true, $json];

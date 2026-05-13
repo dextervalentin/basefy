@@ -34,7 +34,7 @@ function walletSaldo($conn, int $userId): float
 function walletCriarRecargaPix($conn, int $userId, float $valor): array
 {
     if ($userId <= 0 || $valor <= 0) {
-        return [false, 'Valor inválido.'];
+        return [false, 'Valor inválido.', 0];
     }
 
     $stUser = $conn->prepare('SELECT nome, email FROM users WHERE id = ? LIMIT 1');
@@ -42,12 +42,12 @@ function walletCriarRecargaPix($conn, int $userId, float $valor): array
     $stUser->execute();
     $user = $stUser->get_result()->fetch_assoc();
     if (!$user) {
-        return [false, 'Usuário não encontrado.'];
+        return [false, 'Usuário não encontrado.', 0];
     }
 
     $amountCentavos = (int)round($valor * 100);
     if ($amountCentavos <= 0) {
-        return [false, 'Valor inválido.'];
+        return [false, 'Valor inválido.', 0];
     }
 
     $externalRef = 'wallet_topup:' . $userId . ':' . time() . ':' . bin2hex(random_bytes(4));
@@ -56,7 +56,8 @@ function walletCriarRecargaPix($conn, int $userId, float $valor): array
 
     [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
     if (!$okApi) {
-        return [false, (string)($resp['message'] ?? 'Falha ao gerar PIX.')];
+        error_log('[wallet_topup/m5] Falha ao gerar PIX: ' . json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        return [false, (string)($resp['message'] ?? 'Falha ao gerar PIX.'), 0];
     }
 
     $data = $resp['data'] ?? [];
