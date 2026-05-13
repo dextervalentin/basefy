@@ -82,11 +82,8 @@ if (!$alreadyPaid && $qrCodeImage === '') {
     $amountCentavos = (int)round(((float)$order['total']) * 100);
     $externalRef = 'order:' . $orderId;
 
-    // Webhook URL absoluto (a M5 só aceita http/https)
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    if (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') $scheme = 'https';
-    $host = (string)($_SERVER['HTTP_HOST'] ?? parse_url(APP_URL, PHP_URL_HOST) ?? 'localhost');
-    $webhookUrl = $scheme . '://' . $host . BASE_PATH . '/webhooks/m5';
+    // Webhook URL absoluto; usar APP_URL evita http interno/proxy da Railway.
+    $webhookUrl = rtrim(APP_URL, '/') . '/webhooks/m5';
 
     $description = 'Pedido #' . $orderId . ' - Basefy';
 

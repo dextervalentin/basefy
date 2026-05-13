@@ -251,7 +251,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 <?php endif; ?>
 
 <!-- ═══ PIX MODAL (AJAX-rendered) ═══ -->
-<div id="pixModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4" style="display:none" onclick="if(event.target===this)closePixModal()">
+<div id="pixModal" class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" style="display:none;z-index:2147483000" onclick="if(event.target===this)closePixModal()">
     <div class="w-full max-w-lg bg-blackx2 border border-white/[0.08] rounded-3xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto relative">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -326,6 +326,10 @@ console.log('[checkout] page loaded, version: <?= CHECKOUT_VERSION ?>');
     var pmPaid     = document.getElementById('pmPaidBox');
     var pollId, timerId;
 
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+
     // Close modal function (exposed globally for onclick)
     window.closePixModal = function() {
         if (modal) modal.style.display = 'none';
@@ -340,6 +344,11 @@ console.log('[checkout] page loaded, version: <?= CHECKOUT_VERSION ?>');
         console.log('[checkout] showModal', data);
         pmOrder.textContent = 'Pedido #' + data.orderId;
         pmValor.textContent = 'R$\u00A0' + formatBRL(data.valor);
+
+        if (pmError) pmError.classList.add('hidden');
+        if (pmPaid) pmPaid.classList.add('hidden');
+        if (pmQrSec) pmQrSec.classList.add('hidden');
+        if (pmQrImg) pmQrImg.removeAttribute('src');
 
         if (data.qrImage) {
             pmQrImg.src = data.qrImage;

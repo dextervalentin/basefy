@@ -113,9 +113,7 @@ try {
     $amountCentavos = (int)round($pixTotal * 100);
     $externalRef = 'order:' . $orderId;
 
-    $host       = $_SERVER['HTTP_HOST'] ?? 'basefy.io';
-    $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $webhookUrl = $scheme . '://' . $host . '/webhooks/m5';
+    $webhookUrl = rtrim(APP_URL, '/') . '/webhooks/m5';
     $description = 'Pedido #' . $orderId . ' - Basefy';
 
     [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
