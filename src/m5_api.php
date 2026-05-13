@@ -113,13 +113,19 @@ function m5Request(string $method, string $path, ?array $payload = null): array
         $outboundIp = '';
 
         if (str_contains(strtolower($msg), 'ip') || str_contains(strtolower($msg), 'autoriz')) {
-            $outboundIp = m5DetectOutboundIp();
+            $outboundIp = (string)($json['error']['requester_ip'] ?? '');
+            if ($outboundIp === '') {
+                $outboundIp = m5DetectOutboundIp();
+            }
             if ($outboundIp !== '') {
                 $msg .= ' IP de saída do servidor: ' . $outboundIp . '. Cadastre este IP na M5 (não o IP do seu computador) ou desative a restrição de IP.';
             }
         }
 
-        return [false, $json + ['statusCode' => $status, 'message' => $msg, 'outboundIp' => $outboundIp]];
+        $json['statusCode'] = $status;
+        $json['message'] = $msg;
+        $json['outboundIp'] = $outboundIp;
+        return [false, $json];
     }
 
     return [true, $json];
