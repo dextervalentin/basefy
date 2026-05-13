@@ -62,11 +62,11 @@ if ($topupTx && !empty($topupTx['raw_response'])) {
   }
 }
 $paymentData = (array)($topupRaw['paymentData'] ?? []);
-$pixCode = (string)($paymentData['pixCode'] ?? $paymentData['qrCode'] ?? '');
+$pixCode = (string)($paymentData['copyPaste'] ?? $paymentData['pixCode'] ?? $paymentData['qrCode'] ?? '');
 $qrCodeImage = (string)($paymentData['pixQrCode'] ?? $paymentData['qrCodeUrl'] ?? '');
 $qrCodeBase64 = (string)($paymentData['qrCodeBase64'] ?? '');
 if ($qrCodeImage === '' && $qrCodeBase64 !== '') {
-  $qrCodeImage = 'data:image/png;base64,' . $qrCodeBase64;
+  $qrCodeImage = str_starts_with($qrCodeBase64, 'data:') ? $qrCodeBase64 : ('data:image/png;base64,' . $qrCodeBase64);
 }
 $topupStatus = strtoupper((string)($topupTx['status'] ?? ''));
 $showTopupModal = $topupTx ? 'true' : 'false';
@@ -110,7 +110,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
   </div>
 
   <?php if ($topupTx): ?>
-  <div id="topupModal" class="fixed inset-0 z-50 <?= $showTopupModal === 'true' ? 'flex' : 'hidden' ?> items-center justify-center bg-black/70 px-4">
+  <div id="topupModal" class="fixed inset-0 <?= $showTopupModal === 'true' ? 'flex' : 'hidden' ?> items-center justify-center bg-black/70 px-4" style="z-index:2147483000">
     <div class="w-full max-w-xl bg-blackx2 border border-blackx3 rounded-2xl p-5 space-y-4">
       <div class="flex items-center justify-between">
         <h3 class="font-semibold text-lg">Recarga PIX</h3>
@@ -156,6 +156,10 @@ include __DIR__ . '/../../views/partials/footer.php';
     const topupApprovedBox = document.getElementById('topupApprovedBox');
     const topupPendingBox = document.getElementById('topupPendingBox');
     let pollTimer = null;
+
+    if (modal && modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
 
     function updateSaldoHeader(saldo) {
       const el = document.querySelector('h2.text-lg.font-semibold');
