@@ -51,50 +51,26 @@ function walletCriarRecargaPix($conn, int $userId, float $valor): array
     }
 
     $externalRef = 'wallet_topup:' . $userId . ':' . time() . ':' . bin2hex(random_bytes(4));
+    $webhookUrl  = rtrim(APP_URL, '/') . '/webhooks/m5';
+    $description = 'Recarga de carteira usuário #' . $userId . ' [' . $externalRef . ']';
 
-    $payload = [
-        'amount' => $amountCentavos,
-        'currency' => 'BRL',
-        'paymentMethod' => 'pix',
-        'items' => [
-            [
-                'title' => 'Recarga de carteira',
-                'unitPrice' => $amountCentavos,
-                'quantity' => 1,
-                'tangible' => false,
-            ]
-        ],
-        'customer' => [
-            'name' => (string)$user['nome'],
-            'email' => (string)$user['email'],
-            'phone' => '11999999999',
-            'document' => [
-                'number' => '00000000000',
-                'type' => 'cpf',
-            ],
-        ],
-        'pix' => ['expiresInDays' => 1],
-        'postbackUrl' => APP_URL . '/webhooks/blackcat',
-        'externalRef' => $externalRef,
-        'metadata' => 'Recarga de carteira usuário #' . $userId,
-    ];
-
-    [$okApi, $resp] = blackcatCreatePixSale($payload);
+    [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
     if (!$okApi) {
         return [false, (string)($resp['message'] ?? 'Falha ao gerar PIX.')];
     }
 
     $data = $resp['data'] ?? [];
     $providerTransactionId = (string)($data['transactionId'] ?? '');
-    $status = strtoupper((string)($data['status'] ?? 'PENDING'));
-    $net = isset($data['netAmount']) ? (int)$data['netAmount'] : null;
-    $fees = isset($data['fees']) ? (int)$data['fees'] : null;
-    $invoiceUrl = (string)($data['invoiceUrl'] ?? '');
+    $status = 'PENDING';
+    $net = null;
+    $fees = null;
+    $pd = (array)($data['paymentData'] ?? []);
+    $invoiceUrl = (string)($pd['qrCode'] ?? $pd['copyPaste'] ?? '');
     $raw = json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     $ins = $conn->prepare("INSERT INTO payment_transactions
         (provider, order_id, user_id, external_ref, provider_transaction_id, status, payment_method, amount_centavos, net_centavos, fees_centavos, invoice_url, raw_response)
-        VALUES ('blackcat', NULL, ?, ?, ?, ?, 'pix', ?, ?, ?, ?, ?)
+        VALUES ('m5', NULL, ?, ?, ?, ?, 'pix', ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           status = VALUES(status),
           net_centavos = VALUES(net_centavos),
@@ -107,7 +83,7 @@ function walletCriarRecargaPix($conn, int $userId, float $valor): array
 
     $txId = (int)$conn->insert_id;
     if ($txId <= 0) {
-        $stFind = $conn->prepare("SELECT id FROM payment_transactions WHERE provider='blackcat' AND provider_transaction_id=? LIMIT 1");
+        $stFind = $conn->prepare("SELECT id FROM payment_transactions WHERE provider='m5' AND provider_transaction_id=? LIMIT 1");
         $stFind->bind_param('s', $providerTransactionId);
         $stFind->execute();
         $found = $stFind->get_result()->fetch_assoc();
@@ -124,7 +100,7 @@ function walletObterRecargaPorId($conn, int $userId, int $paymentTxId): ?array
     }
 
     $sql = "SELECT * FROM payment_transactions
-            WHERE id = ? AND user_id = ? AND external_ref LIKE 'wallet_topup:%'
+            WHERE id = ? AND user_id = ? AND external_ref LIKE 'wallet_topup:%' AND provider IN ('m5','blackcat')
             LIMIT 1";
     $st = $conn->prepare($sql);
     $st->bind_param('ii', $paymentTxId, $userId);
@@ -226,13 +202,21 @@ function walletAtualizarStatusRecarga($conn, int $userId, int $paymentTxId): arr
         return [false, 'Transação sem provider_transaction_id.'];
     }
 
-    [$ok, $resp] = blackcatGetSaleStatus($providerTransactionId);
+    $provider = strtolower((string)($tx['provider'] ?? 'm5'));
+    if ($provider === 'm5') {
+        [$ok, $resp] = m5GetTransaction($providerTransactionId);
+    } else {
+        [$ok, $resp] = blackcatGetSaleStatus($providerTransactionId);
+    }
     if (!$ok) {
         return [false, (string)($resp['message'] ?? 'Falha ao consultar status.')];
     }
 
     $data = $resp['data'] ?? [];
-    $status = strtoupper((string)($data['status'] ?? 'PENDING'));
+    $rawStatus = strtolower((string)($data['status'] ?? 'pending'));
+    // M5 → confirmed/pending/error/reversed.  BlackCat → PAID/PENDING.
+    $statusMap = ['confirmed' => 'PAID', 'paid' => 'PAID', 'pending' => 'PENDING', 'error' => 'FAILED', 'reversed' => 'REFUNDED', 'failed' => 'FAILED'];
+    $status = $statusMap[$rawStatus] ?? strtoupper($rawStatus);
     $net = isset($data['netAmount']) ? (int)$data['netAmount'] : null;
     $fees = isset($data['fees']) ? (int)$data['fees'] : null;
     $raw = json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

@@ -93,20 +93,28 @@ try {
 try {
     if (in_array($event, ['pix_in.update', 'pix_reversal_in.update'], true)) {
         // ── PIX recebido (cliente paga checkout) ──
-        $stTx = $conn->prepare("SELECT id, order_id, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND (provider_transaction_id = ? OR provider_transaction_id = ?) ORDER BY id DESC LIMIT 1");
+        $stTx = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND (provider_transaction_id = ? OR provider_transaction_id = ?) ORDER BY id DESC LIMIT 1");
         $stTx->bind_param('ss', $pixId, $externalId);
         $stTx->execute();
         $tx = $stTx->get_result()->fetch_assoc();
         $stTx->close();
 
-        // Fallback: tentar achar por description "Pedido #N"
+        // Fallback: tentar achar por description "Pedido #N" ou "[wallet_topup:N:...]"
         if (!$tx && $description !== '' && preg_match('/Pedido\s*#(\d+)/i', $description, $m)) {
             $orderRef = (int)$m[1];
-            $stTx2 = $conn->prepare("SELECT id, order_id, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND order_id = ? ORDER BY id DESC LIMIT 1");
+            $stTx2 = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND order_id = ? ORDER BY id DESC LIMIT 1");
             $stTx2->bind_param('i', $orderRef);
             $stTx2->execute();
             $tx = $stTx2->get_result()->fetch_assoc();
             $stTx2->close();
+        }
+        if (!$tx && $description !== '' && preg_match('/\[(wallet_topup:[^\]]+)\]/', $description, $m)) {
+            $extRef = $m[1];
+            $stTx3 = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos FROM payment_transactions WHERE provider='m5' AND external_ref = ? ORDER BY id DESC LIMIT 1");
+            $stTx3->bind_param('s', $extRef);
+            $stTx3->execute();
+            $tx = $stTx3->get_result()->fetch_assoc();
+            $stTx3->close();
         }
 
         if (!$tx) {
@@ -121,6 +129,8 @@ try {
         $orderId = (int)$tx['order_id'];
         $status  = ($pixStatus === 'confirmed') ? 'PAID' : strtoupper($pixStatus);
         $raw     = $payloadRaw;
+        $txExtRef = (string)($tx['external_ref'] ?? '');
+        $isWalletTopup = str_starts_with($txExtRef, 'wallet_topup:');
 
         $conn->begin_transaction();
         try {
@@ -131,6 +141,18 @@ try {
             $txId = (int)$tx['id'];
             $up->bind_param('sssi', $status, $status, $raw, $txId);
             $up->execute();
+
+            if ($event === 'pix_in.update' && $pixStatus === 'confirmed' && $isWalletTopup) {
+                // Recarga de wallet — credita saldo do usuário
+                $conn->commit();
+                [$okC, $msgC] = walletAplicarCreditoRecargaSeNecessario($conn, $txId);
+                $upE = $conn->prepare("UPDATE webhook_events SET status=?, processed_at=NOW() WHERE idempotency_key = ?");
+                $finalSt = $okC ? 'processed' : 'error';
+                $upE->bind_param('ss', $finalSt, $idempotencyKey);
+                $upE->execute();
+                echo json_encode(['ok' => $okC, 'msg' => $msgC]);
+                exit;
+            }
 
             if ($event === 'pix_in.update' && $pixStatus === 'confirmed' && $orderId > 0) {
                 // Marca order como pago apenas se ainda não foi

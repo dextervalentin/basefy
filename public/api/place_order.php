@@ -18,7 +18,7 @@ try {
     require_once __DIR__ . '/../../src/auth.php';
     require_once __DIR__ . '/../../src/config.php';
     require_once __DIR__ . '/../../src/storefront.php';
-    require_once __DIR__ . '/../../src/blackcat_api.php';
+    require_once __DIR__ . '/../../src/m5_api.php';
 
     _checkoutLog('START', ['method' => $_SERVER['REQUEST_METHOD'], 'session_user' => $_SESSION['user_id'] ?? null]);
 
@@ -113,31 +113,14 @@ try {
     $amountCentavos = (int)round($pixTotal * 100);
     $externalRef = 'order:' . $orderId;
 
-    $payload = [
-        'amount'        => $amountCentavos,
-        'currency'      => 'BRL',
-        'paymentMethod' => 'pix',
-        'items'         => [[
-            'title'     => 'Pedido #' . $orderId,
-            'unitPrice' => $amountCentavos,
-            'quantity'  => 1,
-            'tangible'  => false,
-        ]],
-        'customer' => [
-            'name'     => (string)$buyer['nome'],
-            'email'    => (string)$buyer['email'],
-            'phone'    => '11999999999',
-            'document' => ['number' => '00000000000', 'type' => 'cpf'],
-        ],
-        'pix'         => ['expiresInDays' => 1],
-        'postbackUrl' => APP_URL . '/webhooks/blackcat',
-        'externalRef' => $externalRef,
-        'metadata'    => 'Pedido #' . $orderId,
-    ];
+    $host       = $_SERVER['HTTP_HOST'] ?? 'basefy.io';
+    $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $webhookUrl = $scheme . '://' . $host . '/webhooks/m5';
+    $description = 'Pedido #' . $orderId . ' - Basefy';
 
-    [$okApi, $resp] = blackcatCreatePixSale($payload);
+    [$okApi, $resp] = m5CreatePixQrCode($amountCentavos, $description, $webhookUrl, null);
 
-    _checkoutLog('BLACKCAT_RESP', [
+    _checkoutLog('M5_RESP', [
         'okApi' => $okApi,
         'respKeys' => array_keys($resp ?? []),
         'dataKeys' => array_keys($resp['data'] ?? []),
@@ -145,8 +128,8 @@ try {
     ]);
 
     if (!$okApi) {
-        _checkoutLog('BLACKCAT_FAIL', ['resp' => $resp]);
-        $errMsg = 'Erro BlackCat: ' . (string)($resp['message'] ?? 'Desconhecido');
+        _checkoutLog('M5_FAIL', ['resp' => $resp]);
+        $errMsg = 'Erro M5: ' . (string)($resp['message'] ?? 'Desconhecido');
         echo json_encode([
             'ok' => false,
             'msg' => $errMsg,
@@ -159,14 +142,14 @@ try {
 
     $data   = $resp['data'] ?? [];
     $provId = (string)($data['transactionId'] ?? '');
-    $st     = strtoupper((string)($data['status'] ?? 'PENDING'));
+    $st     = 'PENDING';
     $rawJ   = json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     // Store in DB (non-fatal if fails)
     try {
         $ins = $conn->prepare("INSERT INTO payment_transactions
             (provider, order_id, user_id, external_ref, provider_transaction_id, status, payment_method, amount_centavos, raw_response)
-            VALUES ('blackcat', ?, ?, ?, ?, ?, 'pix', ?, ?)
+            VALUES ('m5', ?, ?, ?, ?, ?, 'pix', ?, ?)
             ON DUPLICATE KEY UPDATE status=VALUES(status), raw_response=VALUES(raw_response), updated_at=CURRENT_TIMESTAMP");
         $ins->bind_param('iisssis', $orderId, $userId, $externalRef, $provId, $st, $amountCentavos, $rawJ);
         $ins->execute();
@@ -174,11 +157,11 @@ try {
         _checkoutLog('DB_INSERT_ERR', ['msg' => $dbErr->getMessage()]);
     }
 
-    // Extract QR data
-    $pd  = (array)($data['paymentData'] ?? $resp['paymentData'] ?? []);
+    // Extract QR data — M5 returns paymentData = { qrCode, qrCodeBase64, copyPaste }
+    $pd  = (array)($data['paymentData'] ?? []);
     $b64 = (string)($pd['qrCodeBase64'] ?? '');
     $qrUrl = (string)($pd['qrCodeUrl'] ?? '');
-    $copyPaste = (string)($pd['pixCode'] ?? $pd['qrCode'] ?? $pd['copyPaste'] ?? '');
+    $copyPaste = (string)($pd['copyPaste'] ?? $pd['qrCode'] ?? $pd['pixCode'] ?? '');
 
     $qrImage = '';
     if ($b64 !== '') {

@@ -370,7 +370,7 @@ console.log('[checkout] page loaded, version: <?= CHECKOUT_VERSION ?>');
 
     function startPolling(orderId) {
         pollId = setInterval(function() {
-            fetch(BP + '/api/blackcat_status?order_id=' + orderId, {credentials:'same-origin'})
+            fetch(BP + '/api/m5_status?order_id=' + orderId, {credentials:'same-origin'})
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     console.log('[checkout] poll:', d);
