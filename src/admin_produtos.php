@@ -125,6 +125,11 @@ function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string
     if ($vendedorId <= 0 || $categoriaId <= 0 || trim($nome) === '') return [false, 'Dados inválidos.'];
     if (!in_array($tipo, ['produto', 'servico', 'dinamico'], true)) $tipo = 'produto';
 
+    // Imagem obrigatória: no create exige; no edit aceita manter a atual (passar $imagem=null vindo do form quando não enviou nova).
+    if ($id <= 0 && (!is_string($imagem) || trim($imagem) === '')) {
+        return [false, 'Adicione pelo menos uma imagem do produto.'];
+    }
+
     // Serviços não têm quantidade
     if ($tipo === 'servico') $quantidade = 0;
     // Only normal products require price > 0 and quantity >= 1

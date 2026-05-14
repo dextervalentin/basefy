@@ -8,8 +8,9 @@ exigirVendedor();
 
 $conn = (new Database())->connect();
 
-$activeMenu = 'aprovadas';
-$pageTitle  = 'Vendas Aprovadas';
+$activeMenu = 'vendas';
+$vendasTab  = 'aprovadas';
+$pageTitle  = 'Vendas';
 
 $uid = (int)($_SESSION['user_id'] ?? 0);
 $q   = trim((string)($_GET['q'] ?? ''));
@@ -95,6 +96,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
 <div class="space-y-4">
+  <?php include __DIR__ . '/../../views/partials/vendas_tabs.php'; ?>
   <!-- Card: Níveis de taxa do vendedor -->
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 sm:p-5 overflow-hidden">
     <div class="flex flex-col lg:flex-row lg:items-center gap-5">

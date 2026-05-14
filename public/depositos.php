@@ -64,8 +64,9 @@ $st->execute();
 $depositos = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-$pageTitle = 'Meus Depósitos';
-$activeMenu = 'depositos';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$finTab = 'depositos';
 
 /* summary stats (all records, no filter) */
 $stAll = $conn->prepare("SELECT status, amount_centavos FROM payment_transactions WHERE user_id = ? AND external_ref LIKE 'wallet_topup:%'");
@@ -87,6 +88,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 ?>
 
 <div class="space-y-4">
+  <?php include __DIR__ . '/../views/partials/financeiro_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <h2 class="text-lg font-semibold mb-1">Meus depósitos</h2>
     <p class="text-sm text-zinc-400 mb-4">Listagem das suas recargas de carteira via PIX.</p>

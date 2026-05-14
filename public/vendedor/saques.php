@@ -15,8 +15,9 @@ if (!contaVerificada($_uid_check)) {
     exit;
 }
 
-$activeMenu = 'saques';
-$pageTitle  = 'Saques';
+$activeMenu = 'financeiro';
+$pageTitle  = 'Financeiro';
+$finTab     = 'saques';
 $uid = (int)($_SESSION['user_id'] ?? 0);
 
 $q = trim((string)($_GET['q'] ?? ''));
@@ -150,6 +151,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
 <div class="space-y-5" x-data="{ obsModal: false, obsText: '', obsTrx: '' }">
+  <?php include __DIR__ . '/../../views/partials/financeiro_tabs_vendor.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <div class="flex items-center justify-between mb-4">
       <div>

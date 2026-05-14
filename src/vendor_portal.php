@@ -158,6 +158,9 @@ function salvarMeuProduto($c, int $uid, int $id, int $categoriaId, string $nome,
     if (!$col) return [false, 'Schema de products inválido.'];
     if ($categoriaId <= 0 || trim($nome) === '') return [false, 'Dados inválidos.'];
     if (!in_array($tipo, ['produto', 'servico', 'dinamico'], true)) $tipo = 'produto';
+    if ($id <= 0 && (!is_string($imagem) || trim($imagem) === '')) {
+        return [false, 'Adicione pelo menos uma imagem do produto.'];
+    }
     if ($tipo === 'servico') { $quantidade = 0; $autoDeliveryEnabled = false; $autoDeliveryItems = null; }
     // Only normal products require price > 0 and quantity >= 1
     if ($tipo === 'produto' && $preco < 0) return [false, 'Dados inválidos.'];

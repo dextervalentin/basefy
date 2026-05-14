@@ -31,14 +31,16 @@ $st->execute();
 $depositos = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
-$pageTitle = 'Depósitos';
-$activeMenu = 'depositos';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$finTab = 'depositos';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
 <div class="max-w-7xl mx-auto space-y-4">
+  <?php include __DIR__ . '/../../views/partials/financeiro_tabs_vendor.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <h2 class="text-lg font-semibold mb-1">Meus depósitos</h2>
     <p class="text-sm text-zinc-400">Recargas de carteira realizadas na sua conta de vendedor.</p>

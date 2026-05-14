@@ -8,8 +8,9 @@ exigirVendedor();
 
 $conn = (new Database())->connect();
 
-$activeMenu = 'analise';
-$pageTitle  = 'Vendas em Análise';
+$activeMenu = 'vendas';
+$vendasTab  = 'analise';
+$pageTitle  = 'Vendas';
 
 $uid = (int)($_SESSION['user_id'] ?? 0);
 $q   = trim((string)($_GET['q'] ?? ''));
@@ -103,7 +104,8 @@ include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
-<div class="">
+<div class="space-y-4">
+  <?php include __DIR__ . '/../../views/partials/vendas_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <form method="get" class="mb-4 rounded-2xl border border-blackx3 bg-blackx/50 p-3 md:p-4">
       <div class="flex flex-col md:flex-row md:items-end md:flex-nowrap gap-3">

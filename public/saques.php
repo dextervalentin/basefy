@@ -72,8 +72,9 @@ $statusBadge = static function (string $status): string {
     return 'bg-blackx border border-blackx3 text-zinc-300';
 };
 
-$pageTitle = 'Meus Saques';
-$activeMenu = 'saques';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$finTab = 'saques';
 
 /* summary stats (all, unfiltered) */
 $stAll = $conn->prepare("SELECT valor, status FROM wallet_withdrawals WHERE user_id = ?");
@@ -95,6 +96,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 ?>
 
 <div class="space-y-4" x-data="{ obsModal: false, obsText: '', obsTrx: '' }">
+  <?php include __DIR__ . '/../views/partials/financeiro_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
       <div>
