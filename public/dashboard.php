@@ -136,6 +136,23 @@ try {
   $sellerLevelProgress = 0.0;
 }
 
+// Só mostra o card de níveis para quem é vendedor (tem produto cadastrado ou alguma venda).
+// Mantém o painel limpo para o comprador "puro".
+$isSeller = false;
+try {
+  if ((float)($sellerLevelInfo['revenue'] ?? 0) > 0) {
+    $isSeller = true;
+  } else {
+    $stChk = $conn->prepare('SELECT 1 FROM produtos WHERE vendedor_id = ? LIMIT 1');
+    $stChk->bind_param('i', $uid);
+    $stChk->execute();
+    $isSeller = (bool)$stChk->get_result()->fetch_assoc();
+    $stChk->close();
+  }
+} catch (\Throwable $e) {
+  $isSeller = false;
+}
+
 include __DIR__ . '/../views/partials/header.php';
 include __DIR__ . '/../views/partials/user_layout_start.php';
 ?>
@@ -166,6 +183,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
     </div>
   </div>
 
+  <?php if ($isSeller): ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 sm:p-5 overflow-hidden">
     <div class="flex flex-col lg:flex-row lg:items-center gap-5">
       <div class="flex-1 min-w-0">
@@ -233,6 +251,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4">
     <h3 class="font-semibold mb-3">Ações rápidas</h3>

@@ -113,6 +113,8 @@ if ($_themeConn !== null) {
     .product-card:hover img { transform: scale(1.05); }
     .line-clamp-2 { display: -webkit-box !important; -webkit-line-clamp: 2 !important; -webkit-box-orient: vertical !important; overflow: hidden !important; text-overflow: ellipsis; }
     .glass { background: rgba(18,19,22,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
     input[type="number"]::-webkit-inner-spin-button,
     input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type="number"] { -moz-appearance: textfield; }

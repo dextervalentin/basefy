@@ -139,19 +139,45 @@ include $ROOT . '/views/partials/user_layout_start.php';
 ?>
 
 <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 md:p-5">
+
+  <?php
+    // Mapeamento das abas inline de status (estilo segmented control mobile-first)
+    $statusTabs = [
+      ''          => 'Todos',
+      'pendente'  => 'Em andamento',
+      'pago'      => 'Pagos',
+      'entregue'  => 'Concluídos',
+      'cancelado' => 'Cancelados',
+    ];
+    $qsBase = $_GET;
+    unset($qsBase['status'], $qsBase['p']);
+    $buildTabUrl = function(string $st) use ($qsBase): string {
+      $qs = $qsBase;
+      if ($st !== '') $qs['status'] = $st;
+      $url = (defined('BASE_PATH') ? BASE_PATH : '') . '/meus_pedidos';
+      return $qs ? $url . '?' . http_build_query($qs) : $url;
+    };
+  ?>
+  <div class="mb-4 -mx-1 overflow-x-auto no-scrollbar">
+    <div class="inline-flex items-center gap-1 rounded-2xl border border-blackx3 bg-blackx/60 p-1 min-w-full md:min-w-0 whitespace-nowrap">
+      <?php foreach ($statusTabs as $stKey => $stLabel):
+        $active = ($status === $stKey);
+      ?>
+        <a href="<?= htmlspecialchars($buildTabUrl($stKey), ENT_QUOTES, 'UTF-8') ?>"
+           class="px-3.5 py-2 rounded-xl text-xs md:text-sm font-medium transition-all whitespace-nowrap <?= $active
+              ? 'bg-gradient-to-r from-greenx to-greenxd text-white shadow-sm'
+              : 'text-zinc-400 hover:text-white hover:bg-blackx3/40' ?>">
+          <?= htmlspecialchars($stLabel, ENT_QUOTES, 'UTF-8') ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
   <form method="get" class="mb-4 rounded-2xl border border-blackx3 bg-blackx/50 p-3 md:p-4">
+    <?php if ($status !== ''): ?>
+      <input type="hidden" name="status" value="<?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8') ?>">
+    <?php endif; ?>
     <div class="flex flex-col md:flex-row md:items-end md:flex-nowrap gap-3">
-      <div class="md:w-48">
-        <label class="block text-xs text-zinc-500 mb-1">Status</label>
-        <select name="status" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx">
-          <option value="">Todos</option>
-          <?php foreach ($allowedStatus as $s): ?>
-            <option value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>" <?= $status === $s ? 'selected' : '' ?>>
-              <?= ucfirst($s) ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
-      </div>
       <div class="md:w-40">
         <label class="block text-xs text-zinc-500 mb-1">De</label>
         <input type="date" name="de" value="<?= htmlspecialchars($de, ENT_QUOTES, 'UTF-8') ?>"
@@ -183,7 +209,7 @@ include $ROOT . '/views/partials/user_layout_start.php';
     </div>
   </form>
 
-  <div class="overflow-x-auto">
+  <div class="hidden md:block overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="text-zinc-400 border-b border-blackx3">
         <tr>
@@ -274,6 +300,96 @@ include $ROOT . '/views/partials/user_layout_start.php';
         <?php endif; ?>
       </tbody>
     </table>
+  </div>
+
+  <!-- Mobile cards list -->
+  <div class="md:hidden space-y-3">
+    <?php if (!$pedidos): ?>
+      <div class="rounded-2xl border border-blackx3 bg-blackx/40 p-6 text-center">
+        <p class="text-zinc-400 text-sm">Nenhum pedido encontrado.</p>
+      </div>
+    <?php else: ?>
+      <?php foreach ($pedidos as $p):
+        $prods = $orderProducts[(int)$p['id']] ?? [];
+        $firstProd = $prods[0] ?? null;
+        $thumbUrl = $firstProd ? mediaResolveUrl((string)($firstProd['imagem'] ?? ''), 'https://placehold.co/56x56/1a1a1a/555?text=—') : '';
+        $thumbName = $firstProd ? (string)($firstProd['nome'] ?? '') : '—';
+        $extraCount = max(0, count($prods) - 1);
+        $grossTotal = (float)($p['gross_total'] ?? 0);
+        $walletUsed = (float)($p['wallet_used'] ?? 0);
+        $displayTotal = $grossTotal > 0 ? $grossTotal : (float)$p['total'];
+        $pixPortion = max(0, $displayTotal - $walletUsed);
+        if ($walletUsed > 0 && $pixPortion > 0) {
+          $payMethod = 'Wallet + PIX'; $payClass = 'bg-purple-500/15 border border-purple-400/40 text-purple-300';
+        } elseif ($walletUsed > 0) {
+          $payMethod = 'Wallet'; $payClass = 'bg-greenx/15 border border-greenx/40 text-greenx';
+        } else {
+          $payMethod = 'PIX'; $payClass = 'bg-purple-500/15 border border-purple-400/40 text-purple-300';
+        }
+        $statusLower = strtolower(trim((string)$p['status']));
+        $canRate = in_array($statusLower, ['pago', 'entregue', 'concluido'], true);
+      ?>
+        <article class="rounded-2xl border border-blackx3 bg-blackx/60 p-3.5 active:scale-[0.99] transition">
+          <header class="flex items-start gap-3">
+            <?php if ($firstProd): ?>
+              <div class="relative flex-shrink-0">
+                <img src="<?= htmlspecialchars($thumbUrl, ENT_QUOTES, 'UTF-8') ?>" alt=""
+                     class="w-12 h-12 rounded-xl object-cover border border-blackx3">
+                <?php if ($extraCount > 0): ?>
+                  <span class="absolute -bottom-1 -right-1 bg-blackx2 border border-blackx3 text-[10px] text-zinc-300 font-bold rounded-full w-5 h-5 flex items-center justify-center">+<?= $extraCount ?></span>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <div class="w-12 h-12 rounded-xl bg-blackx border border-blackx3 flex items-center justify-center text-zinc-500 flex-shrink-0">—</div>
+            <?php endif; ?>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <p class="font-semibold text-sm">#<?= (int)$p['id'] ?></p>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium <?= $statusBadge((string)$p['status']) ?> whitespace-nowrap">
+                  <?= htmlspecialchars((string)$p['status'], ENT_QUOTES, 'UTF-8') ?>
+                </span>
+              </div>
+              <p class="text-sm text-zinc-200 truncate mt-0.5"><?= htmlspecialchars($thumbName, ENT_QUOTES, 'UTF-8') ?></p>
+              <?php if ($extraCount > 0): ?>
+                <p class="text-[11px] text-zinc-500">e mais <?= $extraCount ?> produto<?= $extraCount > 1 ? 's' : '' ?></p>
+              <?php endif; ?>
+            </div>
+          </header>
+
+          <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-lg bg-blackx/60 border border-blackx3 px-2 py-2">
+              <p class="text-[10px] uppercase tracking-wider text-zinc-500">Total</p>
+              <p class="text-sm font-bold mt-0.5">R$ <?= number_format($displayTotal, 2, ',', '.') ?></p>
+            </div>
+            <div class="rounded-lg bg-blackx/60 border border-blackx3 px-2 py-2">
+              <p class="text-[10px] uppercase tracking-wider text-zinc-500">Itens</p>
+              <p class="text-sm font-bold mt-0.5"><?= (int)$p['itens'] ?></p>
+            </div>
+            <div class="rounded-lg bg-blackx/60 border border-blackx3 px-2 py-2">
+              <p class="text-[10px] uppercase tracking-wider text-zinc-500">Pagto</p>
+              <p class="text-[11px] font-semibold mt-0.5 <?= str_contains($payClass,'purple') ? 'text-purple-300' : 'text-greenx' ?>"><?= $payMethod ?></p>
+            </div>
+          </div>
+
+          <footer class="mt-3 flex items-center justify-between gap-2">
+            <span class="text-[11px] text-zinc-500"><?= fmtDate((string)$p['criado_em']) ?></span>
+            <div class="flex items-center gap-2">
+              <?php if ($canRate): ?>
+                <a href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>#avaliacoes"
+                   class="inline-flex items-center gap-1 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-2.5 py-1.5 text-[11px] text-yellow-400">
+                  <svg class="w-3 h-3 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                  Avaliar
+                </a>
+              <?php endif; ?>
+              <a href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>"
+                 class="inline-flex rounded-lg bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-3 py-1.5 text-[11px]">
+                Ver detalhes
+              </a>
+            </div>
+          </footer>
+        </article>
+      <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 
   <?php
