@@ -125,14 +125,16 @@ $tsSt->execute();
 $topSellers = $tsSt->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
 $tsSt->close();
 
-$pageTitle  = 'Taxas & Níveis';
-$activeMenu = 'taxas';
+$pageTitle  = 'Financeiro';
+$activeMenu = 'financeiro';
+$adminFinanceTab = 'taxas';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="space-y-6">
+  <?php include __DIR__ . '/../../views/partials/admin_financeiro_tabs.php'; ?>
 
   <?php if ($msg): ?>
     <div class="rounded-2xl border border-greenx/30 bg-greenx/[0.08] px-5 py-3.5 text-sm text-greenx flex items-center gap-3">

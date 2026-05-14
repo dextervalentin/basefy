@@ -30,13 +30,16 @@ $statusBadge = static function (string $status): string {
   return 'bg-blackx border border-blackx3 text-zinc-300';
 };
 
-$pageTitle = 'Depósitos';
-$activeMenu = 'depositos';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$adminFinanceTab = 'depositos';
 $subnavItems = [['label' => 'Listar depósitos', 'href' => 'depositos.php', 'active' => true]];
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
+
+<?php include __DIR__ . '/../../views/partials/admin_financeiro_tabs.php'; ?>
 
 <div class="max-w-7xl mx-auto bg-blackx2 border border-blackx3 rounded-xl p-4">
   <form method="get" class="mb-4 grid grid-cols-1 md:grid-cols-5 gap-2">

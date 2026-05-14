@@ -73,8 +73,9 @@ $statusBadge = static function (string $s): string {
     return 'bg-orange-500/15 border border-orange-400/40 text-orange-300';
 };
 
-$pageTitle = 'Denúncias';
-$activeMenu = 'denuncias';
+$pageTitle = 'Suporte';
+$activeMenu = 'suporte';
+$adminSupportTab = 'denuncias';
 $subnavItems = [
     ['label' => 'Listar', 'href' => 'denuncias', 'active' => true],
 ];
@@ -84,6 +85,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/admin_suporte_tabs.php'; ?>
   <!-- Stats cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
     <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">

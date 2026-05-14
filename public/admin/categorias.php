@@ -38,8 +38,9 @@ $homeCategoryOptions = array_values(array_filter(
 ));
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 
-$pageTitle = 'Categorias';
-$activeMenu = 'categorias';
+$pageTitle = 'Catálogo';
+$activeMenu = 'catalogo';
+$adminCatalogTab = 'categorias';
 $topActions = [['label' => 'Nova categoria', 'href' => 'categorias_form']];
 $subnavItems = [
     ['label' => 'Listar', 'href' => 'categorias', 'active' => true],
@@ -51,6 +52,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/admin_catalogo_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <?php if ($erro): ?><div class="mb-3 rounded-lg bg-red-600/20 border border-red-500 text-red-300 px-3 py-2 text-sm"><?= htmlspecialchars($erro) ?></div><?php endif; ?>
     <?php if ($ok): ?><div class="mb-3 rounded-lg bg-greenx/20 border border-greenx text-greenx px-3 py-2 text-sm"><?= htmlspecialchars($ok) ?></div><?php endif; ?>

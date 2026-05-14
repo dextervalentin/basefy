@@ -96,13 +96,15 @@ try {
     }
 }
 $totalPages = max(1, (int)ceil($totalPosts / $perPage));
-$pageTitle = 'Blog — Admin';
-$activeMenu = 'blog';
+$pageTitle = 'Conteúdo';
+$activeMenu = 'conteudo';
+$adminContentTab = 'blog';
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
     <main class="flex-1 p-4 sm:p-6 lg:p-8">
+        <?php include __DIR__ . '/../../views/partials/admin_conteudo_tabs.php'; ?>
 
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">

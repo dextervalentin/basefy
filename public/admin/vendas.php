@@ -30,8 +30,9 @@ $statusBadge = static function (string $s): string {
   return 'bg-blackx border border-blackx3 text-zinc-300';
 };
 
-$pageTitle = 'Vendas Realizadas';
-$activeMenu = 'vendas';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$adminFinanceTab = 'vendas';
 $subnavItems = [['label'=>'Listar / Editar', 'href' => 'vendas', 'active'=>true]];
 
 include __DIR__ . '/../../views/partials/header.php';
@@ -39,6 +40,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/admin_financeiro_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <!-- Premium Filter -->
     <form method="get" class="mb-4 rounded-2xl border border-blackx3 bg-blackx/50 p-3 md:p-4">

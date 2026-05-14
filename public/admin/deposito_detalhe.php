@@ -18,8 +18,9 @@ if (!$deposito) {
 
 $webhooks = listarWebhooksRelacionadosAoDeposito($conn, $deposito);
 
-$pageTitle = 'Detalhe do depósito';
-$activeMenu = 'depositos';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$adminFinanceTab = 'depositos';
 $subnavItems = [
     ['label' => 'Listar depósitos', 'href' => 'depositos', 'active' => false],
     ['label' => 'Detalhes', 'href' => '#', 'active' => true],
@@ -33,6 +34,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="space-y-4">
+  <?php include __DIR__ . '/../../views/partials/admin_financeiro_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-xl p-4">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-semibold">Depósito #<?= (int)$deposito['id'] ?></h2>

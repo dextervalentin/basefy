@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = $produto ? 'Editar Produto' : 'Novo Produto';
-$activeMenu = 'produtos';
+$activeMenu = 'catalogo';
 $topActions = [['label' => 'Voltar', 'href' => 'produtos']];
 $subnavItems = [
     ['label' => 'Listar', 'href' => 'produtos', 'active' => false],

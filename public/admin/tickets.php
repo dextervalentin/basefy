@@ -80,8 +80,9 @@ $lista = ticketsList($conn, $f, $pagina, $pp);
 $statusCounts = ticketsCountByStatus($conn);
 $cats = ticketCategories();
 
-$pageTitle  = 'Tickets de Suporte';
-$activeMenu = 'tickets';
+$pageTitle  = 'Suporte';
+$activeMenu = 'suporte';
+$adminSupportTab = 'tickets';
 $subnavItems = [
     ['label' => 'Todos', 'href' => 'tickets', 'active' => true],
 ];
@@ -91,6 +92,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/admin_suporte_tabs.php'; ?>
   <!-- Stats cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
     <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">

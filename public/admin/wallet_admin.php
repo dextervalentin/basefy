@@ -45,14 +45,16 @@ $statusBadge = static function (string $status): string {
   return 'bg-blackx border border-blackx3 text-zinc-300';
 };
 
-$pageTitle = 'Saldo Admin';
-$activeMenu = 'wallet_admin';
+$pageTitle = 'Financeiro';
+$activeMenu = 'financeiro';
+$adminFinanceTab = 'wallet_admin';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="space-y-4">
+  <?php include __DIR__ . '/../../views/partials/admin_financeiro_tabs.php'; ?>
   <?php if ($msg): ?><div class="rounded-lg bg-greenx/20 border border-greenx text-greenx px-3 py-2 text-sm"><?= htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
   <?php if ($err): ?><div class="rounded-lg bg-red-600/20 border border-red-500 text-red-300 px-3 py-2 text-sm"><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
 

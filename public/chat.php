@@ -16,8 +16,9 @@ $uid  = (int)($_SESSION['user_id'] ?? 0);
 $user = $_SESSION['user'] ?? [];
 $role = (string)($user['role'] ?? 'usuario');
 
-$pageTitle  = 'Chat';
-$activeMenu = 'chat';
+$pageTitle  = 'Comunicação';
+$activeMenu = 'comunicacao';
+$comTab     = 'chat';
 
 // Get conversations
 $conversations = chatListConversations($conn, $uid, $role);
@@ -110,6 +111,8 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 .chat-msg.system-msg .sys-code { display: inline-flex; gap: 3px; margin: 8px 0; }
 .chat-msg.system-msg .sys-code span { width: 32px; height: 38px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(245,158,11,0.3); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; font-family: monospace; color: #f59e0b; }
 </style>
+
+<?php include __DIR__ . '/../views/partials/comunicacao_tabs.php'; ?>
 
 <div class="chat-page">
     <!-- Sidebar: conversations list -->

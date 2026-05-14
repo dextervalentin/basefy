@@ -33,8 +33,9 @@ try {
     $stAT->execute(); $activeToday = (int)($stAT->get_result()->fetch_assoc()['cnt'] ?? 0); $stAT->close();
 } catch (Throwable $e) { $activeToday = 0; }
 
-$pageTitle  = 'Chat Monitor';
-$activeMenu = 'chat';
+$pageTitle  = 'Suporte';
+$activeMenu = 'suporte';
+$adminSupportTab = 'chat';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
@@ -296,6 +297,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 </style>
 
 <!-- Stats cards -->
+<?php include __DIR__ . '/../../views/partials/admin_suporte_tabs.php'; ?>
+
 <div class="chat-monitor-stats">
     <div class="chat-stat-card">
         <div class="stat-value"><?= $totalConvsAll ?></div>

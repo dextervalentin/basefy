@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = $editar ? 'Editar categoria' : 'Nova categoria';
-$activeMenu = 'categorias';
+$activeMenu = 'catalogo';
 $subnavItems = [
     ['label' => 'Listar', 'href' => 'categorias', 'active' => false],
     ['label' => 'Adicionar', 'href' => 'categorias_form', 'active' => !$editar],

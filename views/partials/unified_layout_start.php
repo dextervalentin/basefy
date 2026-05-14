@@ -173,8 +173,8 @@ if ($uid > 0) {
         <div>
           <p class="px-2 pb-2 text-[11px] uppercase tracking-wider text-zinc-500 font-semibold">Comunicação</p>
           <div class="space-y-1">
-            <a href="<?= BASE_PATH ?>/chat" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border transition <?= $activeMenu === 'chat' ? 'bg-white/[0.05] border-white/[0.08] text-white' : 'border-transparent text-zinc-400 hover:bg-white/[0.05] hover:border-white/[0.08] hover:text-white' ?>">
-              <i data-lucide="message-circle" class="w-4 h-4"></i><span>Chat</span>
+            <a href="<?= BASE_PATH ?>/chat" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border transition <?= $activeMenu === 'comunicacao' ? 'bg-white/[0.05] border-white/[0.08] text-white' : 'border-transparent text-zinc-400 hover:bg-white/[0.05] hover:border-white/[0.08] hover:text-white' ?>">
+              <i data-lucide="messages-square" class="w-4 h-4"></i><span>Comunicação</span>
               <?php
               if (($uid ?? 0) > 0) {
                   require_once dirname(__DIR__, 2) . '/src/chat.php';
@@ -185,8 +185,6 @@ if ($uid > 0) {
               <span class="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"><?= $chatUnread2 ?></span>
               <?php endif; } ?>
             </a>
-            <a href="<?= BASE_PATH ?>/denuncias" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border transition <?= $activeMenu === 'denuncias' ? 'bg-white/[0.05] border-white/[0.08] text-white' : 'border-transparent text-zinc-400 hover:bg-white/[0.05] hover:border-white/[0.08] hover:text-white' ?>"><i data-lucide="flag" class="w-4 h-4"></i><span>Denúncias</span></a>
-            <a href="<?= BASE_PATH ?>/tickets_dashboard" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border transition <?= $activeMenu === 'tickets' ? 'bg-white/[0.05] border-white/[0.08] text-white' : 'border-transparent text-zinc-400 hover:bg-white/[0.05] hover:border-white/[0.08] hover:text-white' ?>"><i data-lucide="ticket" class="w-4 h-4"></i><span>Tickets</span></a>
           </div>
         </div>
 

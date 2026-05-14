@@ -42,14 +42,16 @@ $lista = ticketsList($conn, $f, $pagina, $pp);
 
 $cats = ticketCategories();
 
-$pageTitle  = 'Meus Tickets';
-$activeMenu = 'tickets';
+$pageTitle  = 'Comunicação';
+$activeMenu = 'comunicacao';
+$comTab     = 'tickets';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/comunicacao_tabs_vendor.php'; ?>
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-lg font-bold">Meus Tickets de Suporte</h2>
     <a href="<?= BASE_PATH ?>/tickets_novo" class="inline-flex items-center gap-2 rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 text-xs transition-all">

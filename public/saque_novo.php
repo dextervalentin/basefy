@@ -29,7 +29,8 @@ if ($cols) {
     }
 }
 
-$activeMenu = 'saques';
+$activeMenu = 'financeiro';
+$finTab = 'saques';
 $pageTitle  = 'Solicitar Saque';
 $erro = '';
 
@@ -88,6 +89,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 ?>
 
 <div class="max-w-2xl mx-auto space-y-4">
+  <?php include __DIR__ . '/../views/partials/financeiro_tabs.php'; ?>
   <div class="flex items-center gap-3 mb-2">
     <a href="<?= BASE_PATH ?>/saques" class="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition">
       <i data-lucide="arrow-left" class="w-4 h-4"></i> Voltar

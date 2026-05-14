@@ -31,8 +31,7 @@ $menuFixed = [
 
 $menuGroups = [
     ['label' => 'Catálogo', 'icon' => 'shopping-bag', 'items' => [
-        ['key' => 'produtos', 'label' => 'Produtos', 'href' => 'produtos', 'icon' => 'package'],
-        ['key' => 'categorias', 'label' => 'Categorias', 'href' => 'categorias', 'icon' => 'tags'],
+      ['key' => 'catalogo', 'label' => 'Catálogo', 'href' => 'produtos', 'icon' => 'shopping-bag'],
     ]],
     ['label' => 'Pessoas', 'icon' => 'users', 'items' => [
         ['key' => 'admins', 'label' => 'Administradores', 'href' => 'admins', 'icon' => 'shield-check'],
@@ -41,25 +40,17 @@ $menuGroups = [
         ['key' => 'solicitacoes_produto', 'label' => 'Solic. Produto', 'href' => 'solicitacoes_produto', 'icon' => 'package-check'],
     ]],
     ['label' => 'Financeiro', 'icon' => 'landmark', 'items' => [
-        ['key' => 'vendas', 'label' => 'Vendas', 'href' => 'vendas', 'icon' => 'badge-dollar-sign'],
-        ['key' => 'depositos', 'label' => 'Depósitos', 'href' => 'depositos', 'icon' => 'banknote'],
-        ['key' => 'saques', 'label' => 'Saques', 'href' => 'saques', 'icon' => 'arrow-down-up'],
-        ['key' => 'wallet_admin', 'label' => 'Saldo Admin', 'href' => 'wallet_admin', 'icon' => 'wallet-cards'],
-        ['key' => 'taxas', 'label' => 'Taxas & Níveis', 'href' => 'taxas', 'icon' => 'percent'],
+      ['key' => 'financeiro', 'label' => 'Financeiro', 'href' => 'vendas', 'icon' => 'landmark'],
     ]],
     ['label' => 'Suporte', 'icon' => 'headphones', 'items' => [
-        ['key' => 'chat', 'label' => 'Chat Monitor', 'href' => 'chat', 'icon' => 'message-circle'],
-        ['key' => 'denuncias', 'label' => 'Denúncias', 'href' => 'denuncias', 'icon' => 'flag'],
-        ['key' => 'tickets', 'label' => 'Tickets', 'href' => 'tickets', 'icon' => 'ticket'],
+      ['key' => 'suporte', 'label' => 'Suporte', 'href' => 'chat', 'icon' => 'headphones'],
     ]],
     ['label' => 'Afiliados', 'icon' => 'share-2', 'items' => [
         ['key' => 'afiliados', 'label' => 'Gerenciar', 'href' => 'afiliados', 'icon' => 'share-2'],
         ['key' => 'afiliados_config', 'label' => 'Configurações', 'href' => 'afiliados_config', 'icon' => 'settings-2'],
     ]],
     ['label' => 'Conteúdo', 'icon' => 'newspaper', 'items' => [
-        ['key' => 'blog', 'label' => 'Blog', 'href' => 'blog', 'icon' => 'newspaper'],
-        ['key' => 'blog_categorias', 'label' => 'Blog Categorias', 'href' => 'blog_categorias', 'icon' => 'tags'],
-        ['key' => 'favoritos', 'label' => 'Favoritos', 'href' => 'favoritos', 'icon' => 'heart'],
+      ['key' => 'conteudo', 'label' => 'Conteúdo', 'href' => 'blog', 'icon' => 'newspaper'],
     ]],
     ['label' => 'Sistema', 'icon' => 'settings', 'items' => [
         ['key' => 'google_oauth', 'label' => 'Google OAuth', 'href' => 'google_oauth', 'icon' => 'key-round'],

@@ -31,7 +31,8 @@ if ($cols) {
     }
 }
 
-$activeMenu = 'saques';
+$activeMenu = 'financeiro';
+$finTab = 'saques';
 $pageTitle  = 'Solicitar Saque';
 
 $uid  = (int)($_SESSION['user_id'] ?? 0);
@@ -91,6 +92,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
 <div class="max-w-2xl mx-auto">
+  <?php include __DIR__ . '/../../views/partials/financeiro_tabs_vendor.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <h2 class="text-lg font-semibold mb-4">Solicitar novo saque</h2>
 

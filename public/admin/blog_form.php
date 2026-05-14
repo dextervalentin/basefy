@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['saved'])) $msg = 'Post criado com sucesso!';
 
 $pageTitle = ($isEdit ? 'Editar post' : 'Novo post') . ' — Blog Admin';
-$activeMenu = 'blog';
+$activeMenu = 'conteudo';
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>

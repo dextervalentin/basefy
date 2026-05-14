@@ -50,14 +50,16 @@ $statusBadge = static function (string $s): string {
     return 'bg-orange-500/15 border border-orange-400/40 text-orange-300';
 };
 
-$pageTitle  = 'Minhas Denúncias';
-$activeMenu = 'denuncias';
+$pageTitle  = 'Comunicação';
+$activeMenu = 'comunicacao';
+$comTab     = 'denuncias';
 
 include __DIR__ . '/../views/partials/header.php';
 include __DIR__ . '/../views/partials/user_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../views/partials/comunicacao_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
 
     <!-- Filter -->

@@ -23,8 +23,9 @@ $lista = listarProdutos($conn, $f, $pagina, $pp);
 $categorias = listarCategoriasProdutoAtivas($conn);
 $vendedores = listarVendedoresAprovados($conn);
 
-$pageTitle = 'Produtos';
-$activeMenu = 'produtos';
+$pageTitle = 'Catálogo';
+$activeMenu = 'catalogo';
+$adminCatalogTab = 'produtos';
 $topActions = [['label' => 'Novo produto', 'href' => 'produtos_form']];
 $subnavItems = [
     ['label' => 'Listar', 'href' => 'produtos', 'active' => true],
@@ -36,6 +37,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="">
+  <?php include __DIR__ . '/../../views/partials/admin_catalogo_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <!-- Premium Filter -->
     <form method="get" class="mb-4 rounded-2xl border border-blackx3 bg-blackx/50 p-3 md:p-4">

@@ -20,14 +20,16 @@ $pp = in_array((int)($_GET['pp'] ?? 10), [5, 10, 20], true) ? (int)($_GET['pp'] 
 $lista = favoritesAdminList($conn, $f, $pagina, $pp);
 $topProducts = favoritesTopProducts($conn, 5);
 
-$pageTitle = 'Favoritos';
-$activeMenu = 'favoritos';
+$pageTitle = 'Conteúdo';
+$activeMenu = 'conteudo';
+$adminContentTab = 'favoritos';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div>
+    <?php include __DIR__ . '/../../views/partials/admin_conteudo_tabs.php'; ?>
     <!-- Top favorited products -->
     <?php if ($topProducts): ?>
     <div class="mb-5 bg-blackx2 border border-blackx3 rounded-2xl p-5">

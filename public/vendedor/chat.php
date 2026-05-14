@@ -20,8 +20,9 @@ $conn = (new Database())->connect();
 $uid  = (int)($_SESSION['user_id'] ?? 0);
 $user = $_SESSION['user'] ?? [];
 
-$pageTitle  = 'Chat';
-$activeMenu = 'chat';
+$pageTitle  = 'Comunicação';
+$activeMenu = 'comunicacao';
+$comTab     = 'chat';
 
 // Get conversations
 $conversations = chatListConversations($conn, $uid, 'vendedor');
@@ -99,6 +100,8 @@ include $ROOT . '/views/partials/vendor_layout_start.php';
   .chat-page { height: calc(100vh - 160px); }
 }
 </style>
+
+<?php include $ROOT . '/views/partials/comunicacao_tabs_vendor.php'; ?>
 
 <div class="chat-page">
     <!-- Sidebar: conversations list -->
