@@ -97,6 +97,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 
 <div class="space-y-4">
   <?php include __DIR__ . '/../../views/partials/vendas_tabs.php'; ?>
+  <?php if (!empty($sellerLevelCfg['enabled'])): ?>
   <!-- Card: Níveis de taxa do vendedor -->
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 sm:p-5 overflow-hidden">
     <div class="flex flex-col lg:flex-row lg:items-center gap-5">
@@ -154,14 +155,33 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
           <p class="text-sm font-bold mt-1"><?= number_format((float)$sellerLevelCfg['nivel2_percent'], 2, ',', '.') ?>%</p>
           <p class="text-[10px] text-zinc-600 mt-1">R$ <?= number_format((float)$sellerLevelCfg['nivel2_threshold'], 0, ',', '.') ?></p>
         </div>
-        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center <?= (int)($sellerLevelInfo['level'] ?? 1) === 3 && empty($sellerLevelInfo['is_custom']) ? 'ring-1 ring-greenx/40' : '' ?>">
-          <p class="text-[11px] text-zinc-500 font-semibold">Nível 3</p>
-          <p class="text-sm font-bold mt-1"><?= number_format((float)$sellerLevelCfg['nivel3_percent'], 2, ',', '.') ?>%</p>
-          <p class="text-[10px] text-zinc-600 mt-1">R$ <?= number_format((float)$sellerLevelCfg['nivel3_threshold'], 0, ',', '.') ?></p>
-        </div>
       </div>
     </div>
   </div>
+  <?php else: ?>
+  <!-- Modo global: card compacto de taxa fixa -->
+  <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 sm:p-5">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-greenx/10 border border-greenx/20 flex items-center justify-center shrink-0">
+        <i data-lucide="percent" class="w-5 h-5 text-greenx"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Sua taxa</p>
+        <h3 class="text-lg font-semibold">
+          <?php if (!empty($sellerLevelInfo['is_custom'])): ?>
+            <?= number_format((float)$sellerLevelInfo['total_fee_percent'], 2, ',', '.') ?>% <span class="text-xs text-fuchsia-300 font-normal">(personalizada)</span>
+          <?php else: ?>
+            <?= number_format((float)$sellerLevelCfg['global_vendor_percent'], 2, ',', '.') ?>%
+            <?php if ((float)$sellerLevelCfg['global_flat_per_order'] > 0): ?>
+              <span class="text-zinc-400 font-normal">+ R$ <?= number_format((float)$sellerLevelCfg['global_flat_per_order'], 2, ',', '.') ?> fixo por pedido</span>
+            <?php endif; ?>
+          <?php endif; ?>
+        </h3>
+        <p class="text-xs text-zinc-500 mt-0.5">Aplicada sobre cada venda aprovada. O comprador não paga taxa de serviço.</p>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <form method="get" class="mb-4">

@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $rules = affRules($conn);
 
 $pageTitle  = 'Config. Afiliados';
-$activeMenu = 'afiliados_config';
+$activeMenu = 'afiliados';
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';

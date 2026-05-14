@@ -35,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $n3Pct         = max(0.0, min(100.0, (float)($_POST['nivel3_percent'] ?? 9.99)));
         $n3Thr         = max(0.0, (float)($_POST['nivel3_threshold'] ?? 40000));
         $leadPct       = max(0.0, min(100.0, (float)($_POST['lead_fee_percent'] ?? 4.99)));
+        $globalPct     = max(0.0, min(100.0, (float)($_POST['global_vendor_percent'] ?? 1.99)));
+        $globalFlat    = max(0.0, (float)($_POST['global_flat_per_order'] ?? 1.00));
 
         // Escrow / auto-release settings
         $days          = max(1, min(60, (int)($_POST['auto_release_days'] ?? 7)));
@@ -44,13 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($n3Thr <= $n2Thr) {
             $err = 'O limite do Nível 3 deve ser maior que o do Nível 2.';
         } else {
-            escrowSettingSet($conn, 'taxas.enabled',          $enabled);
-            escrowSettingSet($conn, 'taxas.nivel1_percent',   number_format($n1Pct, 2, '.', ''));
-            escrowSettingSet($conn, 'taxas.nivel2_percent',   number_format($n2Pct, 2, '.', ''));
-            escrowSettingSet($conn, 'taxas.nivel2_threshold', number_format($n2Thr, 2, '.', ''));
-            escrowSettingSet($conn, 'taxas.nivel3_percent',   number_format($n3Pct, 2, '.', ''));
-            escrowSettingSet($conn, 'taxas.nivel3_threshold', number_format($n3Thr, 2, '.', ''));
-            escrowSettingSet($conn, 'taxas.lead_fee_percent', number_format($leadPct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.enabled',                $enabled);
+            escrowSettingSet($conn, 'taxas.nivel1_percent',         number_format($n1Pct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.nivel2_percent',         number_format($n2Pct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.nivel2_threshold',       number_format($n2Thr, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.nivel3_percent',         number_format($n3Pct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.nivel3_threshold',       number_format($n3Thr, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.lead_fee_percent',       number_format($leadPct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.global_vendor_percent',  number_format($globalPct, 2, '.', ''));
+            escrowSettingSet($conn, 'taxas.global_flat_per_order',  number_format($globalFlat, 2, '.', ''));
 
             // Save escrow settings
             escrowSettingSet($conn, 'wallet.auto_release_days', (string)$days);
@@ -74,13 +78,29 @@ if ($q) {
 }
 
 $overrideSellers = [];
-$qSellers = $conn->query("SELECT id, nome, email, seller_fee_override_enabled, seller_fee_percent
-             FROM users
-             WHERE role IN ('vendedor','vendor','seller','vendendor') OR is_vendedor = TRUE
-             ORDER BY nome ASC, id ASC
-             LIMIT 500");
-if ($qSellers) {
-  $overrideSellers = $qSellers->fetch_all(MYSQLI_ASSOC) ?: [];
+// Pega todos que são vendedores por role, por flag, ou que têm produtos/vendas
+$sellersSql = "
+  SELECT u.id, u.nome, u.email,
+         COALESCE(u.seller_fee_override_enabled, FALSE) AS seller_fee_override_enabled,
+         u.seller_fee_percent
+  FROM users u
+  WHERE
+     u.role IN ('vendedor','vendor','seller','vendendor')
+     OR COALESCE(u.is_vendedor, FALSE) = TRUE
+     OR u.id IN (SELECT DISTINCT vendedor_id FROM products WHERE vendedor_id IS NOT NULL)
+     OR u.id IN (SELECT DISTINCT vendedor_id FROM order_items WHERE vendedor_id IS NOT NULL)
+  ORDER BY u.nome ASC, u.id ASC
+  LIMIT 1000
+";
+try {
+  $qSellers = $conn->query($sellersSql);
+  if ($qSellers) {
+    $overrideSellers = $qSellers->fetch_all(MYSQLI_ASSOC) ?: [];
+  }
+} catch (\Throwable $e) {
+  // Fallback caso colunas/tabelas não existam: lista qualquer usuário com vendas
+  $fb = $conn->query("SELECT u.id, u.nome, u.email, FALSE AS seller_fee_override_enabled, NULL::numeric AS seller_fee_percent FROM users u WHERE u.id IN (SELECT DISTINCT vendedor_id FROM order_items WHERE vendedor_id IS NOT NULL) OR u.id IN (SELECT DISTINCT vendedor_id FROM products WHERE vendedor_id IS NOT NULL) ORDER BY u.nome ASC LIMIT 1000");
+  if ($fb) $overrideSellers = $fb->fetch_all(MYSQLI_ASSOC) ?: [];
 }
 
 // Top sellers — any user who has sales (not limited to "vendedor" role)
@@ -161,14 +181,18 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       <h3 class="font-semibold text-sm">Como funciona o sistema de taxas</h3>
     </div>
     <div class="text-xs text-zinc-400 space-y-1.5 leading-relaxed">
-      <p>Cada vendedor possui um <strong class="text-zinc-200">nível</strong> baseado no faturamento total aprovado.</p>
-      <p>A taxa total por venda = <strong class="text-zinc-200">Taxa do Nível</strong> + <strong class="text-zinc-200">Taxa de Lead</strong> (fixa).</p>
-      <p>Todo o valor da taxa é creditado automaticamente na carteira do <strong class="text-zinc-200">admin recebedor</strong> configurado abaixo.</p>
+      <?php if ($cfg['enabled']): ?>
+        <p><strong class="text-greenx">Modo níveis ATIVO.</strong> Cada vendedor tem um <strong class="text-zinc-200">nível</strong> baseado no faturamento aprovado. Taxa total = <strong>Taxa do Nível</strong> + <strong>Taxa de Lead</strong> (paga pelo comprador).</p>
+      <?php else: ?>
+        <p><strong class="text-greenx">Modo taxa global ATIVO.</strong> Todos os vendedores pagam <strong class="text-zinc-200"><?= number_format($cfg['global_vendor_percent'], 2, ',', '.') ?>%</strong> sobre cada venda + <strong class="text-zinc-200">R$ <?= number_format($cfg['global_flat_per_order'], 2, ',', '.') ?></strong> fixo por pedido. O comprador <strong>não paga</strong> taxa de serviço.</p>
+      <?php endif; ?>
+      <p>Todo valor de taxa é creditado automaticamente na carteira do <strong class="text-zinc-200">admin recebedor</strong> configurado abaixo.</p>
     </div>
   </div>
 
   <!-- Config Form -->
   <form method="post" class="bg-blackx2 border border-blackx3 rounded-2xl p-5 space-y-5">
+    <input type="hidden" name="form_type" value="global_taxas">
 
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-bold flex items-center gap-2">
@@ -177,15 +201,38 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" name="taxas_enabled" value="1" <?= $cfg['enabled'] ? 'checked' : '' ?>
                class="w-4 h-4 rounded border-blackx3 accent-greenx">
-        <span class="text-zinc-300">Sistema de níveis ativo</span>
+        <span class="text-zinc-300">Sistema de níveis ativo <span class="text-zinc-500">(sobrescreve a taxa global)</span></span>
       </label>
     </div>
 
+    <!-- Taxa Global -->
+    <div class="<?= $cfg['enabled'] ? 'opacity-60' : '' ?> bg-greenx/[0.04] border border-greenx/30 rounded-xl p-4 space-y-3">
+      <div class="flex items-center gap-2">
+        <i data-lucide="globe" class="w-4 h-4 text-greenx"></i>
+        <h3 class="font-semibold text-sm text-greenx">Taxa Global (modo padrão — ativa quando o sistema de níveis está desligado)</h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Percentual do vendedor (%)</label>
+          <input type="number" step="0.01" min="0" max="100" name="global_vendor_percent"
+                 value="<?= htmlspecialchars(number_format($cfg['global_vendor_percent'], 2, '.', '')) ?>"
+                 class="w-full rounded-xl bg-blackx border border-blackx3 px-4 py-2.5 text-sm outline-none focus:border-greenx transition">
+        </div>
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Taxa fixa por pedido (R$)</label>
+          <input type="number" step="0.01" min="0" name="global_flat_per_order"
+                 value="<?= htmlspecialchars(number_format($cfg['global_flat_per_order'], 2, '.', '')) ?>"
+                 class="w-full rounded-xl bg-blackx border border-blackx3 px-4 py-2.5 text-sm outline-none focus:border-greenx transition">
+        </div>
+      </div>
+      <p class="text-[11px] text-zinc-500">Cobrada do vendedor na liberação do escrow. A taxa fixa é aplicada <strong>uma vez por pedido</strong>, no primeiro item liberado.</p>
+    </div>
+
     <!-- Lead Fee -->
-    <div class="bg-blackx/60 border border-blackx3 rounded-xl p-4">
+    <div class="<?= !$cfg['enabled'] ? 'opacity-60' : '' ?> bg-blackx/60 border border-blackx3 rounded-xl p-4">
       <div class="flex items-center gap-2 mb-3">
         <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-yellow-400"></i>
-        <h3 class="font-semibold text-sm text-yellow-300">Taxa de Lead (fixa — aplicada em toda venda)</h3>
+        <h3 class="font-semibold text-sm text-yellow-300">Taxa de Lead (só aplica no modo níveis — cobrada do comprador)</h3>
       </div>
       <div class="max-w-xs">
         <label class="block text-xs text-zinc-400 mb-1">Percentual (%)</label>
@@ -196,7 +243,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     </div>
 
     <!-- Levels -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="<?= !$cfg['enabled'] ? 'opacity-60' : '' ?> grid grid-cols-1 md:grid-cols-3 gap-4">
 
       <!-- Level 1 -->
       <div class="bg-blackx/60 border border-blackx3 rounded-xl p-4 space-y-3">

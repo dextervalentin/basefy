@@ -46,8 +46,7 @@ $menuGroups = [
       ['key' => 'suporte', 'label' => 'Suporte', 'href' => 'chat', 'icon' => 'headphones'],
     ]],
     ['label' => 'Afiliados', 'icon' => 'share-2', 'items' => [
-        ['key' => 'afiliados', 'label' => 'Gerenciar', 'href' => 'afiliados', 'icon' => 'share-2'],
-        ['key' => 'afiliados_config', 'label' => 'Configurações', 'href' => 'afiliados_config', 'icon' => 'settings-2'],
+        ['key' => 'afiliados', 'label' => 'Afiliados', 'href' => 'afiliados', 'icon' => 'share-2'],
     ]],
     ['label' => 'Conteúdo', 'icon' => 'newspaper', 'items' => [
       ['key' => 'conteudo', 'label' => 'Conteúdo', 'href' => 'blog', 'icon' => 'newspaper'],
@@ -99,6 +98,19 @@ $menuGroups = [
               if ($activeMenu === (string)$item['key']) { $groupHasActive = true; break; }
           }
         ?>
+          <?php if (count($group['items']) === 1):
+              $solo = $group['items'][0];
+              // Active = grupo ativo OU chave do grupo bate com activeMenu
+              $soloActive = $groupHasActive || ($activeMenu === (string)$solo['key']);
+          ?>
+            <div class="border-t border-white/[0.04] pt-1">
+              <a href="<?= htmlspecialchars((string)$solo['href'], ENT_QUOTES, 'UTF-8') ?>"
+                 class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border-l-2 transition <?= $soloActive ? 'bg-greenx/15 border-greenx text-greenx' : 'border-transparent hover:bg-blackx hover:border-greenx text-zinc-200' ?>">
+                <i data-lucide="<?= htmlspecialchars((string)($group['icon'] ?? $solo['icon'] ?? 'folder'), ENT_QUOTES, 'UTF-8') ?>" class="w-4 h-4"></i>
+                <span><?= htmlspecialchars((string)$group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+              </a>
+            </div>
+          <?php else: ?>
           <div x-data="{ open: <?= $groupHasActive ? 'true' : 'false' ?> }" class="border-t border-white/[0.04] pt-1">
             <button @click="open = !open" type="button"
                     class="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] uppercase tracking-wider font-semibold transition-colors"
@@ -118,6 +130,7 @@ $menuGroups = [
               <?php endforeach; ?>
             </div>
           </div>
+          <?php endif; ?>
         <?php endforeach; ?>
       </nav>
     </aside>

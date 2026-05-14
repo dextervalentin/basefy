@@ -10,6 +10,12 @@ exigirAdmin();
 $db = new Database();
 $conn = $db->connect();
 
+// Carrega config de taxas para banner de status
+require_once __DIR__ . '/../../src/seller_levels.php';
+try { sellerLevelsEnsure($conn); } catch (\Throwable $e) {}
+$feeCfg  = sellerLevelsConfig($conn);
+$feeMode = $feeCfg['enabled'] ? 'levels' : 'global';
+
 function scalarIntSafe($conn, string $sql, int $default = 0): int {
     try {
         $q = $conn->query($sql);
@@ -109,6 +115,27 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
 <div class="space-y-4">
+    <a href="taxas" class="block bg-blackx2 border <?= $feeMode === 'global' ? 'border-greenx/40 hover:border-greenx' : 'border-yellow-400/40 hover:border-yellow-300' ?> rounded-2xl p-4 transition group">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl <?= $feeMode === 'global' ? 'bg-greenx/15 text-greenx' : 'bg-yellow-500/15 text-yellow-300' ?> flex items-center justify-center shrink-0">
+                <i data-lucide="<?= $feeMode === 'global' ? 'percent' : 'trophy' ?>" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-[11px] uppercase tracking-wider <?= $feeMode === 'global' ? 'text-greenx' : 'text-yellow-300' ?> font-semibold">Modelo de taxa ativo</p>
+                <p class="text-sm font-semibold mt-0.5 truncate">
+                <?php if ($feeMode === 'global'): ?>
+                    Taxa global — <?= number_format($feeCfg['global_vendor_percent'], 2, ',', '.') ?>%
+                    <?php if ($feeCfg['global_flat_per_order'] > 0): ?>
+                      + R$ <?= number_format($feeCfg['global_flat_per_order'], 2, ',', '.') ?> por pedido
+                    <?php endif; ?>
+                <?php else: ?>
+                    Sistema de níveis — <?= number_format($feeCfg['nivel1_percent'], 2, ',', '.') ?>% / <?= number_format($feeCfg['nivel2_percent'], 2, ',', '.') ?>% / <?= number_format($feeCfg['nivel3_percent'], 2, ',', '.') ?>%
+                <?php endif; ?>
+                </p>
+            </div>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-zinc-500 group-hover:text-white transition shrink-0"></i>
+        </div>
+    </a>
     <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 flex items-center justify-between">
         <div>
             <h2 class="text-lg font-semibold">Resumo operacional</h2>

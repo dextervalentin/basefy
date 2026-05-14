@@ -17,13 +17,17 @@ require_once __DIR__ . '/wallet_escrow.php';
 function sellerLevelsDefaults(): array
 {
     return [
-        'taxas.enabled'           => '1',
-        'taxas.nivel1_percent'    => '14.99',
-        'taxas.nivel2_percent'    => '12.99',
-        'taxas.nivel2_threshold'  => '20000.00',
-        'taxas.nivel3_percent'    => '9.99',
-        'taxas.nivel3_threshold'  => '40000.00',
-        'taxas.lead_fee_percent'  => '4.99',
+        // Sistema de níveis (legacy). '0' = usa taxa global plana.
+        'taxas.enabled'                 => '0',
+        'taxas.nivel1_percent'          => '14.99',
+        'taxas.nivel2_percent'          => '12.99',
+        'taxas.nivel2_threshold'        => '20000.00',
+        'taxas.nivel3_percent'          => '9.99',
+        'taxas.nivel3_threshold'        => '40000.00',
+        'taxas.lead_fee_percent'        => '4.99',
+        // Taxa global aplicada ao vendedor quando taxas.enabled = '0'
+        'taxas.global_vendor_percent'   => '1.99',
+        'taxas.global_flat_per_order'   => '1.00',
     ];
 }
 
@@ -37,6 +41,13 @@ function sellerLevelsEnsure($conn): void
         if ($current === '') {
             escrowSettingSet($conn, $key, $default);
         }
+    }
+
+    // Migração v2 (one-shot): força desativação do sistema de níveis e ativa
+    // a taxa global (1.99% + R$1) como padrão.
+    if (escrowSettingGet($conn, 'taxas.migrated_v2', '') !== '1') {
+        escrowSettingSet($conn, 'taxas.enabled', '0');
+        escrowSettingSet($conn, 'taxas.migrated_v2', '1');
     }
 
     sellerFeeOverrideEnsureColumns($conn);
@@ -107,9 +118,18 @@ function sellerFeeOverrideSave($conn, int $vendorId, bool $enabled, ?float $perc
         return [false, 'Selecione um vendedor válido.'];
     }
 
-    $st = $conn->prepare("SELECT id FROM users WHERE id = ? AND (role IN ('vendedor','vendor','seller','vendendor') OR is_vendedor = TRUE) LIMIT 1");
+    $st = $conn->prepare("SELECT id FROM users WHERE id = ? AND (
+            role IN ('vendedor','vendor','seller','vendendor')
+            OR is_vendedor = TRUE
+            OR id IN (SELECT DISTINCT vendedor_id FROM order_items WHERE vendedor_id IS NOT NULL)
+            OR id IN (SELECT DISTINCT vendedor_id FROM products WHERE vendedor_id IS NOT NULL)
+        ) LIMIT 1");
     if (!$st) {
-        return [false, 'Não foi possível validar o vendedor.'];
+        // Fallback: aceita qualquer usuário existente (caso colunas/tabelas não existam)
+        $st = $conn->prepare('SELECT id FROM users WHERE id = ? LIMIT 1');
+        if (!$st) {
+            return [false, 'Não foi possível validar o vendedor.'];
+        }
     }
     $st->bind_param('i', $vendorId);
     $st->execute();
@@ -197,14 +217,36 @@ function sellerLevelsConfig($conn): array
     sellerLevelsEnsure($conn);
 
     return [
-        'enabled'          => escrowSettingGet($conn, 'taxas.enabled', '1') === '1',
-        'nivel1_percent'   => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel1_percent', '14.99')),
-        'nivel2_percent'   => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel2_percent', '12.99')),
-        'nivel2_threshold' => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel2_threshold', '20000.00')),
-        'nivel3_percent'   => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel3_percent', '9.99')),
-        'nivel3_threshold' => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel3_threshold', '40000.00')),
-        'lead_fee_percent' => max(0.0, (float)escrowSettingGet($conn, 'taxas.lead_fee_percent', '4.99')),
+        'enabled'               => escrowSettingGet($conn, 'taxas.enabled', '0') === '1',
+        'nivel1_percent'        => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel1_percent', '14.99')),
+        'nivel2_percent'        => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel2_percent', '12.99')),
+        'nivel2_threshold'      => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel2_threshold', '20000.00')),
+        'nivel3_percent'        => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel3_percent', '9.99')),
+        'nivel3_threshold'      => max(0.0, (float)escrowSettingGet($conn, 'taxas.nivel3_threshold', '40000.00')),
+        'lead_fee_percent'      => max(0.0, (float)escrowSettingGet($conn, 'taxas.lead_fee_percent', '4.99')),
+        'global_vendor_percent' => max(0.0, min(100.0, (float)escrowSettingGet($conn, 'taxas.global_vendor_percent', '1.99'))),
+        'global_flat_per_order' => max(0.0, (float)escrowSettingGet($conn, 'taxas.global_flat_per_order', '1.00')),
     ];
+}
+
+/**
+ * Modo atual de cobrança: 'levels' (sistema de níveis legacy)
+ * ou 'global' (taxa plana de X% + R$Y por pedido).
+ */
+function sellerFeeMode($conn): string
+{
+    $cfg = sellerLevelsConfig($conn);
+    return $cfg['enabled'] ? 'levels' : 'global';
+}
+
+/**
+ * Taxa fixa cobrada uma vez por pedido (apenas no modo global).
+ */
+function sellerFlatFeePerOrder($conn): float
+{
+    $cfg = sellerLevelsConfig($conn);
+    if ($cfg['enabled']) return 0.0;
+    return max(0.0, (float)$cfg['global_flat_per_order']);
 }
 
 /**
@@ -249,13 +291,15 @@ function sellerLevelCalc($conn, int $vendorId): array
     }
 
     if (!$cfg['enabled']) {
-        // Levels disabled — use Nível 1 rate, lead fee moved to buyer
+        // Modo global: taxa plana % (a parte flat é aplicada uma vez por pedido,
+        // tratada em wallet_escrow.php — não entra aqui no calc por item).
+        $globalPct = (float)$cfg['global_vendor_percent'];
         return [
-            'level'             => 1,
-            'label'             => 'Nível 1 (padrão)',
-            'fee_percent'       => $cfg['nivel1_percent'],
+            'level'             => 0,
+            'label'             => 'Taxa global',
+            'fee_percent'       => $globalPct,
             'lead_fee_percent'  => 0.0,
-            'total_fee_percent' => $cfg['nivel1_percent'],
+            'total_fee_percent' => $globalPct,
             'revenue'           => 0.0,
             'next_threshold'    => null,
             'is_custom'         => false,
@@ -351,5 +395,7 @@ function sellerFeeCalc($conn, int $vendorId, float $gross, ?int $productId = nul
 function buyerServiceFeePercent($conn): float
 {
     $cfg = sellerLevelsConfig($conn);
+    // No modo global o comprador não paga taxa de serviço — o vendedor cobre tudo.
+    if (!$cfg['enabled']) return 0.0;
     return max(0.0, $cfg['lead_fee_percent']);
 }

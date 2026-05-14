@@ -124,6 +124,9 @@ $payouts = affListPayouts($conn, 0, $payPage, $pp, $payFilter);
 
 $pageTitle = 'Afiliados';
 $activeMenu = 'afiliados';
+$topActions = [
+    ['label' => 'Configurações', 'href' => 'afiliados_config'],
+];
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
