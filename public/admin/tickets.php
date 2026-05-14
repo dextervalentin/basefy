@@ -166,7 +166,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         </tr></thead>
         <tbody>
         <?php foreach ($lista['itens'] as $row): ?>
-          <tr id="tk-row-<?= (int)$row['id'] ?>" class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+          <tr id="tk-row-<?= (int)$row['id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+              data-click-selector=".js-tk-detail" tabindex="0">
             <td class="py-3 pr-3 font-mono text-xs">#<?= (int)$row['id'] ?></td>
             <td class="py-3 pr-3">
               <?= htmlspecialchars((string)($row['user_nome'] ?? '-')) ?>

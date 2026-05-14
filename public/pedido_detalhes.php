@@ -140,7 +140,36 @@ $orderStatusBadge = static function (string $status): string {
     $orderStatusLower = strtolower(trim((string)$order['status']));
     $showDeliveryCode = in_array($orderStatusLower, ['pago', 'paid', 'enviado'], true);
     $deliveryCode = $showDeliveryCode ? escrowGetDeliveryCode($conn, $orderId) : null;
+
+    // Retomar pagamento: se pedido pendente/aguardando e há porção PIX > 0, oferece link de continuar pagamento.
+    // O checkout_pix.php já reaproveita transação PENDENTE existente (raw_response) — só falta um atalho aqui.
+    $canResumePayment = false;
+    if (in_array($orderStatusLower, ['pendente', 'pending', 'aguardando_pagamento'], true) && $pixPortion > 0) {
+        $canResumePayment = true;
+    }
   ?>
+
+  <?php if ($canResumePayment): ?>
+  <div class="mt-4 p-4 rounded-xl bg-gradient-to-r from-yellow-500/[0.08] to-orange-500/[0.05] border border-yellow-500/30">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center shrink-0">
+        <i data-lucide="qr-code" class="w-5 h-5 text-yellow-400"></i>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-bold text-yellow-300">Pagamento pendente</p>
+        <p class="text-xs text-zinc-400 mt-0.5">Você ainda não concluiu o pagamento deste pedido. Continue de onde parou — o mesmo QR Code será reaberto, sem precisar gerar um novo pedido.</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <a href="<?= BASE_PATH ?>/checkout_pix?order_id=<?= (int)$order['id'] ?>"
+             class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-4 py-2 text-sm">
+            <i data-lucide="arrow-right-circle" class="w-4 h-4"></i>
+            Continuar pagamento
+          </a>
+          <span class="inline-flex items-center text-[11px] text-zinc-500">Valor restante: <b class="text-zinc-200 ml-1">R$ <?= number_format($pixPortion, 2, ',', '.') ?></b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <?php if ($deliveryCode): ?>
   <div class="mt-4 p-4 rounded-xl bg-gradient-to-r from-greenx/[0.06] to-greenxd/[0.03] border border-greenx/25">

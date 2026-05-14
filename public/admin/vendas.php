@@ -112,7 +112,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         </thead>
         <tbody>
         <?php foreach ($lista['itens'] as $row): ?>
-          <tr id="sale-row-<?= (int)$row['venda_id'] ?>" class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+          <tr id="sale-row-<?= (int)$row['venda_id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+              data-click-selector=".js-sale-detail" tabindex="0">
             <td class="py-3 pr-3">#<?= (int)$row['venda_id'] ?></td>
             <td class="py-3 pr-3">
               <span class="font-mono text-xs">#<?= (int)$row['pedido_id'] ?></span>

@@ -232,7 +232,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                     </thead>
                     <tbody class="divide-y divide-blackx3">
                     <?php foreach ($posts as $post): ?>
-                    <tr class="hover:bg-white/[0.02] transition-colors">
+                    <tr class="row-link hover:bg-white/[0.02]"
+                        data-href="<?= BASE_PATH ?>/admin/blog_form.php?id=<?= (int)$post['id'] ?>" tabindex="0">
                         <td class="px-6 py-3">
                             <p class="font-semibold truncate max-w-[300px]"><?= htmlspecialchars((string)$post['titulo']) ?></p>
                             <p class="text-xs text-zinc-500">/blog/<?= htmlspecialchars((string)$post['slug']) ?></p>

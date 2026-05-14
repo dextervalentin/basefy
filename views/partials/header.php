@@ -115,6 +115,11 @@ if ($_themeConn !== null) {
     .glass { background: rgba(18,19,22,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
+    /* Linhas clicáveis: marque <tr> ou <article> com class="row-link" data-href="/url" */
+    .row-link { cursor: pointer; transition: background-color .15s ease, border-color .15s ease, transform .15s ease; }
+    .row-link:hover { background-color: rgba(var(--t-accent-rgb), 0.04); }
+    .row-link:active { transform: scale(0.998); }
+    .row-link a, .row-link button, .row-link [data-stop] { position: relative; z-index: 1; }
     input[type="number"]::-webkit-inner-spin-button,
     input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type="number"] { -moz-appearance: textfield; }

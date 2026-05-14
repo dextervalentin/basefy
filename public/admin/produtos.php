@@ -111,7 +111,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         <?php foreach ($lista['itens'] as $row): ?>
           <?php $isAtivo = (int)$row['ativo'] === 1; ?>
           <?php $rowTipo = (string)($row['tipo'] ?? 'produto'); ?>
-          <tr id="prod-row-<?= (int)$row['id'] ?>" class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+          <tr id="prod-row-<?= (int)$row['id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+              data-href="<?= BASE_PATH ?>/admin/produtos_form?id=<?= (int)$row['id'] ?>" tabindex="0">
             <td class="py-3 pr-3"><?= (int)$row['id'] ?></td>
             <td class="py-3 pr-3">
               <?php $img = normalizarProdutoImagemUrl($row['imagem'] ?? ''); ?>

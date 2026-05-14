@@ -85,7 +85,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         <tbody>
           <?php foreach ($lista['itens'] as $row): ?>
             <?php $isAtivo = (int)$row['ativo'] === 1; $statusId = 'status-vendedor-' . (int)$row['id']; ?>
-            <tr class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+            <tr class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+                data-href="<?= BASE_PATH ?>/admin/vendedores_form?id=<?= (int)$row['id'] ?>" tabindex="0">
               <td class="py-3 pr-3"><?= (int)$row['id'] ?></td>
               <td class="py-3 pr-3"><?= htmlspecialchars($row['nome']) ?></td>
               <td class="py-3 pr-3"><?= htmlspecialchars($row['email']) ?></td>

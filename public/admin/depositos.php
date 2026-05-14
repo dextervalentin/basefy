@@ -68,7 +68,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       </thead>
       <tbody>
       <?php foreach ($lista['itens'] as $row): ?>
-          <tr class="border-b border-blackx3/60 hover:bg-blackx/40 transition">
+          <tr class="row-link border-b border-blackx3/60 hover:bg-blackx/40"
+              data-href="<?= BASE_PATH ?>/admin/deposito_detalhe.php?id=<?= (int)$row['id'] ?>" tabindex="0">
           <td class="py-2">#<?= (int)$row['id'] ?></td>
           <td class="py-2"><?= htmlspecialchars((string)($row['provider_transaction_id'] ?: '-'), ENT_QUOTES, 'UTF-8') ?></td>
           <td class="py-2"><?= (int)($row['order_id'] ?? 0) > 0 ? ('#' . (int)$row['order_id']) : '-' ?></td>

@@ -173,7 +173,8 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
         </thead>
         <tbody>
           <?php foreach ($itens as $v): ?>
-            <tr class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+            <tr class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+                data-click-selector=".js-detail" tabindex="0">
               <td class="py-3 pr-3">#<?= (int)$v['order_id'] ?></td>
               <td class="py-3 pr-3"><?= htmlspecialchars((string)($v['comprador_nome'] ?: ('#' . (int)$v['comprador_id'])), ENT_QUOTES, 'UTF-8') ?><br><span class="text-xs text-zinc-500"><?= htmlspecialchars((string)($v['comprador_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></td>
               <td class="py-3 pr-3"><?= (int)$v['qtd_total'] ?> (<?= (int)$v['linhas'] ?> linhas)</td>
@@ -191,7 +192,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
                 <?php endif; ?>
               </td>
               <td class="py-3">
-                <button class="text-greenx hover:underline" type="button" onclick="abrirDetalhes(<?= (int)$v['order_id'] ?>)">
+                <button class="js-detail text-greenx hover:underline" type="button" onclick="abrirDetalhes(<?= (int)$v['order_id'] ?>)">
                   Ver detalhes
                 </button>
               </td>

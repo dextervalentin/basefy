@@ -56,7 +56,8 @@ include __DIR__.'/../../views/partials/vendor_layout_start.php';
         </thead>
         <tbody>
           <?php foreach ($itens as $p): ?>
-            <tr id="vendor-prod-row-<?= (int)$p['id'] ?>" class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+            <tr id="vendor-prod-row-<?= (int)$p['id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+                data-href="<?= BASE_PATH ?>/vendedor/produtos_form?id=<?= (int)$p['id'] ?>" tabindex="0">
               <td class="py-3 pr-3">#<?= (int)$p['id'] ?></td>
               <td class="py-3 pr-3">
                 <img

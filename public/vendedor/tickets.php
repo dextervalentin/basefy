@@ -100,7 +100,8 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
         </tr></thead>
         <tbody>
         <?php foreach ($lista['itens'] as $row): ?>
-          <tr class="border-b border-blackx3/50 hover:bg-blackx/40 transition">
+          <tr class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
+              data-href="<?= BASE_PATH ?>/ticket_detalhe?id=<?= (int)$row['id'] ?>" tabindex="0">
             <td class="py-3 pr-3 font-mono text-xs">#<?= (int)$row['id'] ?></td>
             <td class="py-3 pr-3 text-xs"><?= htmlspecialchars((string)($cats[$row['categoria']]['label'] ?? $row['categoria'])) ?></td>
             <td class="py-3 pr-3 max-w-[200px]"><span class="truncate block"><?= htmlspecialchars((string)$row['titulo']) ?></span></td>

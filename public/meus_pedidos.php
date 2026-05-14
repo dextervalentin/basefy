@@ -236,8 +236,9 @@ include $ROOT . '/views/partials/user_layout_start.php';
             $thumbName = $firstProd ? htmlspecialchars((string)($firstProd['nome'] ?? ''), ENT_QUOTES, 'UTF-8') : '—';
             $extraCount = max(0, count($prods) - 1);
           ?>
-            <tr class="border-b border-blackx3/60 hover:bg-blackx/40 transition cursor-pointer"
-                onclick="window.location='<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>'">
+            <tr class="row-link border-b border-blackx3/60 hover:bg-blackx/40"
+                data-href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>"
+                tabindex="0">
               <td class="px-3 py-3 font-medium">#<?= (int)$p['id'] ?></td>
               <td class="px-3 py-3">
                 <?php if ($firstProd): ?>
@@ -283,12 +284,20 @@ include $ROOT . '/views/partials/user_layout_start.php';
               <td class="px-3 py-3"><span class="px-2.5 py-1 rounded-full text-xs font-medium <?= $statusBadge((string)$p['status']) ?>"><?= htmlspecialchars((string)$p['status'], ENT_QUOTES, 'UTF-8') ?></span></td>
               <td class="px-3 py-3">
                 <div class="flex flex-wrap gap-2">
+                  <?php $statusL = strtolower(trim((string)$p['status'])); ?>
+                  <?php if (in_array($statusL, ['pendente','pending','aguardando_pagamento'], true) && $pixPortion > 0): ?>
+                  <a href="<?= BASE_PATH ?>/checkout_pix?order_id=<?= (int)$p['id'] ?>"
+                     onclick="event.stopPropagation()"
+                     class="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-3 py-1.5 text-xs">
+                    <i data-lucide="qr-code" class="w-3 h-3"></i> Pagar
+                  </a>
+                  <?php endif; ?>
                   <a href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>"
                      onclick="event.stopPropagation()"
                      class="inline-flex rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx">
                     Ver detalhes
                   </a>
-                  <?php if (in_array(strtolower(trim((string)$p['status'])), ['pago', 'entregue', 'concluido'], true)): ?>
+                  <?php if (in_array($statusL, ['pago', 'entregue', 'concluido'], true)): ?>
                   <a href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>#avaliacoes"
                      onclick="event.stopPropagation()"
                      class="inline-flex items-center gap-1 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-1.5 text-xs text-yellow-400 hover:border-yellow-400 hover:bg-yellow-500/10 transition-all">
@@ -332,8 +341,8 @@ include $ROOT . '/views/partials/user_layout_start.php';
         $statusLower = strtolower(trim((string)$p['status']));
         $canRate = in_array($statusLower, ['pago', 'entregue', 'concluido'], true);
       ?>
-        <article class="rounded-2xl border border-blackx3 bg-blackx/60 p-3.5 active:scale-[0.99] transition cursor-pointer"
-                 onclick="window.location='<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>'">
+        <article class="row-link rounded-2xl border border-blackx3 bg-blackx/60 p-3.5 hover:border-greenx/30"
+                 data-href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>">
           <header class="flex items-start gap-3">
             <?php if ($firstProd): ?>
               <div class="relative flex-shrink-0">
@@ -378,6 +387,13 @@ include $ROOT . '/views/partials/user_layout_start.php';
           <footer class="mt-3 flex items-center justify-between gap-2">
             <span class="text-[11px] text-zinc-500"><?= fmtDate((string)$p['criado_em']) ?></span>
             <div class="flex items-center gap-2">
+              <?php if (in_array($statusLower, ['pendente','pending','aguardando_pagamento'], true) && $pixPortion > 0): ?>
+                <a href="<?= BASE_PATH ?>/checkout_pix?order_id=<?= (int)$p['id'] ?>"
+                   onclick="event.stopPropagation()"
+                   class="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-2.5 py-1.5 text-[11px]">
+                  <i data-lucide="qr-code" class="w-3 h-3"></i> Pagar
+                </a>
+              <?php endif; ?>
               <?php if ($canRate): ?>
                 <a href="<?= BASE_PATH ?>/pedido_detalhes?id=<?= (int)$p['id'] ?>#avaliacoes"
                    onclick="event.stopPropagation()"

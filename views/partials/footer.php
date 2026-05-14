@@ -49,6 +49,43 @@ declare(strict_types=1);
     <?php unset($_SESSION['_fav_toast']); endif; ?>
   </script>
   <script>
+  /* Linhas/cards clicáveis — delegação global. Use class="row-link" data-href="/url".
+     Cliques em <a>, <button>, <input>, <select>, <textarea>, [data-stop] não disparam navegação.
+     Alternativa para listas com modal: class="row-link" data-click-selector=".js-sale-detail"
+     → ao clicar na linha, dispara click() no primeiro elemento que casar o seletor dentro dela. */
+  (function(){
+    document.addEventListener('click', function(e){
+      var row = e.target.closest('.row-link');
+      if (!row) return;
+      // Ignora cliques em elementos interativos dentro da linha
+      if (e.target.closest('a, button, input, select, textarea, label, [data-stop]')) return;
+      var sel = row.getAttribute('data-click-selector');
+      if (sel) {
+        var inner = row.querySelector(sel);
+        if (inner) { inner.click(); return; }
+      }
+      var href = row.getAttribute('data-href');
+      if (!href) return;
+      // Suporta ctrl/cmd-click → nova aba
+      if (e.ctrlKey || e.metaKey || e.button === 1) {
+        window.open(href, '_blank', 'noopener');
+      } else {
+        window.location.href = href;
+      }
+    }, false);
+    // Atalho de teclado: Enter abre o item focado
+    document.addEventListener('keydown', function(e){
+      if (e.key !== 'Enter') return;
+      var row = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('row-link') ? document.activeElement : null;
+      if (!row) return;
+      var sel = row.getAttribute('data-click-selector');
+      if (sel) { var inner = row.querySelector(sel); if (inner) { inner.click(); return; } }
+      var href = row.getAttribute('data-href');
+      if (href) window.location.href = href;
+    });
+  })();
+  </script>
+  <script>
   /* ── Global Favorites System ── */
   (function(){
     var BASE = (typeof BASE_PATH !== 'undefined' ? BASE_PATH : '');
