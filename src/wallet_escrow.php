@@ -140,9 +140,10 @@ function escrowInitializeOrderItems($conn, int|string $orderId): void
                 $varNome = !empty($sRow['variante_nome']) ? (string)$sRow['variante_nome'] : null;
 
                 if ($tipo === 'dinamico' && $varNome !== null) {
-                    // Re-fetch variantes fresh para evitar sobrescrita quando o mesmo produto
-                    // tem múltiplas variantes no mesmo pedido
-                    $stCur = $conn->prepare("SELECT variantes FROM products WHERE id = ? LIMIT 1");
+                    // FOR UPDATE bloqueia a linha do produto até o commit da tx externa
+                    // (webhook/api blackcat envolvem esta chamada num begin_transaction),
+                    // garantindo serialização do read-modify-write sobre o JSON `variantes`.
+                    $stCur = $conn->prepare("SELECT variantes FROM products WHERE id = ? LIMIT 1 FOR UPDATE");
                     $variantes = null;
                     if ($stCur) {
                         $stCur->bind_param('i', $prodId);

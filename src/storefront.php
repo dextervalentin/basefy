@@ -993,6 +993,35 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
                 return [false, 'O produto "' . (string)($ck['nome'] ?? '') . '" está esgotado.', []];
             }
         }
+
+        // Extra: produtos com auto-delivery (estoque digital) precisam de itens disponíveis
+        // em product_stock_items na variante escolhida, senão o webhook vai deixar o
+        // comprador pagando sem receber conteúdo.
+        try {
+            $pidCk = (int)($ck['id'] ?? 0);
+            if ($pidCk > 0) {
+                $stAd = $conn->prepare("SELECT auto_delivery_enabled FROM products WHERE id = ? LIMIT 1");
+                if ($stAd) {
+                    $stAd->bind_param('i', $pidCk);
+                    $stAd->execute();
+                    $adRow = $stAd->get_result()->fetch_assoc() ?: [];
+                    $stAd->close();
+                    if (!empty($adRow['auto_delivery_enabled'])) {
+                        require_once __DIR__ . '/stock_items.php';
+                        $varForStock = $tipoCk === 'dinamico' ? (string)($ck['variante_nome'] ?? '') : null;
+                        $avail = stockCountAvailable($conn, $pidCk, $varForStock);
+                        if ($avail < $qtyCk) {
+                            $rotulo = $tipoCk === 'dinamico'
+                                ? ('"' . (string)($ck['variante_nome'] ?? '') . '" de "' . (string)($ck['nome'] ?? '') . '"')
+                                : ('"' . (string)($ck['nome'] ?? '') . '"');
+                            return [false, 'Estoque digital insuficiente para ' . $rotulo . '. Aguarde reposição.', []];
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $eAd) {
+            error_log('[sfCreateOrderFromCart] auto-delivery stock check failed: ' . $eAd->getMessage());
+        }
     }
 
     // Buyer service fee (former lead_fee, now charged to buyer)

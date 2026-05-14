@@ -227,6 +227,9 @@ function stockEditItem(object $conn, mixed $itemId, mixed $productId, string $ne
 /**
  * Consume one stock item for auto-delivery.
  * Returns the item content, or null if no items available.
+ *
+ * Atômico: usa UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING
+ * para evitar race condition (dois pedidos pegando o mesmo item).
  */
 function stockConsumeItem(object $conn, mixed $productId, ?string $variante, mixed $orderItemId): ?array
 {
@@ -234,31 +237,42 @@ function stockConsumeItem(object $conn, mixed $productId, ?string $variante, mix
     $orderItemId = (int)$orderItemId;
     stockEnsureTables($conn);
 
-    // Find oldest available item
+    // Single atomic statement: lock the oldest available row (skip rows locked by other tx),
+    // mark sold, and return content. Concurrent workers get disjoint rows.
     if ($variante !== null && $variante !== '') {
-        $st = $conn->prepare("SELECT id, conteudo FROM product_stock_items WHERE product_id = ? AND variante_nome = ? AND status = 'disponivel' ORDER BY id ASC LIMIT 1");
-        $st->bind_param('is', $productId, $variante);
+        $sql = "UPDATE product_stock_items
+                SET status = 'vendido', order_item_id = ?, entregue_em = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM product_stock_items
+                    WHERE product_id = ? AND variante_nome = ? AND status = 'disponivel'
+                    ORDER BY id ASC LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, conteudo";
+        $st = $conn->prepare($sql);
+        if (!$st) return null;
+        $st->bind_param('iis', $orderItemId, $productId, $variante);
     } else {
-        $st = $conn->prepare("SELECT id, conteudo FROM product_stock_items WHERE product_id = ? AND (variante_nome IS NULL OR variante_nome = '') AND status = 'disponivel' ORDER BY id ASC LIMIT 1");
-        $st->bind_param('i', $productId);
+        $sql = "UPDATE product_stock_items
+                SET status = 'vendido', order_item_id = ?, entregue_em = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM product_stock_items
+                    WHERE product_id = ? AND (variante_nome IS NULL OR variante_nome = '') AND status = 'disponivel'
+                    ORDER BY id ASC LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, conteudo";
+        $st = $conn->prepare($sql);
+        if (!$st) return null;
+        $st->bind_param('ii', $orderItemId, $productId);
     }
+
     $st->execute();
     $row = $st->get_result()->fetch_assoc();
     $st->close();
 
     if (!$row) return null;
-
-    $itemId = (int)$row['id'];
-    $content = (string)$row['conteudo'];
-
-    // Mark as sold
-    $up = $conn->prepare("UPDATE product_stock_items SET status = 'vendido', order_item_id = ?, entregue_em = CURRENT_TIMESTAMP WHERE id = ? AND status = 'disponivel'");
-    $up->bind_param('ii', $orderItemId, $itemId);
-    $up->execute();
-    $ok = $up->affected_rows > 0;
-    $up->close();
-
-    return $ok ? ['id' => $itemId, 'conteudo' => $content] : null;
+    return ['id' => (int)$row['id'], 'conteudo' => (string)$row['conteudo']];
 }
 
 /**

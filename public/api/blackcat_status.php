@@ -71,10 +71,20 @@ $upTx->bind_param('siissi', $status, $net, $fees, $status, $raw, $tx['id']);
 $upTx->execute();
 
 if ($status === 'PAID') {
-    $upOrder = $conn->prepare("UPDATE orders SET status='pago' WHERE id = ?");
-    $upOrder->bind_param('i', $orderId);
-    $upOrder->execute();
-    escrowInitializeOrderItems($conn, (int)$orderId);
+    // Master transaction: garante atomicidade de update do pedido + escrow init
+    // (que dispara decremento de estoque com SELECT FOR UPDATE — precisa de tx).
+    $conn->begin_transaction();
+    try {
+        $upOrder = $conn->prepare("UPDATE orders SET status='pago' WHERE id = ?");
+        $upOrder->bind_param('i', $orderId);
+        $upOrder->execute();
+        escrowInitializeOrderItems($conn, (int)$orderId);
+        $conn->commit();
+    } catch (\Throwable $txErr) {
+        $conn->rollback();
+        error_log('[blackcat_status] PAID tx failed for order #' . $orderId . ': ' . $txErr->getMessage());
+        throw $txErr;
+    }
 }
 
 $currentOrderStatus = $status === 'PAID' ? 'pago' : (string)$order['status'];
