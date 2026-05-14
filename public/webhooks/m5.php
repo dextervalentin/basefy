@@ -127,8 +127,29 @@ try {
             $stTx4->close();
         }
 
+        // Fallback final: M5 às vezes envia pix_in com description=NULL e external_id=NULL
+        // (perdemos o vínculo com a cobrança). Casamos por amount + status PENDING + janela 60 min
+        // pegando o MAIS RECENTE para minimizar colisão.
+        if (!$tx && $amount > 0 && $pixStatus === 'confirmed') {
+            $stTx5 = $conn->prepare("SELECT id, order_id, user_id, external_ref, status, amount_centavos
+                                      FROM payment_transactions
+                                     WHERE provider='m5'
+                                       AND status='PENDING'
+                                       AND amount_centavos = ?
+                                       AND created_at > (NOW() - INTERVAL '60 minutes')
+                                  ORDER BY created_at DESC
+                                     LIMIT 1");
+            $stTx5->bind_param('i', $amount);
+            $stTx5->execute();
+            $tx = $stTx5->get_result()->fetch_assoc();
+            $stTx5->close();
+            if ($tx) {
+                error_log('[webhook/m5] pix_in matched by amount fallback: pt_id=' . (int)$tx['id'] . ' amount=' . $amount . ' pix_id=' . $pixId);
+            }
+        }
+
         if (!$tx) {
-            error_log('[webhook/m5] pix_in não encontrou payment_transaction: pix_id=' . $pixId . ' ext=' . $externalId . ' desc=' . $description);
+            error_log('[webhook/m5] pix_in não encontrou payment_transaction: pix_id=' . $pixId . ' ext=' . $externalId . ' desc=' . $description . ' amount=' . $amount);
             echo json_encode(['ok' => true, 'msg' => 'PIX recebido sem transação correspondente — ignorado']);
             $up = $conn->prepare("UPDATE webhook_events SET status='ignored', processed_at=NOW() WHERE idempotency_key = ?");
             $up->bind_param('s', $idempotencyKey);
