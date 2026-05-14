@@ -269,10 +269,16 @@ function apiChatConversations($conn, int $userId, string $role): void
 {
     $conversations = chatListConversations($conn, $userId, $role);
 
-    $formatted = array_map(function ($c) use ($role) {
+    $formatted = array_map(function ($c) {
+        // Cada conversa carrega "my_role" indicando se o usuário é vendedor ou comprador NAQUELA conversa.
+        $myRole = (string)($c['my_role'] ?? 'comprador');
+        $otherName = $myRole === 'vendedor'
+            ? ($c['other_name'] ?? '')
+            : (($c['store_name'] ?? '') ?: ($c['other_name'] ?? ''));
         return [
             'id'            => (int)$c['id'],
-            'other_name'    => $role === 'vendedor' ? $c['other_name'] : ($c['store_name'] ?: $c['other_name']),
+            'my_role'       => $myRole,
+            'other_name'    => $otherName,
             'other_avatar'  => chatResolveMediaUrl($c['other_avatar']),
             'product_name'  => $c['product_name'],
             'product_image' => chatResolveMediaUrl($c['product_image']),

@@ -526,45 +526,34 @@ function chatListConversations($conn, $userId, string $role = 'usuario'): array
     $userId = (int)$userId;
     chatEnsureTables($conn);
 
-    if ($role === 'vendedor') {
-        $st = $conn->prepare(
-            "SELECT c.*, 
-                    u.nome AS other_name, u.avatar AS other_avatar,
-                    u.last_seen_at AS other_last_seen,
-                    p.nome AS product_name, p.imagem AS product_image,
-                    sp.nome_loja AS store_name,
-                    (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = c.id AND cm.sender_id != ? AND cm.is_read = FALSE) AS unread_count,
-                    (SELECT cm2.message FROM chat_messages cm2 WHERE cm2.conversation_id = c.id ORDER BY cm2.criado_em DESC LIMIT 1) AS last_message,
-                    (SELECT cm3.criado_em FROM chat_messages cm3 WHERE cm3.conversation_id = c.id ORDER BY cm3.criado_em DESC LIMIT 1) AS last_msg_time
-             FROM chat_conversations c
-             JOIN users u ON u.id = c.buyer_id
-             LEFT JOIN products p ON p.id = c.product_id
-             LEFT JOIN seller_profiles sp ON sp.user_id = c.vendor_id
-             WHERE c.vendor_id = ? AND c.vendor_archived = FALSE
-               AND EXISTS (SELECT 1 FROM chat_messages cm0 WHERE cm0.conversation_id = c.id)
-             ORDER BY c.last_message_at DESC"
-        );
-        $st->bind_param('ii', $userId, $userId);
-    } else {
-        $st = $conn->prepare(
-            "SELECT c.*, 
-                    u.nome AS other_name, u.avatar AS other_avatar,
-                    u.last_seen_at AS other_last_seen,
-                    sp.nome_loja AS store_name,
-                    p.nome AS product_name, p.imagem AS product_image,
-                    (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = c.id AND cm.sender_id != ? AND cm.is_read = FALSE) AS unread_count,
-                    (SELECT cm2.message FROM chat_messages cm2 WHERE cm2.conversation_id = c.id ORDER BY cm2.criado_em DESC LIMIT 1) AS last_message,
-                    (SELECT cm3.criado_em FROM chat_messages cm3 WHERE cm3.conversation_id = c.id ORDER BY cm3.criado_em DESC LIMIT 1) AS last_msg_time
-             FROM chat_conversations c
-             JOIN users u ON u.id = c.vendor_id
-             LEFT JOIN seller_profiles sp ON sp.user_id = c.vendor_id
-             LEFT JOIN products p ON p.id = c.product_id
-             WHERE c.buyer_id = ? AND c.buyer_archived = FALSE
-               AND EXISTS (SELECT 1 FROM chat_messages cm0 WHERE cm0.conversation_id = c.id)
-             ORDER BY c.last_message_at DESC"
-        );
-        $st->bind_param('ii', $userId, $userId);
-    }
+    // Retorna TODAS conversas do usuário (lado comprador OU vendedor) em uma única lista.
+    // O "outro lado" é resolvido dinamicamente para cada linha. Antes a query filtrava por role,
+    // o que escondia conversas do vendedor quando o role da sessão era 'usuario' (caso comum: o
+    // usuário também é vendedor, com role default 'usuario' até o admin promover).
+    $st = $conn->prepare(
+        "SELECT c.*, 
+                CASE WHEN c.vendor_id = ? THEN u_buyer.nome ELSE u_vendor.nome END  AS other_name,
+                CASE WHEN c.vendor_id = ? THEN u_buyer.avatar ELSE u_vendor.avatar END AS other_avatar,
+                CASE WHEN c.vendor_id = ? THEN u_buyer.last_seen_at ELSE u_vendor.last_seen_at END AS other_last_seen,
+                CASE WHEN c.vendor_id = ? THEN 'vendedor' ELSE 'comprador' END AS my_role,
+                p.nome AS product_name, p.imagem AS product_image,
+                sp.nome_loja AS store_name,
+                (SELECT COUNT(*) FROM chat_messages cm WHERE cm.conversation_id = c.id AND cm.sender_id != ? AND cm.is_read = FALSE) AS unread_count,
+                (SELECT cm2.message FROM chat_messages cm2 WHERE cm2.conversation_id = c.id ORDER BY cm2.criado_em DESC LIMIT 1) AS last_message,
+                (SELECT cm3.criado_em FROM chat_messages cm3 WHERE cm3.conversation_id = c.id ORDER BY cm3.criado_em DESC LIMIT 1) AS last_msg_time
+         FROM chat_conversations c
+         JOIN users u_buyer  ON u_buyer.id  = c.buyer_id
+         JOIN users u_vendor ON u_vendor.id = c.vendor_id
+         LEFT JOIN products p ON p.id = c.product_id
+         LEFT JOIN seller_profiles sp ON sp.user_id = c.vendor_id
+         WHERE (
+                 (c.buyer_id  = ? AND c.buyer_archived  = FALSE)
+              OR (c.vendor_id = ? AND c.vendor_archived = FALSE)
+               )
+           AND EXISTS (SELECT 1 FROM chat_messages cm0 WHERE cm0.conversation_id = c.id)
+         ORDER BY c.last_message_at DESC"
+    );
+    $st->bind_param('iiiiiii', $userId, $userId, $userId, $userId, $userId, $userId, $userId);
     $st->execute();
     $rows = $st->get_result()->fetch_all();
     $st->close();

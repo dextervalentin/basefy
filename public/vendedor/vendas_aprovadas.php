@@ -55,11 +55,112 @@ $st->execute();
 $itens = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 $st->close();
 
+// ─── Níveis de taxa (card no topo) ───────────────────────────────────────────
+$sellerLevelInfo      = ['label' => 'Nível 1', 'level' => 1, 'total_fee_percent' => 0.0, 'revenue' => 0.0, 'is_custom' => false];
+$sellerLevelCfg       = ['nivel1_percent' => 0, 'nivel2_percent' => 0, 'nivel3_percent' => 0, 'nivel2_threshold' => 0, 'nivel3_threshold' => 0];
+$sellerLevelProgress  = 0.0;
+$sellerLevelRemaining = null;
+$sellerLevelNextLabel = '';
+try {
+    require_once __DIR__ . '/../../src/seller_levels.php';
+    $sellerLevelCfg  = sellerLevelsConfig($conn);
+    $sellerLevelInfo = sellerLevelCalc($conn, $uid);
+    $sellerRevenue   = (float)($sellerLevelInfo['revenue'] ?? 0.0);
+    if (!empty($sellerLevelInfo['is_custom'])) {
+        $sellerLevelProgress = 100.0;
+    } else {
+        $level = (int)($sellerLevelInfo['level'] ?? 1);
+        $stageStart = 0.0; $nextThreshold = 0.0;
+        if ($level === 1) {
+            $nextThreshold = (float)$sellerLevelCfg['nivel2_threshold'];
+            $sellerLevelNextLabel = 'Nível 2';
+        } elseif ($level === 2) {
+            $stageStart = (float)$sellerLevelCfg['nivel2_threshold'];
+            $nextThreshold = (float)$sellerLevelCfg['nivel3_threshold'];
+            $sellerLevelNextLabel = 'Nível 3';
+        } else {
+            $stageStart = (float)$sellerLevelCfg['nivel3_threshold'];
+        }
+        if ($nextThreshold > $stageStart) {
+            $sellerLevelProgress  = max(0.0, min(100.0, (($sellerRevenue - $stageStart) / ($nextThreshold - $stageStart)) * 100.0));
+            $sellerLevelRemaining = max(0.0, $nextThreshold - $sellerRevenue);
+        } else {
+            $sellerLevelProgress = 100.0;
+        }
+    }
+} catch (Throwable $e) { /* silencioso */ }
+
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 ?>
 
-<div>
+<div class="space-y-4">
+  <!-- Card: Níveis de taxa do vendedor -->
+  <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 sm:p-5 overflow-hidden">
+    <div class="flex flex-col lg:flex-row lg:items-center gap-5">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-greenx/10 border border-greenx/20 flex items-center justify-center shrink-0">
+            <i data-lucide="trophy" class="w-5 h-5 text-greenx"></i>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Níveis de taxa</p>
+            <h3 class="text-lg font-semibold truncate"><?= htmlspecialchars((string)($sellerLevelInfo['label'] ?? 'Nível 1'), ENT_QUOTES, 'UTF-8') ?></h3>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+            <p class="text-xs text-zinc-500">Sua taxa atual</p>
+            <p class="text-xl font-bold text-greenx mt-1"><?= number_format((float)($sellerLevelInfo['total_fee_percent'] ?? 0), 2, ',', '.') ?>%</p>
+          </div>
+          <div class="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+            <p class="text-xs text-zinc-500">Vendas aprovadas</p>
+            <p class="text-xl font-bold mt-1">R$ <?= number_format((float)($sellerLevelInfo['revenue'] ?? 0), 2, ',', '.') ?></p>
+          </div>
+          <div class="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+            <p class="text-xs text-zinc-500">Próximo marco</p>
+            <?php if ($sellerLevelRemaining !== null): ?>
+              <p class="text-xl font-bold mt-1">R$ <?= number_format($sellerLevelRemaining, 2, ',', '.') ?></p>
+              <p class="text-[11px] text-zinc-500 mt-0.5">para chegar ao <?= htmlspecialchars($sellerLevelNextLabel, ENT_QUOTES, 'UTF-8') ?></p>
+            <?php elseif (!empty($sellerLevelInfo['is_custom'])): ?>
+              <p class="text-xl font-bold mt-1 text-fuchsia-300">Personalizada</p>
+              <p class="text-[11px] text-zinc-500 mt-0.5">definida pela equipe</p>
+            <?php else: ?>
+              <p class="text-xl font-bold mt-1 text-yellow-300">Topo</p>
+              <p class="text-[11px] text-zinc-500 mt-0.5">melhor nível ativo</p>
+            <?php endif; ?>
+          </div>
+        </div>
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs text-zinc-500 mb-2">
+            <span>Progresso do nível</span>
+            <span><?= number_format($sellerLevelProgress, 0, ',', '.') ?>%</span>
+          </div>
+          <div class="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+            <div class="h-full rounded-full bg-gradient-to-r from-greenx to-greenx2" style="width:<?= number_format($sellerLevelProgress, 2, '.', '') ?>%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 lg:w-[360px] shrink-0">
+        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center <?= (int)($sellerLevelInfo['level'] ?? 1) === 1 && empty($sellerLevelInfo['is_custom']) ? 'ring-1 ring-greenx/40' : '' ?>">
+          <p class="text-[11px] text-zinc-500 font-semibold">Nível 1</p>
+          <p class="text-sm font-bold mt-1"><?= number_format((float)$sellerLevelCfg['nivel1_percent'], 2, ',', '.') ?>%</p>
+          <p class="text-[10px] text-zinc-600 mt-1">inicial</p>
+        </div>
+        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center <?= (int)($sellerLevelInfo['level'] ?? 1) === 2 && empty($sellerLevelInfo['is_custom']) ? 'ring-1 ring-greenx/40' : '' ?>">
+          <p class="text-[11px] text-zinc-500 font-semibold">Nível 2</p>
+          <p class="text-sm font-bold mt-1"><?= number_format((float)$sellerLevelCfg['nivel2_percent'], 2, ',', '.') ?>%</p>
+          <p class="text-[10px] text-zinc-600 mt-1">R$ <?= number_format((float)$sellerLevelCfg['nivel2_threshold'], 0, ',', '.') ?></p>
+        </div>
+        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center <?= (int)($sellerLevelInfo['level'] ?? 1) === 3 && empty($sellerLevelInfo['is_custom']) ? 'ring-1 ring-greenx/40' : '' ?>">
+          <p class="text-[11px] text-zinc-500 font-semibold">Nível 3</p>
+          <p class="text-sm font-bold mt-1"><?= number_format((float)$sellerLevelCfg['nivel3_percent'], 2, ',', '.') ?>%</p>
+          <p class="text-[10px] text-zinc-600 mt-1">R$ <?= number_format((float)$sellerLevelCfg['nivel3_threshold'], 0, ',', '.') ?></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <form method="get" class="mb-4">
       <input

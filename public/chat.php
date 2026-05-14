@@ -137,7 +137,12 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
             <?php foreach ($conversations as $c):
                 $cid     = (int)$c['id'];
                 $cActive = $cid === $activeConvId;
-                $cName   = $c['store_name'] ?: $c['other_name'];
+                $cMyRole = (string)($c['my_role'] ?? 'comprador');
+                // Quando sou vendedor naquela conversa, o "outro" é o comprador (pessoa).
+                // Quando sou comprador, mostro o nome da loja (ou nome do vendedor como fallback).
+                $cName   = $cMyRole === 'vendedor'
+                            ? ($c['other_name'] ?? '')
+                            : (($c['store_name'] ?? '') ?: ($c['other_name'] ?? ''));
                 $cAvatar = $c['other_avatar'] ?? '';
                 $cPreview = $c['last_message'] ?? 'Sem mensagens';
                 $cUnread = (int)($c['unread_count'] ?? 0);
