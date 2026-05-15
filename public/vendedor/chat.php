@@ -99,6 +99,13 @@ include $ROOT . '/views/partials/vendor_layout_start.php';
   .chat-main { display: <?= $activeConvId > 0 ? 'flex' : 'none' ?>; }
   .chat-page { height: calc(100vh - 160px); }
 }
+.vdc-input { width: 28px; height: 32px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(245,158,11,0.35); color: #f59e0b; text-align: center; font-size: 14px; font-weight: 700; font-family: monospace; text-transform: uppercase; outline: none; }
+.vdc-input:focus { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.25); }
+.vdc-input.filled { background: rgba(245,158,11,0.15); }
+#vendorDeliveryBtn:hover { filter: brightness(1.1); transform: translateY(-1px); transition: all .15s; }
+#vendorDeliveryBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+#vendorDeliveryMsg.ok { color: #22c55e; }
+#vendorDeliveryMsg.err { color: #ef4444; }
 </style>
 
 <?php include $ROOT . '/views/partials/comunicacao_tabs_vendor.php'; ?>
@@ -274,6 +281,33 @@ include $ROOT . '/views/partials/vendor_layout_start.php';
             <?php endforeach; ?>
         </div>
 
+        <!-- Delivery code confirmation strip (vendor side) -->
+        <div id="vendorDeliveryStrip" style="padding:12px 16px;border-top:1px solid rgba(245,158,11,0.18);background:linear-gradient(180deg,rgba(245,158,11,0.06),rgba(245,158,11,0.02));">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+                    <i data-lucide="key-round" style="width:16px;height:16px;color:#f59e0b;flex-shrink:0;"></i>
+                    <span style="font-size:12px;font-weight:600;color:#f59e0b;white-space:nowrap;">Confirmar entrega:</span>
+                    <div id="vendorDeliveryBoxes" style="display:flex;gap:4px;">
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                        <input class="vdc-input" maxlength="1" inputmode="text" autocomplete="off" />
+                    </div>
+                </div>
+                <button id="vendorDeliveryBtn" type="button" style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                    <i data-lucide="check-circle" style="width:14px;height:14px;"></i>
+                    Confirmar entrega
+                </button>
+            </div>
+            <div id="vendorDeliveryMsg" style="display:none;font-size:11px;margin-top:6px;"></div>
+        </div>
+        <div id="vendorDeliveryDone" style="display:none;padding:12px 16px;border-top:1px solid rgba(34,197,94,0.18);background:rgba(34,197,94,0.06);text-align:center;font-size:12px;color:#22c55e;font-weight:600;">
+            <i data-lucide="check-circle" style="width:14px;height:14px;display:inline;vertical-align:-2px;"></i>
+            Entrega confirmada — pagamento liberado
+        </div>
+
         <!-- Input -->
         <div class="chat-main-input">
             <textarea id="vendorChatInput" rows="1" placeholder="Digite uma mensagem..." maxlength="2000"></textarea>
@@ -371,6 +405,85 @@ include $ROOT . '/views/partials/vendor_layout_start.php';
                 const d = new Date(dt.replace(' ', 'T'));
                 return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             }
+
+            // ── Vendor delivery code confirmation ──
+            const vdcStrip  = document.getElementById('vendorDeliveryStrip');
+            const vdcDone   = document.getElementById('vendorDeliveryDone');
+            const vdcInputs = document.querySelectorAll('#vendorDeliveryBoxes .vdc-input');
+            const vdcBtn    = document.getElementById('vendorDeliveryBtn');
+            const vdcMsg    = document.getElementById('vendorDeliveryMsg');
+
+            vdcInputs.forEach((inp, i) => {
+                inp.addEventListener('input', (e) => {
+                    inp.value = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    inp.classList.toggle('filled', !!inp.value);
+                    if (inp.value && i < vdcInputs.length - 1) vdcInputs[i + 1].focus();
+                });
+                inp.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && !inp.value && i > 0) {
+                        vdcInputs[i - 1].focus();
+                        vdcInputs[i - 1].value = '';
+                        vdcInputs[i - 1].classList.remove('filled');
+                    }
+                    if (e.key === 'Enter') { e.preventDefault(); vdcBtn.click(); }
+                });
+                inp.addEventListener('paste', (e) => {
+                    e.preventDefault();
+                    const pasted = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    for (let j = 0; j < 6; j++) {
+                        vdcInputs[j].value = pasted[j] || '';
+                        vdcInputs[j].classList.toggle('filled', !!pasted[j]);
+                    }
+                    vdcInputs[Math.min(pasted.length, 5)].focus();
+                });
+            });
+
+            vdcBtn.addEventListener('click', async () => {
+                const code = Array.from(vdcInputs).map(b => b.value.toUpperCase()).join('');
+                vdcMsg.style.display = 'none';
+                if (code.length !== 6) {
+                    vdcMsg.textContent = 'O código deve ter 6 caracteres.';
+                    vdcMsg.className = 'err';
+                    vdcMsg.style.display = 'block';
+                    return;
+                }
+                vdcBtn.disabled = true;
+                try {
+                    const fd = new FormData();
+                    fd.append('conversation_id', CONV_ID);
+                    fd.append('delivery_code', code);
+                    const r = await fetch(CHAT_API + '?action=confirm_delivery', { method: 'POST', body: fd });
+                    const j = await r.json();
+                    vdcMsg.textContent = j.msg || (j.ok ? 'Entrega confirmada!' : 'Erro');
+                    vdcMsg.className = j.ok ? 'ok' : 'err';
+                    vdcMsg.style.display = 'block';
+                    if (j.ok) {
+                        vdcInputs.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+                        vdcStrip.style.display = 'none';
+                        vdcDone.style.display = 'block';
+                        if (window.lucide) window.lucide.createIcons();
+                        setTimeout(() => poll(), 800);
+                    }
+                } catch(e) {
+                    vdcMsg.textContent = 'Erro de conexão.';
+                    vdcMsg.className = 'err';
+                    vdcMsg.style.display = 'block';
+                }
+                vdcBtn.disabled = false;
+            });
+
+            // Hide strip if delivery already confirmed
+            (async function checkDelivered(){
+                try {
+                    const r = await fetch(CHAT_API + '?action=get_delivery_status&conversation_id=' + CONV_ID);
+                    const j = await r.json();
+                    if (j.ok && j.delivered) {
+                        vdcStrip.style.display = 'none';
+                        vdcDone.style.display = 'block';
+                        if (window.lucide) window.lucide.createIcons();
+                    }
+                } catch(e) {}
+            })();
         })();
         </script>
         <?php endif; ?>

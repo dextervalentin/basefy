@@ -1024,10 +1024,11 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
         }
     }
 
-    // Buyer service fee (former lead_fee, now charged to buyer)
+    // Buyer service fee (former lead_fee, now charged to buyer) + taxa fixa por pedido
     require_once __DIR__ . '/seller_levels.php';
-    $buyerFeePct = buyerServiceFeePercent($conn);
-    $buyerFeeAmt = round($grossTotal * ($buyerFeePct / 100), 2);
+    $buyerFeePct  = buyerServiceFeePercent($conn);
+    $buyerFeeFlat = buyerFlatFeePerOrder($conn);
+    $buyerFeeAmt  = round(($grossTotal * ($buyerFeePct / 100)) + $buyerFeeFlat, 2);
     $totalComTaxa = round($grossTotal + $buyerFeeAmt, 2);
 
     $walletUsed = 0.0;

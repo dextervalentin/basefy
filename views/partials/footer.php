@@ -27,7 +27,7 @@ declare(strict_types=1);
     window.addEventListener('pageshow',function(){finish()});
   })();
   </script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script>window.__BASE_PATH = '<?= defined("BASE_PATH") ? BASE_PATH : "" ?>'; window.__BASEFY_PUSH_ONLY = true;</script>
   <script src="<?= defined('BASE_PATH') ? BASE_PATH : '' ?>/assets/js/push-notifications.js"></script>
   <script>

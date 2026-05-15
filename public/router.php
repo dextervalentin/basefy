@@ -42,6 +42,18 @@ $target = realpath($docRoot . DIRECTORY_SEPARATOR . ltrim($uri, '/'));
 if ($target !== false && str_starts_with($target, $docRootPrefix) && is_file($target)) {
     $ext = strtolower(pathinfo($target, PATHINFO_EXTENSION));
     if ($ext !== 'php') {
+        // Cache static assets aggressively (PHP built-in server doesn't send these by default)
+        static $cacheableExts = ['css'=>1,'js'=>1,'png'=>1,'jpg'=>1,'jpeg'=>1,'gif'=>1,'webp'=>1,'svg'=>1,'ico'=>1,'woff'=>1,'woff2'=>1,'ttf'=>1,'eot'=>1,'mp4'=>1,'webm'=>1];
+        if (isset($cacheableExts[$ext])) {
+            $etag = '"' . substr(md5_file($target) ?: '', 0, 16) . '"';
+            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+            if ($ifNoneMatch === $etag) {
+                http_response_code(304);
+                return true;
+            }
+            header('Cache-Control: public, max-age=2592000, immutable');
+            header('ETag: ' . $etag);
+        }
         return false;
     }
     // Exact .php file hit (POST to API endpoints etc.)

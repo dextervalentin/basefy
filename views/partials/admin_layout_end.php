@@ -15,7 +15,7 @@ if ($currentPage !== 'chat.php') {
 }
 ?>
 
-<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 <script>window.lucide?.createIcons();</script>
 <script>
 (() => {

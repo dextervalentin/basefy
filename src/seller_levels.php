@@ -240,9 +240,19 @@ function sellerFeeMode($conn): string
 }
 
 /**
- * Taxa fixa cobrada uma vez por pedido (apenas no modo global).
+ * Taxa fixa por pedido (modo global): legado por compat. SEMPRE retorna 0
+ * porque o flat agora é pago pelo comprador (ver buyerFlatFeePerOrder).
  */
 function sellerFlatFeePerOrder($conn): float
+{
+    return 0.0;
+}
+
+/**
+ * Taxa fixa em R$ cobrada do comprador uma única vez por pedido,
+ * apenas no modo global.
+ */
+function buyerFlatFeePerOrder($conn): float
 {
     $cfg = sellerLevelsConfig($conn);
     if ($cfg['enabled']) return 0.0;

@@ -49,9 +49,10 @@ if (!$items) {
     exit;
 }
 
-// Buyer service fee (4.99%)
+// Buyer service fee (% sobre o bruto) + taxa fixa por pedido
 $buyerFeePct  = buyerServiceFeePercent($conn);
-$buyerFeeAmt  = round($totalBruto * ($buyerFeePct / 100), 2);
+$buyerFeeFlat = buyerFlatFeePerOrder($conn);
+$buyerFeeAmt  = round(($totalBruto * ($buyerFeePct / 100)) + $buyerFeeFlat, 2);
 $totalComTaxa = round($totalBruto + $buyerFeeAmt, 2);
 
 $walletAplicavel = min($walletSaldo, $totalComTaxa);
@@ -162,7 +163,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
                         <?php if ($buyerFeeAmt > 0): ?>
                         <div class="flex justify-between">
-                            <span class="text-zinc-400">Taxa de serviço (<?= number_format($buyerFeePct, 2, ',', '.') ?>%)</span>
+                            <span class="text-zinc-400">Taxa de serviço<?php if ($buyerFeePct > 0): ?> (<?= number_format($buyerFeePct, 2, ',', '.') ?>%<?php if ($buyerFeeFlat > 0): ?> + R$ <?= number_format($buyerFeeFlat, 2, ',', '.') ?><?php endif; ?>)<?php elseif ($buyerFeeFlat > 0): ?> (R$ <?= number_format($buyerFeeFlat, 2, ',', '.') ?> por pedido)<?php endif; ?></span>
                             <span class="font-medium">R$&nbsp;<?= number_format($buyerFeeAmt, 2, ',', '.') ?></span>
                         </div>
                         <?php endif; ?>
@@ -333,7 +334,11 @@ console.log('[checkout] page loaded, version: <?= CHECKOUT_VERSION ?>');
     // Close modal function (exposed globally for onclick)
     window.closePixModal = function() {
         if (modal) modal.style.display = 'none';
-        // Don't stop polling — payment can still complete in background
+        // Stop polling — redirect to pending orders so user can resume payment from dashboard
+        try { if (pollId) clearInterval(pollId); } catch(_) {}
+        try { if (timerId) clearInterval(timerId); } catch(_) {}
+        // Redirect to pending orders page (QR can be re-opened from there via "Pagar" button)
+        window.location.href = BP + '/meus_pedidos?status=pendente';
     };
 
     function formatBRL(v) {

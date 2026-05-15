@@ -110,6 +110,9 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 .chat-msg.system-msg .sys-copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 .chat-msg.system-msg .sys-code { display: inline-flex; gap: 3px; margin: 8px 0; }
 .chat-msg.system-msg .sys-code span { width: 32px; height: 38px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(245,158,11,0.3); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; font-family: monospace; color: #f59e0b; }
+.bdc-box { width: 28px; height: 32px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(245,158,11,0.35); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; font-family: monospace; color: #f59e0b; }
+#buyerDeliverySendBtn:hover { filter: brightness(1.1); transform: translateY(-1px); transition: all .15s; }
+#buyerDeliverySendBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 </style>
 
 <?php include __DIR__ . '/../views/partials/comunicacao_tabs.php'; ?>
@@ -337,6 +340,29 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
             <?php endforeach; ?>
         </div>
 
+        <!-- Delivery code strip (buyer side) -->
+        <div id="buyerDeliveryStrip" style="display:none;padding:12px 16px;border-top:1px solid rgba(245,158,11,0.18);background:linear-gradient(180deg,rgba(245,158,11,0.06),rgba(245,158,11,0.02));">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+                    <i data-lucide="key-round" style="width:16px;height:16px;color:#f59e0b;flex-shrink:0;"></i>
+                    <span style="font-size:12px;font-weight:600;color:#f59e0b;white-space:nowrap;">Código de entrega</span>
+                    <div id="buyerDeliveryBoxes" style="display:flex;gap:4px;">
+                        <span class="bdc-box"></span><span class="bdc-box"></span><span class="bdc-box"></span>
+                        <span class="bdc-box"></span><span class="bdc-box"></span><span class="bdc-box"></span>
+                    </div>
+                </div>
+                <button id="buyerDeliverySendBtn" type="button" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                    <i data-lucide="send" style="width:14px;height:14px;"></i>
+                    <span id="buyerDeliveryBtnLabel">Enviar código no chat</span>
+                </button>
+            </div>
+            <div id="buyerDeliveryMsg" style="display:none;font-size:11px;margin-top:6px;color:#22c55e;"></div>
+        </div>
+        <div id="buyerDeliveryDone" style="display:none;padding:12px 16px;border-top:1px solid rgba(34,197,94,0.18);background:rgba(34,197,94,0.06);text-align:center;font-size:12px;color:#22c55e;font-weight:600;">
+            <i data-lucide="check-circle" style="width:14px;height:14px;display:inline;vertical-align:-2px;"></i>
+            Entrega confirmada — pagamento liberado
+        </div>
+
         <!-- Input -->
         <div class="chat-main-input">
             <textarea id="buyerChatInput" rows="1" placeholder="Digite uma mensagem..." maxlength="2000"></textarea>
@@ -495,6 +521,70 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 const d = new Date(dt.replace(' ', 'T'));
                 return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             }
+
+            // ── Buyer delivery code strip ──
+            const dlvStrip = document.getElementById('buyerDeliveryStrip');
+            const dlvDone  = document.getElementById('buyerDeliveryDone');
+            const dlvBoxes = document.querySelectorAll('#buyerDeliveryBoxes .bdc-box');
+            const dlvBtn   = document.getElementById('buyerDeliverySendBtn');
+            const dlvBtnLabel = document.getElementById('buyerDeliveryBtnLabel');
+            const dlvMsg   = document.getElementById('buyerDeliveryMsg');
+            let dlvCurrentCode = '';
+            let dlvStep = 0;
+
+            async function fetchDeliveryCode() {
+                try {
+                    const r = await fetch(CHAT_API + '?action=get_buyer_code&conversation_id=' + CONV_ID);
+                    const j = await r.json();
+                    if (!j.ok || !j.code) return;
+                    dlvCurrentCode = j.code;
+                    const chars = j.code.split('');
+                    dlvBoxes.forEach((box, i) => { box.textContent = chars[i] || '-'; });
+                    if (j.delivered) {
+                        dlvStrip.style.display = 'none';
+                        dlvDone.style.display = 'block';
+                    } else {
+                        dlvStrip.style.display = 'block';
+                        dlvDone.style.display = 'none';
+                    }
+                    if (window.lucide) window.lucide.createIcons();
+                } catch(e) {}
+            }
+
+            if (dlvBtn) {
+                dlvBtn.addEventListener('click', async () => {
+                    if (!dlvCurrentCode) return;
+                    if (dlvStep === 0) {
+                        dlvStep = 1;
+                        dlvBtnLabel.textContent = 'Confirmar envio?';
+                        dlvBtn.style.background = 'linear-gradient(135deg,#dc2626,#b91c1c)';
+                        return;
+                    }
+                    dlvBtn.disabled = true;
+                    try {
+                        const fd = new FormData();
+                        fd.append('conversation_id', CONV_ID);
+                        fd.append('message', '🔑 Código de entrega: ' + dlvCurrentCode);
+                        const r = await fetch(CHAT_API + '?action=send', { method: 'POST', body: fd });
+                        const j = await r.json();
+                        if (j.ok && j.msg) {
+                            appendMsg(j.msg);
+                            dlvMsg.style.display = 'block';
+                            dlvMsg.textContent = 'Código enviado no chat. Aguarde a confirmação do vendedor.';
+                            dlvBtnLabel.textContent = 'Enviado';
+                        }
+                    } catch(e) {
+                        dlvMsg.style.display = 'block';
+                        dlvMsg.style.color = '#ef4444';
+                        dlvMsg.textContent = 'Erro de conexão.';
+                    }
+                    dlvBtn.disabled = false;
+                });
+            }
+
+            fetchDeliveryCode();
+            // Re-check status periodically (in case vendor confirms)
+            setInterval(fetchDeliveryCode, 15000);
         })();
         </script>
         <?php endif; ?>

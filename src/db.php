@@ -338,9 +338,15 @@ final class PgCompatConnection
 final class Database
 {
     private mixed $conn = null;
+    private static ?PgCompatConnection $shared = null;
 
     public function connect(): mixed
     {
+        // Return shared connection if already opened in this request
+        if (self::$shared !== null) {
+            $this->conn = self::$shared;
+            return $this->conn;
+        }
         if ($this->conn !== null) {
             return $this->conn;
         }
@@ -360,8 +366,10 @@ final class Database
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => true,
         ]);
         $this->conn = new PgCompatConnection($pdo);
+        self::$shared = $this->conn;
         $pdo->exec("SET timezone = 'America/Sao_Paulo'");
 
         return $this->conn;

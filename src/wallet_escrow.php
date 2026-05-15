@@ -282,23 +282,6 @@ function escrowReleaseOrderItem($conn, int $orderItemId, string $trigger, int $a
         $feeAmount  = $feeInfo['total_fee_amount'];
         $netAmount  = $feeInfo['net_amount'];
 
-        // Taxa fixa por pedido (modo global): cobra R$X UMA \u00fanica vez por pedido,
-        // no primeiro item liberado. Detecta "primeiro" contando itens j\u00e1 liberados
-        // do mesmo pedido.
-        $flatFee = sellerFlatFeePerOrder($conn);
-        if ($flatFee > 0) {
-            $stFlat = $conn->prepare('SELECT COUNT(*) AS c FROM order_items WHERE order_id = ? AND released_at IS NOT NULL');
-            $stFlat->bind_param('i', $orderId);
-            $stFlat->execute();
-            $alreadyReleased = (int)($stFlat->get_result()->fetch_assoc()['c'] ?? 0);
-            $stFlat->close();
-            if ($alreadyReleased === 0) {
-                $flatApplied = min($flatFee, max(0.0, $netAmount));
-                $feeAmount  = round($feeAmount + $flatApplied, 2);
-                $netAmount  = round($netAmount - $flatApplied, 2);
-            }
-        }
-
         $upSeller = $conn->prepare('UPDATE users SET wallet_saldo = wallet_saldo + ? WHERE id = ?');
         $upSeller->bind_param('di', $netAmount, $sellerId);
         $upSeller->execute();
