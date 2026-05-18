@@ -311,6 +311,7 @@ const ALUP_PATH_MARKETPLACE_LIST         = '/v1/products';
 const ALUP_PATH_MARKETPLACE_GET          = '/v1/products/';
 const ALUP_PATH_MARKETPLACE_ORDER_CREATE = '/v1/orders';
 const ALUP_PATH_MARKETPLACE_ORDER_GET    = '/v1/orders/';
+const ALUP_OFFICIAL_STORE_ID             = '8b80f8fd-9f02-48da-9ee1-d3bae135f96c';
 
 function alupExtractList(array $body): array
 {
@@ -335,6 +336,30 @@ function alupExtractPriceCents(array $payload): int
         if (isset($payload[$key]) && is_numeric($payload[$key])) return max(0, (int)round((float)$payload[$key]));
     }
     return 0;
+}
+
+function alupProductStoreId(array $payload): string
+{
+    return trim((string)($payload['store_id'] ?? ''));
+}
+
+function alupProductIsOfficial(array $payload): bool
+{
+    return alupProductStoreId($payload) === ALUP_OFFICIAL_STORE_ID;
+}
+
+function alupProductOriginLabel(array $payload): string
+{
+    return alupProductIsOfficial($payload) ? 'Loja oficial AlUp' : 'Vendedor AlUp';
+}
+
+function alupProductDeliveryLabel(array $payload): string
+{
+    return match ((string)($payload['delivery_type'] ?? '')) {
+        'automatic' => 'Automática',
+        'manual' => 'Manual',
+        default => 'Não informado',
+    };
 }
 
 function alupCacheGet(object $conn, string $cacheKey): ?array
@@ -367,14 +392,19 @@ function alupCacheSet(object $conn, string $cacheKey, array $payload, int $ttlSe
     $stmt->execute([$cacheKey, $json, $expiresAt]);
 }
 
-function alupListMarketplaceProducts(object $conn, bool $forceRefresh = false): array
+function alupListMarketplaceProducts(object $conn, bool $forceRefresh = false, array $params = []): array
 {
-    $cacheKey = 'alup:marketplace:products';
+    $allowed = [];
+    foreach (['limit', 'offset', 'q'] as $key) {
+        if (isset($params[$key]) && trim((string)$params[$key]) !== '') $allowed[$key] = trim((string)$params[$key]);
+    }
+    $query = $allowed ? ('?' . http_build_query($allowed)) : '';
+    $cacheKey = 'alup:marketplace:products:' . md5($query);
     if (!$forceRefresh) {
         $cached = alupCacheGet($conn, $cacheKey);
         if ($cached !== null) return [true, $cached, 200, true];
     }
-    [$ok, $body, $status] = alupRequest($conn, 'GET', ALUP_PATH_MARKETPLACE_LIST);
+    [$ok, $body, $status] = alupRequest($conn, 'GET', ALUP_PATH_MARKETPLACE_LIST . $query);
     if ($ok) {
         $ttl = (int)(alupConfig($conn)['catalog_cache_seconds'] ?? 120);
         alupCacheSet($conn, $cacheKey, $body, $ttl);
