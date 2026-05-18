@@ -69,19 +69,42 @@ foreach ($products as $bp) {
   ];
 }
 
-// Vendedores aprovados (para importação 1-click)
+// Vendedores para importação: todos os sellers + usuários com produto publicado
 $vendorOptions = [];
-$rsV = $conn->query("SELECT id, nome, email FROM users
-                     WHERE COALESCE(is_vendedor, FALSE) = TRUE
-                       AND (status_vendedor IS NULL OR status_vendedor IN ('aprovado','nao_solicitado'))
-                     ORDER BY nome ASC LIMIT 500");
+$rsV = $conn->query("SELECT u.id, u.nome, u.email,
+                            COUNT(p.id) AS product_count,
+                            SUM(CASE WHEN COALESCE(p.ativo, 0) = 1 THEN 1 ELSE 0 END) AS published_count
+                     FROM users u
+                     LEFT JOIN products p ON p.vendedor_id = u.id
+                     WHERE COALESCE(u.is_vendedor, 0) = 1
+                        OR EXISTS (
+                          SELECT 1
+                          FROM products px
+                          WHERE px.vendedor_id = u.id
+                            AND COALESCE(px.ativo, 0) = 1
+                        )
+                     GROUP BY u.id, u.nome, u.email
+                     ORDER BY published_count DESC, product_count DESC, u.nome ASC
+                     LIMIT 1000");
 if ($rsV) {
   foreach ($rsV->fetch_all(MYSQLI_ASSOC) as $v) {
+    $vendorName = (string)($v['nome'] ?? 'Vendedor');
+    $vendorEmail = (string)($v['email'] ?? '');
+    $productCount = (int)($v['product_count'] ?? 0);
+    $publishedCount = (int)($v['published_count'] ?? 0);
+    $meta = trim($vendorEmail);
+    if ($publishedCount > 0) {
+      $meta .= ($meta !== '' ? ' · ' : '') . $publishedCount . ' publicado' . ($publishedCount > 1 ? 's' : '');
+    } elseif ($productCount > 0) {
+      $meta .= ($meta !== '' ? ' · ' : '') . $productCount . ' produto' . ($productCount > 1 ? 's' : '');
+    }
     $vendorOptions[] = [
       'id' => (int)$v['id'],
-      'name' => (string)($v['nome'] ?? 'Vendedor'),
-      'email' => (string)($v['email'] ?? ''),
-      'search' => mb_strtolower('#' . $v['id'] . ' ' . ($v['nome'] ?? '') . ' ' . ($v['email'] ?? '')),
+      'name' => $vendorName,
+      'email' => $vendorEmail,
+      'meta' => $meta,
+      'published_count' => $publishedCount,
+      'search' => mb_strtolower('#' . $v['id'] . ' ' . $vendorName . ' ' . $vendorEmail),
     ];
   }
 }
@@ -927,16 +950,16 @@ function alupRenderVendorList(input) {
     if (selected) { selected.textContent = 'Escolha um vendedor da lista.'; selected.classList.remove('text-greenx'); selected.classList.add('text-zinc-500'); }
   }
   const term = input.value.trim().toLowerCase();
-  const matches = ALUP_VENDORS.filter(v => !term || String(v.search || '').includes(term)).slice(0, 12);
+  const matches = ALUP_VENDORS.filter(v => !term || String(v.search || '').includes(term));
   if (!matches.length) {
-    list.innerHTML = '<div class="px-3 py-4 text-sm text-zinc-500 text-center">Nenhum vendedor aprovado encontrado.</div>';
+    list.innerHTML = '<div class="px-3 py-4 text-sm text-zinc-500 text-center">Nenhum vendedor encontrado.</div>';
     list.classList.remove('hidden');
     return;
   }
   list.innerHTML = matches.map(v => {
     const label = '#' + v.id + ' · ' + v.name;
     return `<button type="button" class="alup-combo-item" onclick="alupApplyVendor(${v.id}, '${alupEscapeAttr(label)}')">
-      <span class="min-w-0"><b class="block truncate text-white">${alupEscapeHtml(label)}</b><span class="text-[11px] text-zinc-500">${alupEscapeHtml(v.email || '')}</span></span>
+      <span class="min-w-0"><b class="block truncate text-white">${alupEscapeHtml(label)}</b><span class="text-[11px] text-zinc-500">${alupEscapeHtml(v.meta || v.email || '')}</span></span>
       <i data-lucide="chevron-right" class="h-4 w-4 text-zinc-600"></i>
     </button>`;
   }).join('');
