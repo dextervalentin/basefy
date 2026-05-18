@@ -55,6 +55,20 @@ $products = [];
 $rs = $conn->query("SELECT id, nome, preco, ativo FROM products ORDER BY nome ASC LIMIT 2000");
 if ($rs) $products = $rs->fetch_all(MYSQLI_ASSOC) ?: [];
 
+$basefyProductOptions = [];
+foreach ($products as $bp) {
+  $bpId = (int)($bp['id'] ?? 0);
+  $bpName = (string)($bp['nome'] ?? 'Produto Basefy');
+  $bpPrice = (float)($bp['preco'] ?? 0);
+  $basefyProductOptions[] = [
+    'id' => $bpId,
+    'name' => $bpName,
+    'active' => ((int)($bp['ativo'] ?? 0)) === 1,
+    'price_label' => $bpPrice > 0 ? ('R$ ' . number_format($bpPrice, 2, ',', '.')) : 'Sem preço',
+    'search' => mb_strtolower('#' . $bpId . ' ' . $bpName),
+  ];
+}
+
 $stats = [
     'total' => count($catalog),
     'official' => 0,
@@ -145,9 +159,9 @@ function _alupStoreShort(string $storeId): string
     return substr($storeId, 0, 8) . '...' . substr($storeId, -4);
 }
 
-function _alupJsonAttr(array $payload): string
+function _alupJsonScript(array $payload): string
 {
-  return htmlspecialchars(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?: '{}', ENT_QUOTES, 'UTF-8');
+    return json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?: '{}';
 }
 
 $pageTitle = 'AlUp - Catalogo Marketplace';
@@ -288,20 +302,26 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               $kind = (string)($p['kind'] ?? 'marketplace');
               $existing = $mappedExternalIds[$extId] ?? null;
               $rowId = 'alup_row_' . md5($extId);
+              $payloadId = 'alup_payload_' . md5($extId);
               $storeId = alupProductStoreId($p);
               $isOfficial = alupProductIsOfficial($p);
               $stockRaw = $p['stock_quantity'] ?? null;
               $stockText = ($stockRaw === null || $stockRaw === '') ? 'sem info' : number_format((int)$stockRaw, 0, ',', '.');
               $salesCount = isset($p['sales_count']) && $p['sales_count'] !== null ? (int)$p['sales_count'] : null;
+              $selectedProductId = $existing ? (int)$existing['product_id'] : 0;
+              $selectedProductLabel = $existing ? ('#' . $selectedProductId . ' · ' . (string)($existing['product_nome'] ?? 'Produto Basefy')) : '';
             ?>
             <tr class="border-b border-blackx3/50 align-top hover:bg-white/[0.02] transition-colors">
               <td class="py-3 px-2">
-                <button type="button" data-product='<?= _alupJsonAttr($p) ?>' onclick="alupOpenDetails(this)" class="font-semibold text-white text-left hover:text-greenx transition-colors">
+                <button type="button" data-payload-id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>" onclick="alupOpenDetails(this)" class="font-semibold text-white text-left hover:text-greenx transition-colors">
                   <?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>
                 </button>
                 <div class="text-[11px] text-zinc-500 mt-1 font-mono break-all">ID: <?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?></div>
                 <?php if ($descr !== ''): ?>
-                  <div class="text-xs text-zinc-500 mt-1 line-clamp-2"><?= htmlspecialchars(mb_substr($descr, 0, 220), ENT_QUOTES, 'UTF-8') ?></div>
+                  <button type="button" data-payload-id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>" onclick="alupOpenDetails(this)" class="block text-left text-xs text-zinc-500 mt-1 hover:text-zinc-300 transition-colors">
+                    <span class="line-clamp-2"><?= htmlspecialchars(mb_substr($descr, 0, 220), ENT_QUOTES, 'UTF-8') ?></span>
+                    <span class="mt-1 inline-block text-[11px] font-semibold text-greenx">Ver descrição completa</span>
+                  </button>
                 <?php endif; ?>
                 <?php if (!empty($p['slug'])): ?><div class="text-[11px] text-zinc-600 mt-1">slug: <?= htmlspecialchars((string)$p['slug'], ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
               </td>
@@ -325,7 +345,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               </td>
               <td class="py-3 px-2 text-right">
                 <div class="inline-flex flex-col sm:flex-row justify-end gap-1.5">
-                  <button type="button" data-product='<?= _alupJsonAttr($p) ?>' onclick="alupOpenDetails(this)" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx hover:text-white">
+                  <button type="button" data-payload-id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>" onclick="alupOpenDetails(this)" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx hover:text-white">
                     Detalhes
                   </button>
                   <button type="button" onclick="document.getElementById('<?= $rowId ?>').classList.toggle('hidden')" class="rounded-lg border border-greenx/40 text-greenx px-3 py-1.5 text-xs hover:bg-greenx/10">
@@ -334,9 +354,10 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 </div>
               </td>
             </tr>
+            <script type="application/json" id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>"><?= _alupJsonScript($p) ?></script>
             <tr id="<?= $rowId ?>" class="hidden bg-blackx/40">
               <td colspan="7" class="px-2 py-3">
-                <form method="post" action="../api/admin_alup_action" class="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_auto] gap-3 items-end rounded-2xl border border-blackx3 bg-blackx2/80 p-3">
+                <form method="post" action="../api/admin_alup_action" onsubmit="return alupRequireBasefyProduct(this)" class="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_auto] gap-3 items-end rounded-2xl border border-blackx3 bg-blackx2/80 p-3">
                   <input type="hidden" name="action" value="save_mapping">
                   <input type="hidden" name="external_id" value="<?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="kind" value="<?= htmlspecialchars($kind, ENT_QUOTES, 'UTF-8') ?>">
@@ -357,19 +378,22 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                       <p class="mt-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-xs text-yellow-200">Entrega manual: pode ficar em processamento até a AlUp entregar ou enviar webhook.</p>
                     <?php endif; ?>
                   </div>
-                  <div class="min-w-[260px]">
+                  <div class="min-w-[260px]" data-basefy-picker>
                     <label class="block text-xs text-zinc-400 mb-1">Produto Basefy</label>
-                    <input type="search" oninput="alupFilterBasefySelect(this)" placeholder="Filtrar produto Basefy por ID ou nome" class="mb-2 w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2 text-sm outline-none focus:border-greenx">
-                    <select name="product_id" required class="w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2 text-sm">
-                      <option value="">— escolher —</option>
-                      <?php foreach ($products as $bp): ?>
-                        <option value="<?= (int)$bp['id'] ?>" data-search="#<?= (int)$bp['id'] ?> <?= htmlspecialchars(mb_strtolower((string)$bp['nome']), ENT_QUOTES, 'UTF-8') ?>" <?= ($existing && (int)$existing['product_id'] === (int)$bp['id']) ? 'selected' : '' ?>>
-                          #<?= (int)$bp['id'] ?> · <?= htmlspecialchars((string)$bp['nome'], ENT_QUOTES, 'UTF-8') ?>
-                          <?= !((int)$bp['ativo']) ? ' (inativo)' : '' ?>
-                        </option>
-                      <?php endforeach; ?>
-                    </select>
-                    <p class="mt-1 text-[11px] text-zinc-500">Use um produto de teste antes de vincular produto público da loja.</p>
+                    <input type="hidden" name="product_id" value="<?= (int)$selectedProductId ?>">
+                    <input type="search"
+                           data-basefy-input
+                           data-selected-label="<?= htmlspecialchars($selectedProductLabel, ENT_QUOTES, 'UTF-8') ?>"
+                           value="<?= htmlspecialchars($selectedProductLabel, ENT_QUOTES, 'UTF-8') ?>"
+                           onfocus="alupRenderBasefyList(this)"
+                           oninput="alupRenderBasefyList(this)"
+                           autocomplete="off"
+                           placeholder="Digite ID ou nome do produto Basefy"
+                           class="w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2.5 text-sm outline-none focus:border-greenx focus:ring-2 focus:ring-greenx/10">
+                    <div data-basefy-list class="hidden mt-2 max-h-64 overflow-y-auto rounded-xl border border-blackx3 bg-blackx shadow-2xl shadow-black/40"></div>
+                    <p data-basefy-selected class="mt-2 text-[11px] <?= $selectedProductId > 0 ? 'text-greenx' : 'text-zinc-500' ?>">
+                      <?= $selectedProductId > 0 ? ('Selecionado: ' . htmlspecialchars($selectedProductLabel, ENT_QUOTES, 'UTF-8')) : 'Nenhum produto selecionado.' ?>
+                    </p>
                   </div>
                   <div class="flex lg:flex-col gap-2">
                     <button type="submit" class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 text-sm whitespace-nowrap">Salvar vínculo</button>
@@ -466,8 +490,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3"><p class="text-xs text-zinc-500">Estoque</p><p id="alupDetailStock" class="font-semibold text-white"></p></div>
           </div>
           <div class="rounded-2xl border border-blackx3 bg-blackx/50 p-3">
-            <p class="text-xs font-semibold uppercase text-zinc-500 mb-2">Descrição</p>
-            <p id="alupDetailDescription" class="text-sm text-zinc-300 whitespace-pre-wrap"></p>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <p class="text-xs font-semibold uppercase text-zinc-500">Descrição completa</p>
+              <p id="alupDetailDescriptionMeta" class="text-[11px] text-zinc-500"></p>
+            </div>
+            <div id="alupDetailDescription" class="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed break-words"></div>
           </div>
         </div>
       </div>
@@ -488,6 +515,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 
 <script>
 const ALUP_OFFICIAL_STORE_ID_JS = '<?= htmlspecialchars(ALUP_OFFICIAL_STORE_ID, ENT_QUOTES, 'UTF-8') ?>';
+const ALUP_BASEFY_PRODUCTS = <?= _alupJsonScript($basefyProductOptions) ?>;
 let alupCurrentDetailPayload = null;
 
 function alupFormatBRLFromCents(value) {
@@ -560,9 +588,14 @@ function alupRenderFields(product) {
   }).join('');
 }
 
-function alupOpenDetails(button) {
-  let product = {};
-  try { product = JSON.parse(button.getAttribute('data-product') || '{}'); } catch (err) { product = {}; }
+function alupReadPayloadFromTrigger(trigger) {
+  const payloadId = trigger.getAttribute('data-payload-id') || '';
+  const payloadNode = payloadId ? document.getElementById(payloadId) : null;
+  const raw = payloadNode ? payloadNode.textContent : (trigger.getAttribute('data-product') || '{}');
+  try { return JSON.parse(raw || '{}'); } catch (err) { return {}; }
+}
+
+function alupApplyDetails(product, meta) {
   alupCurrentDetailPayload = product;
   const storeId = String(product.store_id || '');
   const price = alupReadPrice(product, ['price_cents', 'cost_cents', 'supplier_cost_cents', 'price']);
@@ -575,11 +608,38 @@ function alupOpenDetails(button) {
   alupSetText('alupDetailDelivery', alupDeliveryLabel(product.delivery_type));
   alupSetText('alupDetailStock', product.stock_quantity !== undefined && product.stock_quantity !== null && product.stock_quantity !== '' ? product.stock_quantity : 'sem info');
   alupSetText('alupDetailDescription', product.description || 'Sem descrição.');
+  alupSetText('alupDetailDescriptionMeta', meta || '');
   alupRenderMedia(product);
   alupRenderFields(product);
   alupSetText('alupDetailRaw', JSON.stringify(product, null, 2));
+}
+
+async function alupOpenDetails(button) {
+  const product = alupReadPayloadFromTrigger(button);
+  alupApplyDetails(product, 'Carregando detalhe...');
   document.getElementById('alupDetailsModal')?.classList.remove('hidden');
   document.body.classList.add('overflow-hidden');
+
+  const externalId = String(product.id || product.external_id || '').trim();
+  if (!externalId) {
+    alupSetText('alupDetailDescriptionMeta', 'ID não informado.');
+    return;
+  }
+
+  try {
+    const response = await fetch('../api/admin_alup_action?action=product_details&external_id=' + encodeURIComponent(externalId), {
+      headers: { 'Accept': 'application/json' }
+    });
+    const json = await response.json();
+    if (json && json.ok && json.product) {
+      const detailed = Object.assign({}, product, json.product);
+      alupApplyDetails(detailed, 'Detalhe completo da AlUp');
+      return;
+    }
+    alupSetText('alupDetailDescriptionMeta', json && json.msg ? json.msg : 'Detalhe indisponível.');
+  } catch (err) {
+    alupSetText('alupDetailDescriptionMeta', 'Não foi possível buscar o detalhe agora.');
+  }
 }
 
 function alupCloseDetails() {
@@ -592,16 +652,96 @@ function alupCopyDetails() {
   navigator.clipboard.writeText(JSON.stringify(alupCurrentDetailPayload, null, 2));
 }
 
-function alupFilterBasefySelect(input) {
-  const select = input.closest('form')?.querySelector('select[name="product_id"]');
-  if (!select) return;
+function alupRenderBasefyList(input) {
+  const picker = input.closest('[data-basefy-picker]');
+  if (!picker) return;
+  const list = picker.querySelector('[data-basefy-list]');
+  const hidden = picker.querySelector('input[name="product_id"]');
+  const selected = picker.querySelector('[data-basefy-selected]');
+  if (!list || !hidden) return;
+
+  if ((input.dataset.selectedLabel || '') !== input.value) {
+    hidden.value = '';
+    if (selected) {
+      selected.textContent = 'Escolha um produto da lista abaixo.';
+      selected.classList.remove('text-greenx', 'text-red-300');
+      selected.classList.add('text-zinc-500');
+    }
+  }
+
   const term = input.value.trim().toLowerCase();
-  Array.from(select.options).forEach((option) => {
-    if (!option.value) return;
-    const haystack = (option.dataset.search || option.textContent || '').toLowerCase();
-    option.hidden = term !== '' && !haystack.includes(term);
-  });
+  const selectedId = Number(hidden.value || 0);
+  const matches = ALUP_BASEFY_PRODUCTS
+    .filter((product) => !term || String(product.search || '').includes(term))
+    .slice(0, 10);
+
+  if (!matches.length) {
+    list.innerHTML = '<div class="px-3 py-4 text-sm text-zinc-500 text-center">Nenhum produto Basefy encontrado.</div>';
+    list.classList.remove('hidden');
+    return;
+  }
+
+  list.innerHTML = matches.map((product) => {
+    const label = `#${product.id} · ${product.name}`;
+    const active = product.active ? 'Ativo' : 'Inativo';
+    const activeClass = product.active ? 'text-greenx bg-greenx/10 border-greenx/30' : 'text-yellow-200 bg-yellow-500/10 border-yellow-500/30';
+    const selectedClass = selectedId === Number(product.id) ? 'border-greenx bg-greenx/10' : 'border-blackx3 hover:border-greenx hover:bg-white/[0.03]';
+    return `<button type="button" data-id="${product.id}" data-label="${alupEscapeAttr(label)}" onclick="alupSelectBasefyProduct(this)" class="w-full text-left px-3 py-2.5 border-b border-blackx3/70 last:border-b-0 ${selectedClass} transition-colors">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-white truncate">${alupEscapeHtml(label)}</p>
+          <p class="text-[11px] text-zinc-500 mt-0.5">${alupEscapeHtml(product.price_label || 'Sem preço')}</p>
+        </div>
+        <span class="shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${activeClass}">${active}</span>
+      </div>
+    </button>`;
+  }).join('');
+  list.classList.remove('hidden');
 }
+
+function alupSelectBasefyProduct(button) {
+  const picker = button.closest('[data-basefy-picker]');
+  if (!picker) return;
+  const input = picker.querySelector('[data-basefy-input]');
+  const hidden = picker.querySelector('input[name="product_id"]');
+  const list = picker.querySelector('[data-basefy-list]');
+  const selected = picker.querySelector('[data-basefy-selected]');
+  const label = button.dataset.label || '';
+  if (hidden) hidden.value = button.dataset.id || '';
+  if (input) {
+    input.value = label;
+    input.dataset.selectedLabel = label;
+  }
+  if (selected) {
+    selected.textContent = label ? ('Selecionado: ' + label) : 'Nenhum produto selecionado.';
+    selected.classList.remove('text-zinc-500', 'text-red-300');
+    selected.classList.add('text-greenx');
+  }
+  if (list) list.classList.add('hidden');
+}
+
+function alupRequireBasefyProduct(form) {
+  const hidden = form.querySelector('input[name="product_id"]');
+  if (hidden && Number(hidden.value || 0) > 0) return true;
+  const input = form.querySelector('[data-basefy-input]');
+  const selected = form.querySelector('[data-basefy-selected]');
+  if (selected) {
+    selected.textContent = 'Escolha um produto da lista antes de salvar.';
+    selected.classList.remove('text-zinc-500', 'text-greenx');
+    selected.classList.add('text-red-300');
+  }
+  if (input) {
+    input.focus();
+    alupRenderBasefyList(input);
+  }
+  return false;
+}
+
+document.addEventListener('click', (event) => {
+  document.querySelectorAll('[data-basefy-list]').forEach((list) => {
+    if (!list.closest('[data-basefy-picker]')?.contains(event.target)) list.classList.add('hidden');
+  });
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') alupCloseDetails();

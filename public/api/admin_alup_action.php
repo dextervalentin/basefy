@@ -20,10 +20,34 @@ function _alupRedirect(string $url, string $msgKey, string $value): void
     exit;
 }
 
+function _alupJsonResponse(array $payload, int $statusCode = 200): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 $referer = (string)($_SERVER['HTTP_REFERER'] ?? ($basePath . '/admin/alup_catalog'));
 
 try {
     switch ($action) {
+        case 'product_details': {
+            $externalId = trim((string)($_GET['external_id'] ?? $_POST['external_id'] ?? ''));
+            if ($externalId === '') {
+                _alupJsonResponse(['ok' => false, 'msg' => 'Produto AlUp não informado.'], 422);
+            }
+            [$okApi, $body, $statusCode] = alupGetMarketplaceProduct($conn, $externalId);
+            if (!$okApi) {
+                _alupJsonResponse([
+                    'ok' => false,
+                    'msg' => (string)($body['error']['message'] ?? 'Não foi possível carregar detalhes AlUp.'),
+                    'status' => $statusCode,
+                ], $statusCode >= 400 ? $statusCode : 502);
+            }
+            _alupJsonResponse(['ok' => true, 'product' => alupExtractItem(is_array($body) ? $body : [])]);
+            break;
+        }
         case 'save_mapping': {
             $productId = (int)($_POST['product_id'] ?? 0);
             $externalId = trim((string)($_POST['external_id'] ?? ''));
