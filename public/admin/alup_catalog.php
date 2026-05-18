@@ -348,7 +348,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                   <button type="button" data-payload-id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>" onclick="alupOpenDetails(this)" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx hover:text-white">
                     Detalhes
                   </button>
-                  <button type="button" onclick="document.getElementById('<?= $rowId ?>').classList.toggle('hidden')" class="rounded-lg border border-greenx/40 text-greenx px-3 py-1.5 text-xs hover:bg-greenx/10">
+                  <button type="button" onclick="alupToggleLinkPanel('<?= $rowId ?>')" class="rounded-lg border border-greenx/40 text-greenx px-3 py-1.5 text-xs hover:bg-greenx/10">
                     <?= $existing ? 'Vínculo' : 'Vincular' ?>
                   </button>
                 </div>
@@ -357,11 +357,20 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <script type="application/json" id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>"><?= _alupJsonScript($p) ?></script>
             <tr id="<?= $rowId ?>" class="hidden bg-blackx/40">
               <td colspan="7" class="px-2 py-3">
-                <form method="post" action="../api/admin_alup_action" onsubmit="return alupRequireBasefyProduct(this)" class="grid grid-cols-1 xl:grid-cols-2 gap-4 rounded-2xl border border-blackx3 bg-blackx2/80 p-4">
+                <form method="post" action="../api/admin_alup_action" onsubmit="return alupRequireBasefyProduct(this)" class="grid grid-cols-1 xl:grid-cols-2 gap-4 rounded-2xl border border-blackx3 bg-blackx2/80 p-4 shadow-xl shadow-black/20">
                   <input type="hidden" name="action" value="save_mapping">
                   <input type="hidden" name="external_id" value="<?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="kind" value="<?= htmlspecialchars($kind, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="payload_json" value='<?= htmlspecialchars(json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: "{}", ENT_QUOTES, "UTF-8") ?>'>
+                  <div class="xl:col-span-2 flex items-start justify-between gap-3 border-b border-blackx3 pb-3">
+                    <div>
+                      <p class="text-sm font-semibold text-white">Vincular produto Basefy</p>
+                      <p class="mt-0.5 text-xs text-zinc-500">Escolha qual produto da loja será entregue pela AlUp.</p>
+                    </div>
+                    <button type="button" onclick="alupCloseLinkPanel(this)" class="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-blackx3 text-zinc-400 hover:border-greenx hover:text-white transition" aria-label="Fechar vínculo">
+                      <i data-lucide="x" class="h-4 w-4"></i>
+                    </button>
+                  </div>
                   <div class="h-full min-h-[188px] rounded-xl border border-blackx3 bg-blackx/50 p-4">
                     <div class="flex items-center justify-between gap-2 mb-2">
                       <span class="text-xs font-semibold uppercase text-zinc-500">Produto AlUp</span>
@@ -468,10 +477,10 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
   <?php endif; ?>
 </div>
 
-<div id="alupDetailsModal" class="hidden fixed inset-x-0 bottom-0 top-16 z-[999] p-4 sm:p-6">
+<div id="alupDetailsModal" class="hidden" style="display:none;position:fixed;top:4rem;right:0;bottom:0;left:0;z-index:99999;padding:24px;align-items:center;justify-content:center;overflow:auto;">
   <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="alupCloseDetails()"></div>
-  <div class="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center">
-  <div class="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl shadow-black/50">
+  <div class="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-center">
+  <div class="flex w-full flex-col overflow-hidden rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl shadow-black/50" style="max-height:calc(100vh - 8rem);max-height:calc(100dvh - 8rem);">
     <div class="shrink-0 flex items-start justify-between gap-4 border-b border-blackx3 px-5 py-4">
       <div class="min-w-0">
         <p id="alupDetailOrigin" class="text-xs font-semibold uppercase text-greenx"></p>
@@ -619,7 +628,11 @@ function alupApplyDetails(product, meta) {
 async function alupOpenDetails(button) {
   const product = alupReadPayloadFromTrigger(button);
   alupApplyDetails(product, 'Carregando detalhe...');
-  document.getElementById('alupDetailsModal')?.classList.remove('hidden');
+  const modal = document.getElementById('alupDetailsModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
   document.body.classList.add('overflow-hidden');
 
   const externalId = String(product.id || product.external_id || '').trim();
@@ -645,13 +658,29 @@ async function alupOpenDetails(button) {
 }
 
 function alupCloseDetails() {
-  document.getElementById('alupDetailsModal')?.classList.add('hidden');
+  const modal = document.getElementById('alupDetailsModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
   document.body.classList.remove('overflow-hidden');
 }
 
 function alupCopyDetails() {
   if (!alupCurrentDetailPayload || !navigator.clipboard) return;
   navigator.clipboard.writeText(JSON.stringify(alupCurrentDetailPayload, null, 2));
+}
+
+function alupToggleLinkPanel(rowId) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden') && window.lucide) window.lucide.createIcons();
+}
+
+function alupCloseLinkPanel(button) {
+  const row = button.closest('tr');
+  if (row) row.classList.add('hidden');
 }
 
 function alupRenderBasefyList(input) {
