@@ -21,7 +21,10 @@ declare(strict_types=1);
       show();
     });
     document.querySelectorAll('form').forEach(function(f){
-      f.addEventListener('submit',function(){show()});
+      f.addEventListener('submit',function(){
+        if(f.hasAttribute('data-no-transition')||f.dataset.variants)return;
+        show();
+      });
     });
     window.addEventListener('beforeunload',function(){show()});
     window.addEventListener('pageshow',function(){finish()});
@@ -200,7 +203,7 @@ declare(strict_types=1);
     </div>
   </div>
   <style>
-  .vp-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99998;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);align-items:center;justify-content:center;animation:vpFadeIn .2s ease-out}
+  .vp-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000002;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);align-items:center;justify-content:center;animation:vpFadeIn .2s ease-out}
   @keyframes vpFadeIn{from{opacity:0}to{opacity:1}}
   .vp-card{background:var(--t-bg-card,#0f0f0f);border:1px solid rgba(255,255,255,.08);border-radius:24px;max-width:380px;width:calc(100vw - 32px);padding:0;box-shadow:0 25px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);overflow:hidden;animation:vpSlideUp .25s ease-out}
   @keyframes vpSlideUp{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -302,6 +305,10 @@ declare(strict_types=1);
       var varData = form.dataset.variants;
       if (!varData) return; // regular product
       e.preventDefault();
+      var overlay = document.getElementById('page-exit-overlay');
+      if (overlay) overlay.classList.remove('fading');
+      var loader = document.getElementById('page-loader');
+      if (loader) loader.classList.remove('active');
       // Reset guard-submit lock so picker can re-submit
       form.dataset.submitting = '0';
       try {

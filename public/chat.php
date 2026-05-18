@@ -20,6 +20,17 @@ $pageTitle  = 'Comunicação';
 $activeMenu = 'comunicacao';
 $comTab     = 'chat';
 
+function chatAvatarInitial(string $name): string
+{
+    $initial = mb_strtoupper(mb_substr(trim($name) !== '' ? trim($name) : 'U', 0, 1));
+    return htmlspecialchars($initial, ENT_QUOTES, 'UTF-8');
+}
+
+function chatAvatarDisplayUrl(?string $raw): string
+{
+    return mediaResolveUrl((string)$raw, '');
+}
+
 // Get conversations
 $conversations = chatListConversations($conn, $uid, $role);
 
@@ -49,8 +60,9 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 .chat-sidebar-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: background 0.15s; border-bottom: 1px solid rgba(255,255,255,0.03); text-decoration: none; color: inherit; }
 .chat-sidebar-item:hover { background: rgba(255,255,255,0.04); }
 .chat-sidebar-item.active { background: rgba(var(--t-accent-rgb),0.08); border-left: 3px solid var(--t-accent); }
-.chat-sidebar-item .sb-avatar { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #1a1a2e, #16213e); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
-.chat-sidebar-item .sb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.chat-sidebar-item .sb-avatar { position: relative; width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #1a1a2e, #16213e); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.chat-sidebar-item .sb-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: var(--t-accent); }
 .chat-sidebar-item .sb-info { flex: 1; min-width: 0; }
 .chat-sidebar-item .sb-name { font-size: 14px; font-weight: 600; color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-sidebar-item .sb-preview { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
@@ -60,7 +72,8 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .chat-main-header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); flex-shrink: 0; }
-.chat-main-header .mh-avatar { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--t-accent), var(--t-accent-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chat-main-header .mh-avatar { position: relative; width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--t-accent), var(--t-accent-hover)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.chat-main-header .mh-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .chat-main-header .mh-info { flex: 1; min-width: 0; }
 .chat-main-header .mh-name { font-size: 15px; font-weight: 700; color: #fff; }
 .chat-main-header .mh-product { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -163,21 +176,14 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                         else $cTime = $dt->format('d/m');
                     } catch (Throwable $e) {}
                 }
-                $avatarUrl = '';
-                if ($cAvatar) {
-                    if (str_starts_with($cAvatar, 'media:')) {
-                        $avatarUrl = BASE_PATH . '/api/media?id=' . substr($cAvatar, 6);
-                    } else {
-                        $avatarUrl = BASE_PATH . '/' . ltrim(str_replace('\\', '/', $cAvatar), '/');
-                    }
-                }
+                $avatarUrl = chatAvatarDisplayUrl($cAvatar);
+                $avatarInitial = chatAvatarInitial((string)$cName);
             ?>
             <a href="?conv=<?= $cid ?>" class="chat-sidebar-item <?= $cActive ? 'active' : '' ?>">
                 <div class="sb-avatar">
+                    <span class="avatar-fallback"><?= $avatarInitial ?></span>
                     <?php if ($avatarUrl): ?>
-                    <img src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="">
-                    <?php else: ?>
-                    <span style="font-size:16px;font-weight:700;color:var(--t-accent)"><?= strtoupper(mb_substr($cName, 0, 1)) ?></span>
+                    <img src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" onerror="this.remove()">
                     <?php endif; ?>
                 </div>
                 <div class="sb-info">
@@ -219,21 +225,14 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 // Resolve the other user's avatar
                 $isCurrentBuyer = ((int)($activeConv['buyer_id'] ?? 0) === $uid);
                 $otherAvatar = $isCurrentBuyer ? ($activeConv['vendor_avatar'] ?? '') : ($activeConv['buyer_avatar'] ?? '');
-                $otherAvatarUrl = '';
-                if ($otherAvatar) {
-                    if (str_starts_with($otherAvatar, 'media:')) {
-                        $otherAvatarUrl = BASE_PATH . '/api/media?id=' . substr($otherAvatar, 6);
-                    } else {
-                        $otherAvatarUrl = BASE_PATH . '/' . ltrim(str_replace('\\', '/', $otherAvatar), '/');
-                    }
-                }
                 $otherName = $activeConv['store_name'] ?: ($isCurrentBuyer ? $activeConv['vendor_name'] : $activeConv['buyer_name']);
+                $otherAvatarUrl = chatAvatarDisplayUrl($otherAvatar);
+                $otherInitial = chatAvatarInitial((string)$otherName);
             ?>
-            <div class="mh-avatar" style="overflow:hidden">
+            <div class="mh-avatar">
+                <span class="avatar-fallback"><?= $otherInitial ?></span>
                 <?php if ($otherAvatarUrl): ?>
-                <img src="<?= htmlspecialchars($otherAvatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" style="width:100%;height:100%;object-fit:cover">
-                <?php else: ?>
-                <span style="font-size:16px;font-weight:700;color:var(--t-accent)"><?= strtoupper(mb_substr($otherName, 0, 1)) ?></span>
+                <img src="<?= htmlspecialchars($otherAvatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" onerror="this.remove()">
                 <?php endif; ?>
             </div>
             <div class="mh-info">

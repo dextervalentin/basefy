@@ -9,6 +9,74 @@ require_once __DIR__ . '/../src/affiliates.php';
 require_once __DIR__ . '/../src/upload_paths.php';
 require_once __DIR__ . '/../src/media.php';
 
+function homeProductVendorRows($conn, array $filters, int $limit = 40): array
+{
+    $cols = sfProductColumns($conn);
+    if ($cols['vendor'] === null || $cols['category'] === null) return [];
+
+    $where = [];
+    if ($cols['active'] !== null) {
+        $where[] = 'p.' . $cols['active'] . ' = 1';
+    }
+    if ($cols['approval_status'] !== null) {
+        $where[] = "COALESCE(p." . $cols['approval_status'] . ", 'aprovado') = 'aprovado'";
+    }
+    $categoryId = (int)($filters['category_id'] ?? 0);
+    if ($categoryId > 0) {
+        $where[] = 'p.' . $cols['category'] . ' = ' . $categoryId;
+    }
+    if (!empty($filters['featured_only'])) {
+        if ($cols['featured'] === null) return [];
+        $where[] = 'p.' . $cols['featured'] . ' = TRUE';
+    }
+
+    $whereSql = $where ? implode(' AND ', $where) : '1=1';
+    $sql = "SELECT p." . $cols['vendor'] . " AS vendedor_id, MAX(p.id) AS newest_id, COUNT(*) AS total
+            FROM products p
+            WHERE " . $whereSql . "
+            GROUP BY p." . $cols['vendor'] . "
+            ORDER BY newest_id DESC
+            LIMIT " . max(1, min(100, $limit));
+    $rs = $conn->query($sql);
+    return $rs ? ($rs->fetch_all(MYSQLI_ASSOC) ?: []) : [];
+}
+
+function homeListProductsByVendorRounds($conn, array $filters, int $limit, int $maxPerVendor = 2): array
+{
+    $buckets = [];
+    foreach (homeProductVendorRows($conn, $filters, 60) as $vendor) {
+        $vendorId = (int)($vendor['vendedor_id'] ?? 0);
+        if ($vendorId <= 0) continue;
+        $vendorFilters = $filters;
+        $vendorFilters['vendor_id'] = $vendorId;
+        $vendorFilters['limit'] = $maxPerVendor;
+        $rows = sfListProducts($conn, $vendorFilters);
+        if ($rows) $buckets[] = $rows;
+    }
+
+    $result = [];
+    $seen = [];
+    for ($round = 0; $round < $maxPerVendor; $round++) {
+        foreach ($buckets as $bucket) {
+            if (!isset($bucket[$round])) continue;
+            $id = (int)($bucket[$round]['id'] ?? 0);
+            if ($id <= 0 || isset($seen[$id])) continue;
+            $result[] = $bucket[$round];
+            $seen[$id] = true;
+            if (count($result) >= $limit) return $result;
+        }
+    }
+
+    foreach (sfListProducts($conn, array_merge($filters, ['limit' => 100])) as $product) {
+        $id = (int)($product['id'] ?? 0);
+        if ($id <= 0 || isset($seen[$id])) continue;
+        $result[] = $product;
+        $seen[$id] = true;
+        if (count($result) >= $limit) return $result;
+    }
+    return $result;
+}
+
 $userId     = (int)($_SESSION['user_id'] ?? 0);
 $userRole   = (string)($_SESSION['user']['role'] ?? 'usuario');
 $isLoggedIn = $userId > 0;
@@ -26,13 +94,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 }
 
 $q          = trim((string)($_GET['q'] ?? ''));
-$destaques  = $q !== ''
-    ? sfListProducts($conn, ['limit' => 10, 'q' => $q])
-    : sfListProducts($conn, ['limit' => 10, 'featured_only' => true]);
-if ($q === '' && !$destaques) {
-    $destaques = sfListProducts($conn, ['limit' => 10]);
+$destaques = [];
+if ($q !== '') {
+    $destaques = sfListProducts($conn, ['limit' => 10, 'q' => $q]);
+} else {
+    $destaques = homeListProductsByVendorRounds($conn, ['featured_only' => true], 10, 2);
+    if (!$destaques) {
+        $destaques = homeListProductsByVendorRounds($conn, [], 10, 2);
+    }
 }
-$populares  = sfListProducts($conn, ['limit' => 5]);
+$populares  = sfListProducts($conn, ['limit' => 5, 'order' => 'best_sellers']);
 $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'
@@ -60,7 +131,7 @@ if ($homeFeaturedCategorySetting !== '') {
     }
 }
 $homeFeaturedProducts = $homeFeaturedCategory
-    ? sfListProducts($conn, ['limit' => 5, 'category_id' => (int)$homeFeaturedCategory['id']])
+    ? homeListProductsByVendorRounds($conn, ['category_id' => (int)$homeFeaturedCategory['id']], 5, 2)
     : [];
 $topVendedores = sfListTopVendors($conn, 5);
 $homeBannerPcPath = __DIR__ . '/assets/img/home-banner-pc-20260511.png';
@@ -325,13 +396,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
             <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver todas <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
-        <div class="flex flex-nowrap gap-2.5 sm:gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             <?php foreach ($homeCategorias as $i => $cat):
                 $catImg = trim((string)($cat['imagem'] ?? ''));
                 $catImgUrl = ($catImg !== '' && $catImg !== 'https://placehold.co/1200x800/111827/9ca3af?text=Produto') ? sfImageUrl($catImg) : '';
             ?>
             <a href="<?= sfCategoryUrl($cat) ?>"
-               class="cat-card group relative flex flex-col items-center justify-end text-center rounded-2xl border border-white/[0.06] bg-blackx2 overflow-hidden hover:border-greenx/30 transition-all duration-500 animate-fade-in stagger-<?= min($i + 1, 6) ?> min-w-[132px] sm:min-w-[150px] lg:min-w-[144px] xl:min-w-[156px] h-[108px] sm:h-[122px] snap-start">
+                class="cat-card group relative flex flex-col items-center justify-end text-center rounded-2xl border border-white/[0.06] bg-blackx2 overflow-hidden hover:border-greenx/30 transition-all duration-500 animate-fade-in stagger-<?= min($i + 1, 6) ?> h-[108px] sm:h-[122px]">
                 <?php if ($catImgUrl): ?>
                 <img src="<?= htmlspecialchars($catImgUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-110 transition-all duration-700" loading="lazy">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/20"></div>

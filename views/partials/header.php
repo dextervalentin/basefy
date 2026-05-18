@@ -192,7 +192,9 @@ if ($_themeConn !== null) {
   });
 
   // Handle form submits (optional — keeps the feel consistent on POST)
-  document.addEventListener('submit', function() {
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form && (form.hasAttribute('data-no-transition') || form.dataset.variants)) return;
     var overlay = document.getElementById('page-exit-overlay');
     if (overlay) overlay.classList.add('fading');
   });

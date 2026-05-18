@@ -704,12 +704,41 @@ function sfListProducts($conn, array $filters = []): array
         $params[] = $categoryId;
     }
 
+    $vendorId = (int)($filters['vendor_id'] ?? 0);
+    if ($vendorId > 0) {
+        $where[] = 'p.' . $cols['vendor'] . ' = ?';
+        $types .= 'i';
+        $params[] = $vendorId;
+    }
+
     if (!empty($filters['featured_only'])) {
         if ($cols['featured'] === null) return [];
         $where[] = 'p.' . $cols['featured'] . ' = TRUE';
     }
 
     $limit = max(1, min(100, (int)($filters['limit'] ?? 24)));
+    $order = (string)($filters['order'] ?? 'default');
+    $salesJoin = '';
+    $salesSelect = '';
+    $salesOrder = '';
+    if ($order === 'best_sellers') {
+        $orderItemCols = sfTableColumns($conn, 'order_items');
+        if (in_array('product_id', $orderItemCols, true)) {
+            $moderationWhere = in_array('moderation_status', $orderItemCols, true)
+                ? "WHERE COALESCE(moderation_status, 'aprovada') <> 'rejeitado'"
+                : '';
+            $subtotalExpr = in_array('subtotal', $orderItemCols, true) ? 'COALESCE(SUM(subtotal), 0)' : '0';
+            $salesJoin = "
+            LEFT JOIN (
+                SELECT product_id, COUNT(*) AS sales_total, {$subtotalExpr} AS sales_volume
+                FROM order_items
+                {$moderationWhere}
+                GROUP BY product_id
+            ) psales ON psales.product_id = p.id";
+            $salesSelect = ', COALESCE(psales.sales_total, 0) AS sales_total, COALESCE(psales.sales_volume, 0) AS sales_volume';
+            $salesOrder = 'COALESCE(psales.sales_total, 0) DESC, COALESCE(psales.sales_volume, 0) DESC, ';
+        }
+    }
 
     $sql = "SELECT p.id, p.nome, p.descricao, p.preco, {$imageExpr} AS imagem,
                    p.slug, p.variantes, {$featuredExpr} AS destaque,
@@ -718,16 +747,16 @@ function sfListProducts($conn, array $filters = []): array
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
-                   COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled
+                   COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled{$salesSelect}
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
-            LEFT JOIN users u ON u.id = p." . $cols['vendor'];
+            LEFT JOIN users u ON u.id = p." . $cols['vendor'] . $salesJoin;
 
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
 
-    $sql .= ' ORDER BY ' . ($cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE) DESC, ') : '') . 'p.id DESC LIMIT ' . $limit;
+    $sql .= ' ORDER BY ' . $salesOrder . ($cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE) DESC, ') : '') . 'p.id DESC LIMIT ' . $limit;
 
     $st = $conn->prepare($sql);
     if (!$st) {
@@ -1335,8 +1364,13 @@ function sfDisplayPrice(array $p): string
                 $prices = array_map(fn($v) => (float)($v['preco'] ?? 0), $vars);
                 $prices = array_filter($prices, fn($pr) => $pr > 0);
                 if ($prices) {
+                    $uniquePrices = array_values(array_unique(array_map(static fn($pr) => number_format((float)$pr, 2, '.', ''), $prices)));
                     $min = min($prices);
-                    return '<span class="sf-price-prefix">A partir de </span>R$&nbsp;' . number_format($min, 2, ',', '.');
+                    $price = 'R$&nbsp;' . number_format($min, 2, ',', '.');
+                    if (count($prices) === 1 || count($uniquePrices) === 1) {
+                        return $price;
+                    }
+                    return '<span class="sf-price-prefix">A partir de </span>' . $price;
                 }
             }
         }
