@@ -62,6 +62,20 @@ try {
             _alupRedirect($referer, $ok ? 'msg' : 'err', $msg);
             break;
         }
+        case 'import_product': {
+            [$ok, $msg, $productId] = alupImportProductFromCatalog($conn, [
+                'external_id' => $_POST['external_id'] ?? '',
+                'vendor_id' => $_POST['vendor_id'] ?? 0,
+                'categoria_id' => $_POST['categoria_id'] ?? 0,
+                'markup_percent' => $_POST['markup_percent'] ?? 30,
+                'nome_override' => $_POST['nome_override'] ?? '',
+                'ativo' => $_POST['ativo'] ?? '',
+                'kind' => $_POST['kind'] ?? 'marketplace',
+                'payload_json' => $_POST['payload_json'] ?? '',
+            ]);
+            _alupJsonResponse(['ok' => $ok, 'msg' => $msg, 'product_id' => $productId], $ok ? 200 : 422);
+            break;
+        }
         case 'delete_mapping': {
             $mappingId = (int)($_POST['mapping_id'] ?? 0);
             [$ok, $msg] = alupDeleteMapping($conn, $mappingId);

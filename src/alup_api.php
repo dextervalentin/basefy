@@ -519,6 +519,105 @@ function alupDeleteMapping(object $conn, int $mappingId): array
     return [(bool)$ok, $ok ? 'Vínculo removido.' : 'Falha ao remover.'];
 }
 
+/**
+ * Importa um produto AlUp para a base local: cria registro em products e cria o mapping.
+ * Retorna [ok, mensagem, product_id].
+ */
+function alupImportProductFromCatalog(object $conn, array $opts): array
+{
+    alupEnsureTables($conn);
+    $externalId = trim((string)($opts['external_id'] ?? ''));
+    $vendorId = (int)($opts['vendor_id'] ?? 0);
+    $categoriaId = (int)($opts['categoria_id'] ?? 0);
+    $markup = max(0.0, (float)($opts['markup_percent'] ?? 30));
+    $nomeOverride = trim((string)($opts['nome_override'] ?? ''));
+    $ativo = !empty($opts['ativo']) ? 1 : 0;
+    $kind = trim((string)($opts['kind'] ?? 'marketplace')) ?: 'marketplace';
+
+    $payload = is_array($opts['payload'] ?? null) ? $opts['payload'] : [];
+    if (!$payload) {
+        $raw = (string)($opts['payload_json'] ?? '');
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) $payload = $decoded;
+        }
+    }
+
+    if ($externalId === '') return [false, 'external_id é obrigatório.', 0];
+    if ($vendorId <= 0) return [false, 'vendor_id é obrigatório.', 0];
+
+    // Verifica vendedor válido
+    $stV = $conn->prepare("SELECT id FROM users WHERE id = ? AND COALESCE(is_vendedor, FALSE) = TRUE LIMIT 1");
+    $stV->bind_param('i', $vendorId);
+    $stV->execute();
+    $okV = (bool)$stV->get_result()->fetch_assoc();
+    $stV->close();
+    if (!$okV) return [false, 'Vendedor não encontrado ou não é vendedor.', 0];
+
+    // Categoria fallback: primeira categoria ativa do tipo produto
+    if ($categoriaId <= 0) {
+        $rsC = $conn->query("SELECT id FROM categories WHERE ativo=1 AND tipo='produto' ORDER BY id ASC LIMIT 1");
+        if ($rsC) {
+            $rowC = $rsC->fetch_assoc();
+            $categoriaId = (int)($rowC['id'] ?? 0);
+        }
+    }
+    if ($categoriaId <= 0) return [false, 'Crie ao menos uma categoria de produto antes de importar.', 0];
+
+    // Se já existe mapping para este external_id, retorna o existente
+    $stExist = $conn->prepare("SELECT product_id FROM external_product_mappings WHERE provider='alup' AND kind=? AND external_id=? LIMIT 1");
+    $stExist->bind_param('ss', $kind, $externalId);
+    $stExist->execute();
+    $existRow = $stExist->get_result()->fetch_assoc();
+    $stExist->close();
+    if ($existRow) {
+        return [false, 'Este produto AlUp já está vinculado (produto #' . (int)$existRow['product_id'] . ').', (int)$existRow['product_id']];
+    }
+
+    // Monta campos
+    $nome = $nomeOverride !== '' ? $nomeOverride : (string)($payload['title'] ?? $payload['name'] ?? 'Produto AlUp');
+    $nome = mb_substr($nome, 0, 160);
+    $descricao = (string)($payload['description'] ?? '');
+    $imagem = (string)($payload['image_url'] ?? $payload['image'] ?? '');
+    if ($imagem === '' && !empty($payload['images']) && is_array($payload['images'])) {
+        $first = $payload['images'][0] ?? null;
+        if (is_string($first)) $imagem = $first;
+        elseif (is_array($first)) $imagem = (string)($first['url'] ?? $first['src'] ?? '');
+    }
+    $imagem = mb_substr($imagem, 0, 255);
+
+    $costCents = alupExtractPriceCents($payload);
+    $finalCents = (int)round($costCents * (1 + ($markup / 100)));
+    $preco = $finalCents > 0 ? round($finalCents / 100, 2) : 0.00;
+
+    $deliveryType = (string)($payload['delivery_type'] ?? '');
+    $tipo = $deliveryType === 'automatic' ? 'dinamico' : 'produto';
+    $quantidade = (int)($payload['stock_quantity'] ?? 0);
+    if ($quantidade < 0) $quantidade = 0;
+
+    // INSERT product
+    $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, tipo, quantidade, ativo)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!$st) return [false, 'Falha ao preparar insert: ' . $conn->error, 0];
+    $st->bind_param('iissdssii', $vendorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $ativo);
+    if (!$st->execute()) {
+        $msg = 'Falha ao inserir produto: ' . $st->error;
+        $st->close();
+        return [false, $msg, 0];
+    }
+    $productId = (int)$conn->insert_id;
+    $st->close();
+
+    // Cria mapping
+    [$okMap, $msgMap] = alupSaveMapping($conn, $productId, $kind, $externalId, $payload);
+    if (!$okMap) {
+        // Não rollback do produto: admin pode vincular manualmente depois
+        return [true, 'Produto #' . $productId . ' criado mas vínculo falhou: ' . $msgMap, $productId];
+    }
+
+    return [true, 'Produto #' . $productId . ' importado e vinculado.', $productId];
+}
+
 function alupNotifyDeliveryToChat(object $conn, int $orderItemId, string $deliveryContent): void
 {
     if ($orderItemId <= 0 || trim($deliveryContent) === '') return;
