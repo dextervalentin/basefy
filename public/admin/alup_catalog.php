@@ -601,7 +601,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 
       <div class="alup-modal-body">
         <section class="alup-tab-panel" data-panel="import">
-          <p class="text-xs text-zinc-400 mb-3">Cria um novo produto Basefy com nome, descrição, imagem e preço do AlUp já preenchidos e vincula automaticamente. <b class="text-greenx">1 clique.</b></p>
+          <p class="text-xs text-zinc-400 mb-3">Cria ou atualiza o produto Basefy com nome, descrição, imagem, preço e variantes do AlUp, já aprovado e publicado. <b class="text-greenx">1 clique.</b></p>
           <form id="alupImportForm" class="grid grid-cols-1 md:grid-cols-2 gap-3" onsubmit="return alupSubmitImport(event)">
             <input type="hidden" name="action" value="import_product">
             <input type="hidden" name="external_id" id="alupImportExternalId">
@@ -642,10 +642,10 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             </div>
 
             <div class="md:col-span-2 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-blackx3">
-              <label class="inline-flex items-center gap-2 text-xs text-zinc-400">
-                <input type="checkbox" name="ativo" value="1" checked class="accent-greenx">
-                Ativar produto após importar
-              </label>
+              <span class="inline-flex items-center gap-2 text-xs text-greenx">
+                <i data-lucide="shield-check" class="h-4 w-4"></i>
+                Produto aprovado e publicado automaticamente
+              </span>
               <button type="submit" id="alupImportSubmit" class="alup-btn-primary rounded-xl px-5 py-2.5 text-sm font-semibold">
                 Importar e vincular
               </button>
@@ -693,6 +693,7 @@ const ALUP_VENDORS = <?= _alupJsonScript($vendorOptions) ?>;
 let alupCurrentDetailPayload = null;
 let alupCurrentLinkPayload = null;
 let alupCurrentLinkCostCents = 0;
+const ALUP_PRICE_KEYS = ['price_cents', 'cost_cents', 'supplier_cost_cents', 'amount_cents', 'unit_price_cents', 'sale_price_cents', 'value_cents', 'preco_centavos', 'valor_centavos', 'price', 'cost', 'supplier_cost', 'amount', 'unit_price', 'sale_price', 'base_price', 'public_price', 'value', 'preco', 'valor'];
 
 function alupFormatBRLFromCents(value) {
   const number = Number(value || 0);
@@ -700,11 +701,48 @@ function alupFormatBRLFromCents(value) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number / 100);
 }
 
+function alupMoneyValueToCents(value) {
+  if (value === undefined || value === null || value === '' || typeof value === 'object') return 0;
+  let raw = String(value).replace(/R\$/g, '').replace(/\s/g, '').trim();
+  if (!raw) return 0;
+  const hasDecimal = raw.includes(',') || raw.includes('.');
+  if (raw.includes(',') && raw.includes('.')) raw = raw.replace(/\./g, '');
+  raw = raw.replace(',', '.');
+  const number = Number(raw);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  if (hasDecimal || Math.floor(number) !== number) return Math.round(number * 100);
+  return number >= 1000 ? Math.round(number) : Math.round(number * 100);
+}
+
 function alupReadPrice(product, keys) {
   for (const key of keys) {
-    if (product[key] !== undefined && product[key] !== null && product[key] !== '') return Number(product[key]);
+    if (product[key] === undefined || product[key] === null || product[key] === '' || typeof product[key] === 'object') continue;
+    if (key.includes('_cents') || key.includes('_centavos')) {
+      const cents = Number(String(product[key]).replace(',', '.'));
+      if (Number.isFinite(cents) && cents > 0) return Math.round(cents);
+      continue;
+    }
+    const cents = alupMoneyValueToCents(product[key]);
+    if (cents > 0) return cents;
   }
-  return 0;
+  const nestedKeys = ['pricing', 'price_info', 'cost_info', 'supplier', 'product', 'data'];
+  for (const key of nestedKeys) {
+    if (product[key] && typeof product[key] === 'object' && !Array.isArray(product[key])) {
+      const value = alupReadPrice(product[key], keys);
+      if (value > 0) return value;
+    }
+  }
+  const listKeys = ['variants', 'variantes', 'options', 'opcoes', 'skus', 'items', 'plans', 'packages', 'services'];
+  const prices = [];
+  for (const key of listKeys) {
+    if (!Array.isArray(product[key])) continue;
+    for (const item of product[key]) {
+      if (!item || typeof item !== 'object') continue;
+      const value = alupReadPrice(item, keys);
+      if (value > 0) prices.push(value);
+    }
+  }
+  return prices.length ? Math.min(...prices) : 0;
 }
 
 function alupSetText(id, value) {
@@ -785,7 +823,7 @@ function alupGetModal(id) {
 function alupApplyDetails(product, meta) {
   alupCurrentDetailPayload = product;
   const storeId = String(product.store_id || '');
-  const price = alupReadPrice(product, ['price_cents', 'cost_cents', 'supplier_cost_cents', 'price']);
+  const price = alupReadPrice(product, ALUP_PRICE_KEYS);
   const compare = alupReadPrice(product, ['compare_price_cents', 'compare_price']);
   alupSetText('alupDetailOrigin', storeId === ALUP_OFFICIAL_STORE_ID_JS ? 'Loja oficial AlUp' : 'Vendedor AlUp');
   alupSetText('alupDetailTitle', product.title || product.name || 'Produto AlUp');
@@ -855,7 +893,7 @@ function alupOpenLinkModal(button) {
   alupCurrentLinkPayload = product;
   const extId = String(product.id || product.external_id || '');
   const storeId = String(product.store_id || '');
-  const cost = alupReadPrice(product, ['price_cents', 'cost_cents', 'supplier_cost_cents', 'price']);
+  const cost = alupReadPrice(product, ALUP_PRICE_KEYS);
   alupCurrentLinkCostCents = Number(cost) || 0;
 
   // Header info

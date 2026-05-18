@@ -330,12 +330,116 @@ function alupExtractItem(array $body): array
     return $body;
 }
 
+function alupMoneyValueToCents(mixed $value): int
+{
+    if (is_array($value) || is_object($value)) return 0;
+    $raw = trim(str_replace(['R$', ' '], '', (string)$value));
+    if ($raw === '') return 0;
+    $hasDecimal = str_contains($raw, ',') || str_contains($raw, '.');
+    if (str_contains($raw, ',') && str_contains($raw, '.')) {
+        $raw = str_replace('.', '', $raw);
+    }
+    $raw = str_replace(',', '.', $raw);
+    if (!is_numeric($raw)) return 0;
+    $number = (float)$raw;
+    if ($number <= 0) return 0;
+    if ($hasDecimal || floor($number) !== $number) return (int)round($number * 100);
+    return $number >= 1000 ? (int)round($number) : (int)round($number * 100);
+}
+
 function alupExtractPriceCents(array $payload): int
 {
-    foreach (['price_cents', 'cost_cents', 'supplier_cost_cents', 'price'] as $key) {
+    foreach (['price_cents', 'cost_cents', 'supplier_cost_cents', 'amount_cents', 'unit_price_cents', 'sale_price_cents', 'value_cents', 'preco_centavos', 'valor_centavos'] as $key) {
         if (isset($payload[$key]) && is_numeric($payload[$key])) return max(0, (int)round((float)$payload[$key]));
     }
-    return 0;
+
+    foreach (['price', 'cost', 'supplier_cost', 'amount', 'unit_price', 'sale_price', 'base_price', 'public_price', 'value', 'preco', 'valor'] as $key) {
+        if (isset($payload[$key])) {
+            $cents = alupMoneyValueToCents($payload[$key]);
+            if ($cents > 0) return $cents;
+        }
+    }
+
+    foreach (['pricing', 'price_info', 'cost_info', 'supplier', 'product', 'data'] as $key) {
+        if (isset($payload[$key]) && is_array($payload[$key])) {
+            $cents = alupExtractPriceCents($payload[$key]);
+            if ($cents > 0) return $cents;
+        }
+    }
+
+    $prices = [];
+    foreach (['variants', 'variantes', 'options', 'opcoes', 'skus', 'items', 'plans', 'packages', 'services'] as $key) {
+        if (!isset($payload[$key]) || !is_array($payload[$key])) continue;
+        foreach ($payload[$key] as $item) {
+            if (!is_array($item)) continue;
+            $cents = alupExtractPriceCents($item);
+            if ($cents > 0) $prices[] = $cents;
+        }
+    }
+    return $prices ? min($prices) : 0;
+}
+
+function alupApplyMarkupCents(int $costCents, float $markupPercent): int
+{
+    return $costCents > 0 ? (int)round($costCents * (1 + (max(0.0, $markupPercent) / 100))) : 0;
+}
+
+function alupExtractStockQuantity(array $payload, int $fallback = 999): int
+{
+    foreach (['stock_quantity', 'stock', 'quantity', 'qty', 'available_quantity', 'available'] as $key) {
+        if (isset($payload[$key]) && is_numeric($payload[$key])) return max(0, (int)$payload[$key]);
+    }
+    return max(1, $fallback);
+}
+
+function alupVariantRows(array $payload): array
+{
+    $rows = [];
+    foreach (['variants', 'variantes', 'options', 'opcoes', 'skus', 'items', 'plans', 'packages', 'services'] as $key) {
+        if (!isset($payload[$key]) || !is_array($payload[$key])) continue;
+        foreach ($payload[$key] as $item) {
+            if (is_array($item)) $rows[] = $item;
+        }
+    }
+    return $rows;
+}
+
+function alupBuildBasefyVariants(array $payload, int $defaultCostCents, float $markupPercent): array
+{
+    $variants = [];
+    $rows = alupVariantRows($payload);
+    if (!$rows) $rows = [$payload];
+
+    foreach ($rows as $idx => $row) {
+        $name = trim((string)($row['name'] ?? $row['title'] ?? $row['label'] ?? $row['option_name'] ?? $row['variant_name'] ?? $row['sku'] ?? ''));
+        if ($name === '') $name = count($rows) === 1 ? 'Padrão' : ('Opção ' . ($idx + 1));
+        $costCents = alupExtractPriceCents($row);
+        if ($costCents <= 0) $costCents = $defaultCostCents;
+        $finalCents = alupApplyMarkupCents($costCents, $markupPercent);
+        if ($finalCents <= 0) continue;
+        $variants[] = [
+            'nome' => mb_substr($name, 0, 80),
+            'preco' => round($finalCents / 100, 2),
+            'quantidade' => alupExtractStockQuantity($row, alupExtractStockQuantity($payload, 999)),
+        ];
+    }
+
+    return $variants;
+}
+
+function alupInferBasefyType(array $payload, array $variants): string
+{
+    $text = mb_strtolower(implode(' ', array_filter([
+        (string)($payload['type'] ?? ''),
+        (string)($payload['product_type'] ?? ''),
+        (string)($payload['category'] ?? ''),
+        (string)($payload['category_name'] ?? ''),
+        (string)($payload['delivery_type'] ?? ''),
+    ])));
+    if (str_contains($text, 'servico') || str_contains($text, 'serviço') || str_contains($text, 'service')) return 'servico';
+    if ((string)($payload['delivery_type'] ?? '') === 'automatic' || count($variants) > 1 || str_contains($text, 'dynamic') || str_contains($text, 'dinamico')) return 'dinamico';
+    if ((string)($payload['delivery_type'] ?? '') === 'manual') return 'servico';
+    return 'produto';
 }
 
 function alupProductStoreId(array $payload): string
@@ -462,6 +566,18 @@ function alupGetMappingByProduct(object $conn, int $productId): ?array
     return $row ?: null;
 }
 
+function alupApproveMappedProduct(object $conn, int $productId): void
+{
+    if ($productId <= 0) return;
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS status_aprovacao VARCHAR(20) NOT NULL DEFAULT 'pendente'"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS motivo_recusa TEXT DEFAULT NULL"); } catch (Throwable $e) {}
+    $st = $conn->prepare("UPDATE products SET ativo = 1, status_aprovacao = 'aprovado', motivo_recusa = NULL WHERE id = ?");
+    if (!$st) return;
+    $st->bind_param('i', $productId);
+    $st->execute();
+    $st->close();
+}
+
 function alupSaveMapping(object $conn, int $productId, string $kind, string $externalId, array $payload = []): array
 {
     alupEnsureTables($conn);
@@ -492,6 +608,7 @@ function alupSaveMapping(object $conn, int $productId, string $kind, string $ext
             return [false, 'Conflito: external_id já vinculado a outro produto.'];
         }
         $st->close();
+        if ($ok) alupApproveMappedProduct($conn, $productId);
         return [(bool)$ok, $ok ? 'Vínculo atualizado.' : 'Falha ao atualizar vínculo.'];
     }
 
@@ -505,6 +622,7 @@ function alupSaveMapping(object $conn, int $productId, string $kind, string $ext
         return [false, 'Conflito: external_id já vinculado a outro produto.'];
     }
     $st->close();
+    if ($ok) alupApproveMappedProduct($conn, $productId);
     return [(bool)$ok, $ok ? 'Vínculo criado.' : 'Falha ao criar vínculo.'];
 }
 
@@ -531,7 +649,6 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     $categoriaId = (int)($opts['categoria_id'] ?? 0);
     $markup = max(0.0, (float)($opts['markup_percent'] ?? 30));
     $nomeOverride = trim((string)($opts['nome_override'] ?? ''));
-    $ativo = !empty($opts['ativo']) ? 1 : 0;
     $kind = trim((string)($opts['kind'] ?? 'marketplace')) ?: 'marketplace';
 
     $payload = is_array($opts['payload'] ?? null) ? $opts['payload'] : [];
@@ -546,6 +663,12 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     if ($externalId === '') return [false, 'external_id é obrigatório.', 0];
     if ($vendorId <= 0) return [false, 'vendor_id é obrigatório.', 0];
 
+    [$okDetail, $detailBody] = alupGetMarketplaceProduct($conn, $externalId);
+    if ($okDetail && is_array($detailBody)) {
+        $detail = alupExtractItem($detailBody);
+        if ($detail) $payload = array_replace_recursive($payload, $detail);
+    }
+
     $stV = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
     $stV->bind_param('i', $vendorId);
     $stV->execute();
@@ -553,9 +676,9 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     $stV->close();
     if (!$okV) return [false, 'Vendedor não encontrado.', 0];
 
-    // Categoria fallback: primeira categoria ativa do tipo produto
+    // Categoria fallback: primeira categoria ativa não-blog
     if ($categoriaId <= 0) {
-        $rsC = $conn->query("SELECT id FROM categories WHERE ativo=1 AND tipo='produto' ORDER BY id ASC LIMIT 1");
+        $rsC = $conn->query("SELECT id FROM categories WHERE ativo=1 AND tipo <> 'blog' ORDER BY id ASC LIMIT 1");
         if ($rsC) {
             $rowC = $rsC->fetch_assoc();
             $categoriaId = (int)($rowC['id'] ?? 0);
@@ -563,21 +686,29 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     }
     if ($categoriaId <= 0) return [false, 'Crie ao menos uma categoria de produto antes de importar.', 0];
 
-    // Se já existe mapping para este external_id, retorna o existente
+    // Se já existe mapping para este external_id, atualiza o produto vinculado com os dados atuais.
+    $existingProductId = 0;
     $stExist = $conn->prepare("SELECT product_id FROM external_product_mappings WHERE provider='alup' AND kind=? AND external_id=? LIMIT 1");
     $stExist->bind_param('ss', $kind, $externalId);
     $stExist->execute();
     $existRow = $stExist->get_result()->fetch_assoc();
     $stExist->close();
     if ($existRow) {
-        return [false, 'Este produto AlUp já está vinculado (produto #' . (int)$existRow['product_id'] . ').', (int)$existRow['product_id']];
+        $existingProductId = (int)$existRow['product_id'];
     }
 
-    // Monta campos
     $nome = $nomeOverride !== '' ? $nomeOverride : (string)($payload['title'] ?? $payload['name'] ?? 'Produto AlUp');
     $nome = mb_substr($nome, 0, 160);
-    $descricao = (string)($payload['description'] ?? '');
-    $imagem = (string)($payload['image_url'] ?? $payload['image'] ?? '');
+
+    $descricaoRaw = (string)($payload['description'] ?? $payload['short_description'] ?? $payload['details'] ?? '');
+    $descricaoText = trim(strip_tags($descricaoRaw));
+    $descricao = $descricaoText !== ''
+        ? nl2br(htmlspecialchars($descricaoText, ENT_QUOTES, 'UTF-8'), false)
+        : '<p>Produto importado da AlUp e vinculado ao Basefy para venda imediata.</p>';
+
+    $imagem = '';
+    if (!empty($payload['image_url']) && is_string($payload['image_url'])) $imagem = (string)$payload['image_url'];
+    elseif (!empty($payload['image'])) $imagem = is_array($payload['image']) ? (string)($payload['image']['url'] ?? $payload['image']['src'] ?? '') : (string)$payload['image'];
     if ($imagem === '' && !empty($payload['images']) && is_array($payload['images'])) {
         $first = $payload['images'][0] ?? null;
         if (is_string($first)) $imagem = $first;
@@ -586,19 +717,47 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     $imagem = mb_substr($imagem, 0, 255);
 
     $costCents = alupExtractPriceCents($payload);
-    $finalCents = (int)round($costCents * (1 + ($markup / 100)));
-    $preco = $finalCents > 0 ? round($finalCents / 100, 2) : 0.00;
+    $variants = alupBuildBasefyVariants($payload, $costCents, $markup);
+    $tipo = alupInferBasefyType($payload, $variants);
+    if ($tipo === 'dinamico' && !$variants && $costCents > 0) $variants = alupBuildBasefyVariants($payload, $costCents, $markup);
+    $finalCents = alupApplyMarkupCents($costCents, $markup);
+    if ($finalCents <= 0 && $variants) $finalCents = (int)round(((float)$variants[0]['preco']) * 100);
+    if ($finalCents <= 0) return [false, 'A AlUp não informou preço/custo válido para importar este produto.', 0];
 
-    $deliveryType = (string)($payload['delivery_type'] ?? '');
-    $tipo = $deliveryType === 'automatic' ? 'dinamico' : 'produto';
-    $quantidade = (int)($payload['stock_quantity'] ?? 0);
-    if ($quantidade < 0) $quantidade = 0;
+    $preco = $tipo === 'dinamico' ? 0.00 : round($finalCents / 100, 2);
+    $quantidade = $tipo === 'produto' ? alupExtractStockQuantity($payload, 999) : 0;
+    $variantes = $tipo === 'dinamico' ? json_encode($variants, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
 
-    // INSERT product
-    $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, tipo, quantidade, ativo)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    if (!$st) return [false, 'Falha ao preparar insert: ' . $conn->error, 0];
-    $st->bind_param('iissdssii', $vendorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $ativo);
+    require_once __DIR__ . '/storefront.php';
+    _sfEnsureSlugColumn($conn);
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS variantes TEXT DEFAULT NULL"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS status_aprovacao VARCHAR(20) NOT NULL DEFAULT 'pendente'"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS motivo_recusa TEXT DEFAULT NULL"); } catch (Throwable $e) {}
+    $slug = sfCreateUniqueSlug($conn, $nome, $existingProductId > 0 ? $existingProductId : 0);
+
+    if ($existingProductId > 0) {
+        $st = $conn->prepare("UPDATE products
+                              SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?,
+                                  imagem=CASE WHEN ? <> '' THEN ? ELSE imagem END,
+                                  tipo=?, quantidade=?, ativo=1, slug=?, variantes=?,
+                                  status_aprovacao='aprovado', motivo_recusa=NULL
+                              WHERE id=?");
+        if (!$st) return [false, 'Falha ao preparar atualização do produto.', 0];
+        $st->bind_param('iissdsssissi', $vendorId, $categoriaId, $nome, $descricao, $preco, $imagem, $imagem, $tipo, $quantidade, $slug, $variantes, $existingProductId);
+        if (!$st->execute()) {
+            $msg = 'Falha ao atualizar produto: ' . $st->error;
+            $st->close();
+            return [false, $msg, $existingProductId];
+        }
+        $st->close();
+        alupSaveMapping($conn, $existingProductId, $kind, $externalId, $payload);
+        return [true, 'Produto #' . $existingProductId . ' atualizado, aprovado e pronto para vender.', $existingProductId];
+    }
+
+    $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, tipo, quantidade, ativo, slug, variantes, status_aprovacao, motivo_recusa)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'aprovado', NULL)");
+    if (!$st) return [false, 'Falha ao preparar insert do produto.', 0];
+    $st->bind_param('iissdssiss', $vendorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $slug, $variantes);
     if (!$st->execute()) {
         $msg = 'Falha ao inserir produto: ' . $st->error;
         $st->close();
