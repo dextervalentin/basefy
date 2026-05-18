@@ -102,5 +102,8 @@ try {
     }
 } catch (Throwable $e) {
     error_log('[admin_alup_action] ' . $e->getMessage());
+    if ($action === 'import_product') {
+        _alupJsonResponse(['ok' => false, 'msg' => 'Erro interno: ' . $e->getMessage()], 500);
+    }
     _alupRedirect($referer, 'err', 'Erro interno: ' . $e->getMessage());
 }

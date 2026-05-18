@@ -571,7 +571,7 @@ function alupApproveMappedProduct(object $conn, int $productId): void
     if ($productId <= 0) return;
     try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS status_aprovacao VARCHAR(20) NOT NULL DEFAULT 'pendente'"); } catch (Throwable $e) {}
     try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS motivo_recusa TEXT DEFAULT NULL"); } catch (Throwable $e) {}
-    $st = $conn->prepare("UPDATE products SET ativo = 1, status_aprovacao = 'aprovado', motivo_recusa = NULL WHERE id = ?");
+    $st = $conn->prepare("UPDATE products SET ativo = TRUE, status_aprovacao = 'aprovado', motivo_recusa = NULL WHERE id = ?");
     if (!$st) return;
     $st->bind_param('i', $productId);
     $st->execute();
@@ -678,7 +678,7 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
 
     // Categoria fallback: primeira categoria ativa não-blog
     if ($categoriaId <= 0) {
-        $rsC = $conn->query("SELECT id FROM categories WHERE ativo=1 AND tipo <> 'blog' ORDER BY id ASC LIMIT 1");
+        $rsC = $conn->query("SELECT id FROM categories WHERE ativo = TRUE AND tipo <> 'blog' ORDER BY id ASC LIMIT 1");
         if ($rsC) {
             $rowC = $rsC->fetch_assoc();
             $categoriaId = (int)($rowC['id'] ?? 0);
@@ -739,7 +739,7 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
         $st = $conn->prepare("UPDATE products
                               SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?,
                                   imagem=CASE WHEN ? <> '' THEN ? ELSE imagem END,
-                                  tipo=?, quantidade=?, ativo=1, slug=?, variantes=?,
+                                  tipo=?, quantidade=?, ativo=TRUE, slug=?, variantes=?,
                                   status_aprovacao='aprovado', motivo_recusa=NULL
                               WHERE id=?");
         if (!$st) return [false, 'Falha ao preparar atualização do produto.', 0];
@@ -755,7 +755,7 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     }
 
     $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, tipo, quantidade, ativo, slug, variantes, status_aprovacao, motivo_recusa)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'aprovado', NULL)");
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, 'aprovado', NULL)");
     if (!$st) return [false, 'Falha ao preparar insert do produto.', 0];
     $st->bind_param('iissdssiss', $vendorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $slug, $variantes);
     if (!$st->execute()) {
