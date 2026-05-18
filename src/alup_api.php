@@ -546,25 +546,12 @@ function alupImportProductFromCatalog(object $conn, array $opts): array
     if ($externalId === '') return [false, 'external_id é obrigatório.', 0];
     if ($vendorId <= 0) return [false, 'vendor_id é obrigatório.', 0];
 
-        // Verifica vendedor válido: seller explícito ou usuário que já tenha produto publicado
-        $stV = $conn->prepare("SELECT u.id
-                                                     FROM users u
-                                                     WHERE u.id = ?
-                                                         AND (
-                                                             COALESCE(u.is_vendedor, 0) = 1
-                                                             OR EXISTS (
-                                                                 SELECT 1
-                                                                 FROM products p
-                                                                 WHERE p.vendedor_id = u.id
-                                                                     AND COALESCE(p.ativo, 0) = 1
-                                                             )
-                                                         )
-                                                     LIMIT 1");
+    $stV = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
     $stV->bind_param('i', $vendorId);
     $stV->execute();
     $okV = (bool)$stV->get_result()->fetch_assoc();
     $stV->close();
-    if (!$okV) return [false, 'Vendedor não encontrado e sem produto publicado.', 0];
+    if (!$okV) return [false, 'Vendedor não encontrado.', 0];
 
     // Categoria fallback: primeira categoria ativa do tipo produto
     if ($categoriaId <= 0) {

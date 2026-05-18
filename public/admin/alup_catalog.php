@@ -69,25 +69,41 @@ foreach ($products as $bp) {
   ];
 }
 
-// Vendedores para importação: todos os sellers + usuários com produto publicado
 $vendorOptions = [];
 $rsV = $conn->query("SELECT u.id, u.nome, u.email,
                             COUNT(p.id) AS product_count,
-                            SUM(CASE WHEN COALESCE(p.ativo, 0) = 1 THEN 1 ELSE 0 END) AS published_count
+                            SUM(CASE WHEN COALESCE(p.ativo, FALSE) = TRUE THEN 1 ELSE 0 END) AS published_count
                      FROM users u
                      LEFT JOIN products p ON p.vendedor_id = u.id
-                     WHERE COALESCE(u.is_vendedor, 0) = 1
+                     WHERE COALESCE(u.is_vendedor, FALSE) = TRUE
                         OR EXISTS (
                           SELECT 1
                           FROM products px
                           WHERE px.vendedor_id = u.id
-                            AND COALESCE(px.ativo, 0) = 1
                         )
                      GROUP BY u.id, u.nome, u.email
                      ORDER BY published_count DESC, product_count DESC, u.nome ASC
                      LIMIT 1000");
-if ($rsV) {
-  foreach ($rsV->fetch_all(MYSQLI_ASSOC) as $v) {
+$vendorRows = $rsV ? ($rsV->fetch_all(MYSQLI_ASSOC) ?: []) : [];
+if (empty($vendorRows)) {
+  $rsFallback = $conn->query("SELECT u.id, u.nome, u.email,
+                                    COUNT(p.id) AS product_count,
+                                    SUM(CASE WHEN COALESCE(p.ativo, FALSE) = TRUE THEN 1 ELSE 0 END) AS published_count
+                             FROM users u
+                             LEFT JOIN products p ON p.vendedor_id = u.id
+                             GROUP BY u.id, u.nome, u.email
+                             ORDER BY published_count DESC, product_count DESC, u.nome ASC
+                             LIMIT 1000");
+  $vendorRows = $rsFallback ? ($rsFallback->fetch_all(MYSQLI_ASSOC) ?: []) : [];
+}
+if (empty($vendorRows)) {
+  $rsUsers = $conn->query("SELECT id, nome, email, 0 AS product_count, 0 AS published_count
+                           FROM users
+                           ORDER BY nome ASC
+                           LIMIT 1000");
+  $vendorRows = $rsUsers ? ($rsUsers->fetch_all(MYSQLI_ASSOC) ?: []) : [];
+}
+foreach ($vendorRows as $v) {
     $vendorName = (string)($v['nome'] ?? 'Vendedor');
     $vendorEmail = (string)($v['email'] ?? '');
     $productCount = (int)($v['product_count'] ?? 0);
@@ -106,7 +122,6 @@ if ($rsV) {
       'published_count' => $publishedCount,
       'search' => mb_strtolower('#' . $v['id'] . ' ' . $vendorName . ' ' . $vendorEmail),
     ];
-  }
 }
 
 // Categorias de produto
