@@ -307,10 +307,10 @@ function alupTryApplyWebhookToFulfillment(object $conn, string $event, array $pa
  * Paths assumidos; ajuste as constantes se a doc AlUp diferir.
  * ============================================================ */
 
-const ALUP_PATH_MARKETPLACE_LIST         = '/v1/marketplace/products';
-const ALUP_PATH_MARKETPLACE_GET          = '/v1/marketplace/products/';
-const ALUP_PATH_MARKETPLACE_ORDER_CREATE = '/v1/marketplace/orders';
-const ALUP_PATH_MARKETPLACE_ORDER_GET    = '/v1/marketplace/orders/';
+const ALUP_PATH_MARKETPLACE_LIST         = '/v1/products';
+const ALUP_PATH_MARKETPLACE_GET          = '/v1/products/';
+const ALUP_PATH_MARKETPLACE_ORDER_CREATE = '/v1/orders';
+const ALUP_PATH_MARKETPLACE_ORDER_GET    = '/v1/orders/';
 
 function alupExtractList(array $body): array
 {
@@ -327,6 +327,14 @@ function alupExtractItem(array $body): array
     if (isset($body['data']) && is_array($body['data'])) return $body['data'];
     if (isset($body['item']) && is_array($body['item'])) return $body['item'];
     return $body;
+}
+
+function alupExtractPriceCents(array $payload): int
+{
+    foreach (['price_cents', 'cost_cents', 'supplier_cost_cents', 'price'] as $key) {
+        if (isset($payload[$key]) && is_numeric($payload[$key])) return max(0, (int)round((float)$payload[$key]));
+    }
+    return 0;
 }
 
 function alupCacheGet(object $conn, string $cacheKey): ?array
@@ -439,13 +447,14 @@ function alupSaveMapping(object $conn, int $productId, string $kind, string $ext
 
     $existing = alupGetMappingByProduct($conn, $productId);
     $payloadJson = $payload ? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+    $supplierCostCents = alupExtractPriceCents($payload);
 
     if ($existing) {
         $st = $conn->prepare("UPDATE external_product_mappings
-                              SET kind = ?, external_id = ?, external_payload = ?, last_synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                              SET kind = ?, external_id = ?, external_payload = ?, supplier_cost_cents = ?, last_synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                               WHERE id = ?");
         $id = (int)$existing['id'];
-        $st->bind_param('sssi', $kind, $externalId, $payloadJson, $id);
+        $st->bind_param('sssii', $kind, $externalId, $payloadJson, $supplierCostCents, $id);
         try {
             $ok = $st->execute();
         } catch (Throwable $e) {
@@ -456,9 +465,9 @@ function alupSaveMapping(object $conn, int $productId, string $kind, string $ext
         return [(bool)$ok, $ok ? 'Vínculo atualizado.' : 'Falha ao atualizar vínculo.'];
     }
 
-    $st = $conn->prepare("INSERT INTO external_product_mappings (product_id, provider, kind, external_id, external_payload, last_synced_at)
-                          VALUES (?, 'alup', ?, ?, ?, CURRENT_TIMESTAMP)");
-    $st->bind_param('isss', $productId, $kind, $externalId, $payloadJson);
+    $st = $conn->prepare("INSERT INTO external_product_mappings (product_id, provider, kind, external_id, external_payload, supplier_cost_cents, last_synced_at)
+                          VALUES (?, 'alup', ?, ?, ?, ?, CURRENT_TIMESTAMP)");
+    $st->bind_param('isssi', $productId, $kind, $externalId, $payloadJson, $supplierCostCents);
     try {
         $ok = $st->execute();
     } catch (Throwable $e) {

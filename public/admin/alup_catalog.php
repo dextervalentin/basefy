@@ -97,7 +97,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               if ($extId === '') continue;
               $title = (string)($p['title'] ?? $p['name'] ?? 'Produto AlUp');
               $descr = (string)($p['description'] ?? '');
-              $priceCents = (int)($p['price_cents'] ?? $p['cost_cents'] ?? 0);
+              $priceCents = alupExtractPriceCents($p);
               $priceBRL = $priceCents > 0 ? ('R$ ' . number_format($priceCents / 100, 2, ',', '.')) : '—';
               $kind = (string)($p['kind'] ?? 'marketplace');
               $existing = $mappedExternalIds[$extId] ?? null;
