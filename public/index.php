@@ -108,7 +108,7 @@ $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'
 ));
-$homeCategorias = $categorias;
+$homeCategorias = array_slice($categorias, 0, 12);
 
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 $homeFeaturedCategory = null;
