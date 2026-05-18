@@ -71,19 +71,14 @@ foreach ($products as $bp) {
 
 $vendorOptions = [];
 $rsV = $conn->query("SELECT u.id, u.nome, u.email,
-                            COUNT(p.id) AS product_count,
-                            SUM(CASE WHEN COALESCE(p.ativo, FALSE) = TRUE THEN 1 ELSE 0 END) AS published_count
-                     FROM users u
-                     LEFT JOIN products p ON p.vendedor_id = u.id
-                     WHERE COALESCE(u.is_vendedor, FALSE) = TRUE
-                        OR EXISTS (
-                          SELECT 1
-                          FROM products px
-                          WHERE px.vendedor_id = u.id
-                        )
-                     GROUP BY u.id, u.nome, u.email
-                     ORDER BY published_count DESC, product_count DESC, u.nome ASC
-                     LIMIT 1000");
+        CASE WHEN COALESCE(u.is_vendedor, FALSE) = TRUE THEN 1 ELSE 0 END AS seller_rank,
+        COUNT(p.id) AS product_count,
+        SUM(CASE WHEN COALESCE(p.ativo, FALSE) = TRUE THEN 1 ELSE 0 END) AS published_count
+      FROM users u
+      LEFT JOIN products p ON p.vendedor_id = u.id
+      GROUP BY u.id, u.nome, u.email, u.is_vendedor
+      ORDER BY seller_rank DESC, published_count DESC, product_count DESC, u.nome ASC
+      LIMIT 5000");
 $vendorRows = $rsV ? ($rsV->fetch_all(MYSQLI_ASSOC) ?: []) : [];
 if (empty($vendorRows)) {
   $rsFallback = $conn->query("SELECT u.id, u.nome, u.email,
