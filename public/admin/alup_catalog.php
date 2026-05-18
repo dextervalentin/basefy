@@ -449,12 +449,12 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 </div>
 
 <style>
-.alup-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;animation:alupFade .18s ease-out}
+.alup-modal{position:fixed;inset:0;z-index:1000002;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;animation:alupFade .18s ease-out;isolation:isolate}
 .alup-modal.hidden{display:none}
-.alup-modal-backdrop{position:absolute;inset:0;background:rgba(2,2,4,.78);backdrop-filter:blur(8px) saturate(1.1);-webkit-backdrop-filter:blur(8px) saturate(1.1)}
-.alup-modal-wrap{position:relative;z-index:1;width:100%;max-width:64rem;display:flex;align-items:center;justify-content:center;animation:alupRise .22s cubic-bezier(.2,.9,.3,1.2)}
+.alup-modal-backdrop{position:fixed;inset:0;z-index:0;background:rgba(2,2,4,.78);backdrop-filter:blur(8px) saturate(1.1);-webkit-backdrop-filter:blur(8px) saturate(1.1)}
+.alup-modal-wrap{position:relative;z-index:2;width:100%;max-width:64rem;display:flex;align-items:center;justify-content:center;animation:alupRise .22s cubic-bezier(.2,.9,.3,1.2)}
 #alupLinkModal .alup-modal-wrap{max-width:54rem}
-.alup-modal-card{display:flex;flex-direction:column;width:100%;max-height:calc(100dvh - 4rem);overflow:hidden;border-radius:20px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#101013 0%,#0a0a0c 100%);box-shadow:0 24px 64px -16px rgba(0,0,0,.7),0 0 0 1px rgba(16,185,129,.06)}
+.alup-modal-card,.alup-modal-wrap>.flex{position:relative;z-index:3;display:flex;flex-direction:column;width:100%;max-height:calc(100dvh - 4rem);overflow:hidden;border-radius:20px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#101013 0%,#0a0a0c 100%);box-shadow:0 24px 64px -16px rgba(0,0,0,.7),0 0 0 1px rgba(16,185,129,.06)}
 .alup-modal-header{position:relative;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06);background:radial-gradient(120% 140% at 0% 0%,rgba(16,185,129,.18),transparent 55%)}
 .alup-modal-body{flex:1;min-height:0;overflow-y:auto;padding:20px 22px}
 .alup-btn-primary{background:linear-gradient(180deg,#10b981,#059669);color:#fff;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 16px -8px rgba(16,185,129,.6),inset 0 1px 0 rgba(255,255,255,.18);transition:transform .12s,filter .12s}
@@ -733,6 +733,17 @@ function alupReadPayloadFromTrigger(trigger) {
   try { return JSON.parse(raw || '{}'); } catch (err) { return {}; }
 }
 
+function alupGetModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return null;
+  const exitOverlay = document.getElementById('page-exit-overlay');
+  if (exitOverlay) exitOverlay.classList.remove('fading');
+  const preloader = document.getElementById('page-preloader');
+  if (preloader) preloader.classList.add('hidden');
+  if (modal.parentElement !== document.body) document.body.appendChild(modal);
+  return modal;
+}
+
 function alupApplyDetails(product, meta) {
   alupCurrentDetailPayload = product;
   const storeId = String(product.store_id || '');
@@ -755,7 +766,7 @@ function alupApplyDetails(product, meta) {
 async function alupOpenDetails(button) {
   const product = alupReadPayloadFromTrigger(button);
   alupApplyDetails(product, 'Carregando detalhe...');
-  const modal = document.getElementById('alupDetailsModal');
+  const modal = alupGetModal('alupDetailsModal');
   if (modal) modal.classList.remove('hidden');
   document.body.classList.add('overflow-hidden');
 
@@ -872,7 +883,7 @@ function alupOpenLinkModal(button) {
     alupApplyVendor(v.id, '#' + v.id + ' · ' + v.name);
   }
 
-  const modal = document.getElementById('alupLinkModal');
+  const modal = alupGetModal('alupLinkModal');
   if (modal) modal.classList.remove('hidden');
   document.body.classList.add('overflow-hidden');
   if (window.lucide) window.lucide.createIcons();
