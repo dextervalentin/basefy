@@ -145,6 +145,11 @@ function _alupStoreShort(string $storeId): string
     return substr($storeId, 0, 8) . '...' . substr($storeId, -4);
 }
 
+function _alupJsonAttr(array $payload): string
+{
+  return htmlspecialchars(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?: '{}', ENT_QUOTES, 'UTF-8');
+}
+
 $pageTitle = 'AlUp - Catalogo Marketplace';
 $activeMenu = 'alup_catalog';
 include __DIR__ . '/../../views/partials/header.php';
@@ -289,9 +294,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               $stockText = ($stockRaw === null || $stockRaw === '') ? 'sem info' : number_format((int)$stockRaw, 0, ',', '.');
               $salesCount = isset($p['sales_count']) && $p['sales_count'] !== null ? (int)$p['sales_count'] : null;
             ?>
-            <tr class="border-b border-blackx3/50 align-top">
+            <tr class="border-b border-blackx3/50 align-top hover:bg-white/[0.02] transition-colors">
               <td class="py-3 px-2">
-                <div class="font-semibold text-white"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></div>
+                <button type="button" data-product='<?= _alupJsonAttr($p) ?>' onclick="alupOpenDetails(this)" class="font-semibold text-white text-left hover:text-greenx transition-colors">
+                  <?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>
+                </button>
                 <div class="text-[11px] text-zinc-500 mt-1 font-mono break-all">ID: <?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?></div>
                 <?php if ($descr !== ''): ?>
                   <div class="text-xs text-zinc-500 mt-1 line-clamp-2"><?= htmlspecialchars(mb_substr($descr, 0, 220), ENT_QUOTES, 'UTF-8') ?></div>
@@ -317,37 +324,62 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 <?php endif; ?>
               </td>
               <td class="py-3 px-2 text-right">
-                <button type="button" onclick="document.getElementById('<?= $rowId ?>').classList.toggle('hidden')" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx">
-                  <?= $existing ? 'Reatribuir / Remover' : 'Vincular' ?>
-                </button>
+                <div class="inline-flex flex-col sm:flex-row justify-end gap-1.5">
+                  <button type="button" data-product='<?= _alupJsonAttr($p) ?>' onclick="alupOpenDetails(this)" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx hover:text-white">
+                    Detalhes
+                  </button>
+                  <button type="button" onclick="document.getElementById('<?= $rowId ?>').classList.toggle('hidden')" class="rounded-lg border border-greenx/40 text-greenx px-3 py-1.5 text-xs hover:bg-greenx/10">
+                    <?= $existing ? 'Vínculo' : 'Vincular' ?>
+                  </button>
+                </div>
               </td>
             </tr>
             <tr id="<?= $rowId ?>" class="hidden bg-blackx/40">
               <td colspan="7" class="px-2 py-3">
-                <form method="post" action="../api/admin_alup_action" class="flex flex-wrap items-end gap-2">
+                <form method="post" action="../api/admin_alup_action" class="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_auto] gap-3 items-end rounded-2xl border border-blackx3 bg-blackx2/80 p-3">
                   <input type="hidden" name="action" value="save_mapping">
                   <input type="hidden" name="external_id" value="<?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="kind" value="<?= htmlspecialchars($kind, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="payload_json" value='<?= htmlspecialchars(json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: "{}", ENT_QUOTES, "UTF-8") ?>'>
-                  <div class="flex-1 min-w-[260px]">
+                  <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3 min-h-[116px]">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                      <span class="text-xs font-semibold uppercase text-zinc-500">Produto AlUp</span>
+                      <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold <?= $isOfficial ? 'bg-greenx/20 text-greenx border border-greenx/40' : 'bg-zinc-700 text-zinc-200' ?>"><?= $isOfficial ? 'Oficial' : 'Vendedor' ?></span>
+                    </div>
+                    <p class="text-sm font-semibold text-white line-clamp-2"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></p>
+                    <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                      <span>Fornecedor: <b class="text-zinc-200"><?= $priceBRL ?></b></span>
+                      <span>Entrega: <b class="text-zinc-200"><?= htmlspecialchars(alupProductDeliveryLabel($p), ENT_QUOTES, 'UTF-8') ?></b></span>
+                      <span>Estoque: <b class="text-zinc-200"><?= htmlspecialchars($stockText, ENT_QUOTES, 'UTF-8') ?></b></span>
+                      <span class="font-mono"><?= htmlspecialchars(_alupStoreShort($storeId), ENT_QUOTES, 'UTF-8') ?></span>
+                    </div>
+                    <?php if ((string)($p['delivery_type'] ?? '') === 'manual'): ?>
+                      <p class="mt-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-xs text-yellow-200">Entrega manual: pode ficar em processamento até a AlUp entregar ou enviar webhook.</p>
+                    <?php endif; ?>
+                  </div>
+                  <div class="min-w-[260px]">
                     <label class="block text-xs text-zinc-400 mb-1">Produto Basefy</label>
+                    <input type="search" oninput="alupFilterBasefySelect(this)" placeholder="Filtrar produto Basefy por ID ou nome" class="mb-2 w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2 text-sm outline-none focus:border-greenx">
                     <select name="product_id" required class="w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2 text-sm">
                       <option value="">— escolher —</option>
                       <?php foreach ($products as $bp): ?>
-                        <option value="<?= (int)$bp['id'] ?>" <?= ($existing && (int)$existing['product_id'] === (int)$bp['id']) ? 'selected' : '' ?>>
+                        <option value="<?= (int)$bp['id'] ?>" data-search="#<?= (int)$bp['id'] ?> <?= htmlspecialchars(mb_strtolower((string)$bp['nome']), ENT_QUOTES, 'UTF-8') ?>" <?= ($existing && (int)$existing['product_id'] === (int)$bp['id']) ? 'selected' : '' ?>>
                           #<?= (int)$bp['id'] ?> · <?= htmlspecialchars((string)$bp['nome'], ENT_QUOTES, 'UTF-8') ?>
                           <?= !((int)$bp['ativo']) ? ' (inativo)' : '' ?>
                         </option>
                       <?php endforeach; ?>
                     </select>
+                    <p class="mt-1 text-[11px] text-zinc-500">Use um produto de teste antes de vincular produto público da loja.</p>
                   </div>
-                  <button type="submit" class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 text-sm">Salvar vínculo</button>
-                  <?php if ($existing): ?>
-                    <button type="submit" name="action" value="delete_mapping" formaction="../api/admin_alup_action"
-                            onclick="return confirm('Remover vínculo?')"
-                            class="rounded-xl border border-red-500/50 text-red-300 hover:bg-red-500/10 px-4 py-2 text-sm">Remover vínculo</button>
-                    <input type="hidden" name="mapping_id" value="<?= (int)$existing['id'] ?>">
-                  <?php endif; ?>
+                  <div class="flex lg:flex-col gap-2">
+                    <button type="submit" class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 text-sm whitespace-nowrap">Salvar vínculo</button>
+                    <?php if ($existing): ?>
+                      <button type="submit" name="action" value="delete_mapping" formaction="../api/admin_alup_action"
+                              onclick="return confirm('Remover vínculo?')"
+                              class="rounded-xl border border-red-500/50 text-red-300 hover:bg-red-500/10 px-4 py-2 text-sm whitespace-nowrap">Remover</button>
+                      <input type="hidden" name="mapping_id" value="<?= (int)$existing['id'] ?>">
+                    <?php endif; ?>
+                  </div>
                 </form>
               </td>
             </tr>
@@ -411,6 +443,170 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
   </div>
   <?php endif; ?>
 </div>
+
+<div id="alupDetailsModal" class="hidden fixed inset-0 z-50">
+  <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="alupCloseDetails()"></div>
+  <div class="relative mx-auto my-6 w-[calc(100%-1.5rem)] max-w-5xl max-h-[calc(100vh-3rem)] overflow-hidden rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl">
+    <div class="flex items-start justify-between gap-4 border-b border-blackx3 px-5 py-4">
+      <div class="min-w-0">
+        <p id="alupDetailOrigin" class="text-xs font-semibold uppercase text-greenx"></p>
+        <h3 id="alupDetailTitle" class="mt-1 text-xl font-bold text-white break-words">Produto AlUp</h3>
+        <p id="alupDetailId" class="mt-1 font-mono text-xs text-zinc-500 break-all"></p>
+      </div>
+      <button type="button" onclick="alupCloseDetails()" class="shrink-0 rounded-xl border border-blackx3 px-3 py-2 text-sm hover:border-greenx">Fechar</button>
+    </div>
+    <div class="max-h-[calc(100vh-10rem)] overflow-y-auto p-5 space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
+        <div id="alupDetailMedia" class="rounded-2xl border border-blackx3 bg-blackx/50 p-3 min-h-[180px]"></div>
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3"><p class="text-xs text-zinc-500">Preço</p><p id="alupDetailPrice" class="font-semibold text-white"></p></div>
+            <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3"><p class="text-xs text-zinc-500">Compare</p><p id="alupDetailCompare" class="font-semibold text-white"></p></div>
+            <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3"><p class="text-xs text-zinc-500">Entrega</p><p id="alupDetailDelivery" class="font-semibold text-white"></p></div>
+            <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3"><p class="text-xs text-zinc-500">Estoque</p><p id="alupDetailStock" class="font-semibold text-white"></p></div>
+          </div>
+          <div class="rounded-2xl border border-blackx3 bg-blackx/50 p-3">
+            <p class="text-xs font-semibold uppercase text-zinc-500 mb-2">Descrição</p>
+            <p id="alupDetailDescription" class="text-sm text-zinc-300 whitespace-pre-wrap"></p>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-blackx3 bg-blackx/50 p-3">
+        <p class="text-xs font-semibold uppercase text-zinc-500 mb-2">Campos principais</p>
+        <div id="alupDetailFields" class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm"></div>
+      </div>
+      <div class="rounded-2xl border border-blackx3 bg-blackx/50 p-3">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <p class="text-xs font-semibold uppercase text-zinc-500">Payload completo</p>
+          <button type="button" onclick="alupCopyDetails()" class="rounded-lg border border-blackx3 px-3 py-1.5 text-xs hover:border-greenx">Copiar JSON</button>
+        </div>
+        <pre id="alupDetailRaw" class="max-h-80 overflow-auto rounded-xl bg-blackx border border-blackx3 p-3 text-xs text-zinc-300 whitespace-pre-wrap break-words"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ALUP_OFFICIAL_STORE_ID_JS = '<?= htmlspecialchars(ALUP_OFFICIAL_STORE_ID, ENT_QUOTES, 'UTF-8') ?>';
+let alupCurrentDetailPayload = null;
+
+function alupFormatBRLFromCents(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number <= 0) return '—';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number / 100);
+}
+
+function alupReadPrice(product, keys) {
+  for (const key of keys) {
+    if (product[key] !== undefined && product[key] !== null && product[key] !== '') return Number(product[key]);
+  }
+  return 0;
+}
+
+function alupSetText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value === undefined || value === null || value === '' ? '—' : String(value);
+}
+
+function alupDeliveryLabel(type) {
+  if (type === 'automatic') return 'Automática';
+  if (type === 'manual') return 'Manual';
+  return 'Não informado';
+}
+
+function alupCollectMedia(product) {
+  const media = [];
+  const add = (item) => {
+    if (!item) return;
+    if (typeof item === 'string') media.push(item);
+    if (typeof item === 'object') media.push(item.url || item.src || item.image_url || item.path || '');
+  };
+  add(product.image_url);
+  add(product.image);
+  if (Array.isArray(product.images)) product.images.forEach(add);
+  if (Array.isArray(product.media)) product.media.forEach(add);
+  return [...new Set(media.filter(Boolean))].slice(0, 8);
+}
+
+function alupRenderMedia(product) {
+  const box = document.getElementById('alupDetailMedia');
+  if (!box) return;
+  const media = alupCollectMedia(product);
+  if (!media.length) {
+    box.innerHTML = '<div class="h-full min-h-[160px] grid place-items-center text-sm text-zinc-500">Sem mídia no payload</div>';
+    return;
+  }
+  const first = media[0];
+  const thumbs = media.map((url) => `<a href="${alupEscapeAttr(url)}" target="_blank" class="block truncate rounded-lg border border-blackx3 px-2 py-1 text-xs text-zinc-400 hover:border-greenx hover:text-white">${alupEscapeHtml(url)}</a>`).join('');
+  box.innerHTML = `<img src="${alupEscapeAttr(first)}" alt="" class="w-full aspect-square object-cover rounded-xl border border-blackx3 bg-blackx" onerror="this.style.display='none'"><div class="mt-2 space-y-1">${thumbs}</div>`;
+}
+
+function alupEscapeHtml(value) {
+  return String(value).replace(/[&<>"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]));
+}
+
+function alupEscapeAttr(value) {
+  return alupEscapeHtml(value).replace(/'/g, '&#039;');
+}
+
+function alupRenderFields(product) {
+  const box = document.getElementById('alupDetailFields');
+  if (!box) return;
+  const keys = ['id', 'title', 'slug', 'store_id', 'delivery_type', 'stock_quantity', 'sales_count', 'price', 'compare_price', 'created_at', 'updated_at'];
+  box.innerHTML = keys.map((key) => {
+    const raw = product[key];
+    const value = raw === undefined || raw === null || raw === '' ? '—' : raw;
+    return `<div class="rounded-xl border border-blackx3 bg-blackx p-2"><p class="text-[11px] text-zinc-500">${alupEscapeHtml(key)}</p><p class="font-mono text-xs text-zinc-200 break-all">${alupEscapeHtml(value)}</p></div>`;
+  }).join('');
+}
+
+function alupOpenDetails(button) {
+  let product = {};
+  try { product = JSON.parse(button.getAttribute('data-product') || '{}'); } catch (err) { product = {}; }
+  alupCurrentDetailPayload = product;
+  const storeId = String(product.store_id || '');
+  const price = alupReadPrice(product, ['price_cents', 'cost_cents', 'supplier_cost_cents', 'price']);
+  const compare = alupReadPrice(product, ['compare_price_cents', 'compare_price']);
+  alupSetText('alupDetailOrigin', storeId === ALUP_OFFICIAL_STORE_ID_JS ? 'Loja oficial AlUp' : 'Vendedor AlUp');
+  alupSetText('alupDetailTitle', product.title || product.name || 'Produto AlUp');
+  alupSetText('alupDetailId', product.id ? `ID: ${product.id}` : 'ID não informado');
+  alupSetText('alupDetailPrice', alupFormatBRLFromCents(price));
+  alupSetText('alupDetailCompare', alupFormatBRLFromCents(compare));
+  alupSetText('alupDetailDelivery', alupDeliveryLabel(product.delivery_type));
+  alupSetText('alupDetailStock', product.stock_quantity !== undefined && product.stock_quantity !== null && product.stock_quantity !== '' ? product.stock_quantity : 'sem info');
+  alupSetText('alupDetailDescription', product.description || 'Sem descrição.');
+  alupRenderMedia(product);
+  alupRenderFields(product);
+  alupSetText('alupDetailRaw', JSON.stringify(product, null, 2));
+  document.getElementById('alupDetailsModal')?.classList.remove('hidden');
+  document.body.classList.add('overflow-hidden');
+}
+
+function alupCloseDetails() {
+  document.getElementById('alupDetailsModal')?.classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+}
+
+function alupCopyDetails() {
+  if (!alupCurrentDetailPayload || !navigator.clipboard) return;
+  navigator.clipboard.writeText(JSON.stringify(alupCurrentDetailPayload, null, 2));
+}
+
+function alupFilterBasefySelect(input) {
+  const select = input.closest('form')?.querySelector('select[name="product_id"]');
+  if (!select) return;
+  const term = input.value.trim().toLowerCase();
+  Array.from(select.options).forEach((option) => {
+    if (!option.value) return;
+    const haystack = (option.dataset.search || option.textContent || '').toLowerCase();
+    option.hidden = term !== '' && !haystack.includes(term);
+  });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') alupCloseDetails();
+});
+</script>
 
 <?php
 include __DIR__ . '/../../views/partials/admin_layout_end.php';
