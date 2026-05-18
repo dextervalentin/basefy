@@ -357,28 +357,28 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <script type="application/json" id="<?= htmlspecialchars($payloadId, ENT_QUOTES, 'UTF-8') ?>"><?= _alupJsonScript($p) ?></script>
             <tr id="<?= $rowId ?>" class="hidden bg-blackx/40">
               <td colspan="7" class="px-2 py-3">
-                <form method="post" action="../api/admin_alup_action" onsubmit="return alupRequireBasefyProduct(this)" class="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_auto] gap-3 items-end rounded-2xl border border-blackx3 bg-blackx2/80 p-3">
+                <form method="post" action="../api/admin_alup_action" onsubmit="return alupRequireBasefyProduct(this)" class="grid grid-cols-1 xl:grid-cols-2 gap-4 rounded-2xl border border-blackx3 bg-blackx2/80 p-4">
                   <input type="hidden" name="action" value="save_mapping">
                   <input type="hidden" name="external_id" value="<?= htmlspecialchars($extId, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="kind" value="<?= htmlspecialchars($kind, ENT_QUOTES, 'UTF-8') ?>">
                   <input type="hidden" name="payload_json" value='<?= htmlspecialchars(json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: "{}", ENT_QUOTES, "UTF-8") ?>'>
-                  <div class="rounded-xl border border-blackx3 bg-blackx/50 p-3 min-h-[116px]">
+                  <div class="h-full min-h-[188px] rounded-xl border border-blackx3 bg-blackx/50 p-4">
                     <div class="flex items-center justify-between gap-2 mb-2">
                       <span class="text-xs font-semibold uppercase text-zinc-500">Produto AlUp</span>
                       <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold <?= $isOfficial ? 'bg-greenx/20 text-greenx border border-greenx/40' : 'bg-zinc-700 text-zinc-200' ?>"><?= $isOfficial ? 'Oficial' : 'Vendedor' ?></span>
                     </div>
                     <p class="text-sm font-semibold text-white line-clamp-2"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></p>
-                    <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                      <span>Fornecedor: <b class="text-zinc-200"><?= $priceBRL ?></b></span>
-                      <span>Entrega: <b class="text-zinc-200"><?= htmlspecialchars(alupProductDeliveryLabel($p), ENT_QUOTES, 'UTF-8') ?></b></span>
-                      <span>Estoque: <b class="text-zinc-200"><?= htmlspecialchars($stockText, ENT_QUOTES, 'UTF-8') ?></b></span>
-                      <span class="font-mono"><?= htmlspecialchars(_alupStoreShort($storeId), ENT_QUOTES, 'UTF-8') ?></span>
+                    <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                      <span class="rounded-lg border border-blackx3 bg-blackx/60 px-2 py-2">Fornecedor<br><b class="text-zinc-200"><?= $priceBRL ?></b></span>
+                      <span class="rounded-lg border border-blackx3 bg-blackx/60 px-2 py-2">Entrega<br><b class="text-zinc-200"><?= htmlspecialchars(alupProductDeliveryLabel($p), ENT_QUOTES, 'UTF-8') ?></b></span>
+                      <span class="rounded-lg border border-blackx3 bg-blackx/60 px-2 py-2">Estoque<br><b class="text-zinc-200"><?= htmlspecialchars($stockText, ENT_QUOTES, 'UTF-8') ?></b></span>
+                      <span class="rounded-lg border border-blackx3 bg-blackx/60 px-2 py-2">Store<br><b class="font-mono text-zinc-200"><?= htmlspecialchars(_alupStoreShort($storeId), ENT_QUOTES, 'UTF-8') ?></b></span>
                     </div>
                     <?php if ((string)($p['delivery_type'] ?? '') === 'manual'): ?>
                       <p class="mt-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-xs text-yellow-200">Entrega manual: pode ficar em processamento até a AlUp entregar ou enviar webhook.</p>
                     <?php endif; ?>
                   </div>
-                  <div class="min-w-[260px]" data-basefy-picker>
+                  <div class="h-full min-h-[188px] rounded-xl border border-blackx3 bg-blackx/50 p-4" data-basefy-picker>
                     <label class="block text-xs text-zinc-400 mb-1">Produto Basefy</label>
                     <input type="hidden" name="product_id" value="<?= (int)$selectedProductId ?>">
                     <input type="search"
@@ -390,13 +390,13 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                            autocomplete="off"
                            placeholder="Digite ID ou nome do produto Basefy"
                            class="w-full rounded-xl bg-blackx border border-blackx3 px-3 py-2.5 text-sm outline-none focus:border-greenx focus:ring-2 focus:ring-greenx/10">
-                    <div data-basefy-list class="hidden mt-2 max-h-64 overflow-y-auto rounded-xl border border-blackx3 bg-blackx shadow-2xl shadow-black/40"></div>
-                    <p data-basefy-selected class="mt-2 text-[11px] <?= $selectedProductId > 0 ? 'text-greenx' : 'text-zinc-500' ?>">
+                    <div data-basefy-list class="hidden mt-3 max-h-56 overflow-y-auto rounded-xl border border-blackx3 bg-blackx shadow-2xl shadow-black/40"></div>
+                    <p data-basefy-selected class="mt-3 min-h-[36px] rounded-lg border px-3 py-2 text-xs <?= $selectedProductId > 0 ? 'border-greenx/30 bg-greenx/10 text-greenx' : 'border-blackx3 bg-blackx/60 text-zinc-500' ?>">
                       <?= $selectedProductId > 0 ? ('Selecionado: ' . htmlspecialchars($selectedProductLabel, ENT_QUOTES, 'UTF-8')) : 'Nenhum produto selecionado.' ?>
                     </p>
                   </div>
-                  <div class="flex lg:flex-col gap-2">
-                    <button type="submit" class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 text-sm whitespace-nowrap">Salvar vínculo</button>
+                  <div class="xl:col-span-2 flex flex-wrap justify-end gap-2 border-t border-blackx3 pt-3">
+                    <button type="submit" class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-5 py-2.5 text-sm whitespace-nowrap">Salvar vínculo</button>
                     <?php if ($existing): ?>
                       <button type="submit" name="action" value="delete_mapping" formaction="../api/admin_alup_action"
                               onclick="return confirm('Remover vínculo?')"
@@ -468,10 +468,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
   <?php endif; ?>
 </div>
 
-<div id="alupDetailsModal" class="hidden fixed inset-0 z-50">
+<div id="alupDetailsModal" class="hidden fixed inset-x-0 bottom-0 top-16 z-[999] p-4 sm:p-6">
   <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="alupCloseDetails()"></div>
-  <div class="relative mx-auto my-6 w-[calc(100%-1.5rem)] max-w-5xl max-h-[calc(100vh-3rem)] overflow-hidden rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl">
-    <div class="flex items-start justify-between gap-4 border-b border-blackx3 px-5 py-4">
+  <div class="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center">
+  <div class="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl shadow-black/50">
+    <div class="shrink-0 flex items-start justify-between gap-4 border-b border-blackx3 px-5 py-4">
       <div class="min-w-0">
         <p id="alupDetailOrigin" class="text-xs font-semibold uppercase text-greenx"></p>
         <h3 id="alupDetailTitle" class="mt-1 text-xl font-bold text-white break-words">Produto AlUp</h3>
@@ -479,7 +480,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       </div>
       <button type="button" onclick="alupCloseDetails()" class="shrink-0 rounded-xl border border-blackx3 px-3 py-2 text-sm hover:border-greenx">Fechar</button>
     </div>
-    <div class="max-h-[calc(100vh-10rem)] overflow-y-auto p-5 space-y-4">
+    <div class="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
       <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
         <div id="alupDetailMedia" class="rounded-2xl border border-blackx3 bg-blackx/50 p-3 min-h-[180px]"></div>
         <div class="space-y-3">
@@ -510,6 +511,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         <pre id="alupDetailRaw" class="max-h-80 overflow-auto rounded-xl bg-blackx border border-blackx3 p-3 text-xs text-zinc-300 whitespace-pre-wrap break-words"></pre>
       </div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -664,8 +666,8 @@ function alupRenderBasefyList(input) {
     hidden.value = '';
     if (selected) {
       selected.textContent = 'Escolha um produto da lista abaixo.';
-      selected.classList.remove('text-greenx', 'text-red-300');
-      selected.classList.add('text-zinc-500');
+      selected.classList.remove('border-greenx/30', 'bg-greenx/10', 'text-greenx', 'border-red-500/40', 'bg-red-500/10', 'text-red-300');
+      selected.classList.add('border-blackx3', 'bg-blackx/60', 'text-zinc-500');
     }
   }
 
@@ -686,8 +688,8 @@ function alupRenderBasefyList(input) {
     const active = product.active ? 'Ativo' : 'Inativo';
     const activeClass = product.active ? 'text-greenx bg-greenx/10 border-greenx/30' : 'text-yellow-200 bg-yellow-500/10 border-yellow-500/30';
     const selectedClass = selectedId === Number(product.id) ? 'border-greenx bg-greenx/10' : 'border-blackx3 hover:border-greenx hover:bg-white/[0.03]';
-    return `<button type="button" data-id="${product.id}" data-label="${alupEscapeAttr(label)}" onclick="alupSelectBasefyProduct(this)" class="w-full text-left px-3 py-2.5 border-b border-blackx3/70 last:border-b-0 ${selectedClass} transition-colors">
-      <div class="flex items-start justify-between gap-3">
+    return `<button type="button" data-id="${product.id}" data-label="${alupEscapeAttr(label)}" onclick="alupSelectBasefyProduct(this)" class="flex min-h-[68px] w-full items-center text-left px-3 py-2.5 border-b border-blackx3/70 last:border-b-0 ${selectedClass} transition-colors">
+      <div class="flex w-full items-start justify-between gap-3">
         <div class="min-w-0">
           <p class="text-sm font-semibold text-white truncate">${alupEscapeHtml(label)}</p>
           <p class="text-[11px] text-zinc-500 mt-0.5">${alupEscapeHtml(product.price_label || 'Sem preço')}</p>
@@ -714,8 +716,8 @@ function alupSelectBasefyProduct(button) {
   }
   if (selected) {
     selected.textContent = label ? ('Selecionado: ' + label) : 'Nenhum produto selecionado.';
-    selected.classList.remove('text-zinc-500', 'text-red-300');
-    selected.classList.add('text-greenx');
+    selected.classList.remove('border-blackx3', 'bg-blackx/60', 'text-zinc-500', 'border-red-500/40', 'bg-red-500/10', 'text-red-300');
+    selected.classList.add('border-greenx/30', 'bg-greenx/10', 'text-greenx');
   }
   if (list) list.classList.add('hidden');
 }
@@ -727,8 +729,8 @@ function alupRequireBasefyProduct(form) {
   const selected = form.querySelector('[data-basefy-selected]');
   if (selected) {
     selected.textContent = 'Escolha um produto da lista antes de salvar.';
-    selected.classList.remove('text-zinc-500', 'text-greenx');
-    selected.classList.add('text-red-300');
+    selected.classList.remove('border-blackx3', 'bg-blackx/60', 'text-zinc-500', 'border-greenx/30', 'bg-greenx/10', 'text-greenx');
+    selected.classList.add('border-red-500/40', 'bg-red-500/10', 'text-red-300');
   }
   if (input) {
     input.focus();
