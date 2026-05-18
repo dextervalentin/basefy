@@ -52,6 +52,9 @@ $menuGroups = [
       ['key' => 'conteudo', 'label' => 'Conteúdo', 'href' => 'blog', 'icon' => 'newspaper'],
     ]],
     ['label' => 'Sistema', 'icon' => 'settings', 'items' => [
+        ['key' => 'alup', 'label' => 'AlUp Config', 'href' => 'alup', 'icon' => 'plug-zap'],
+        ['key' => 'alup_catalog', 'label' => 'AlUp Catálogo', 'href' => 'alup_catalog', 'icon' => 'package-search'],
+        ['key' => 'alup_fulfillments', 'label' => 'AlUp Fulfillments', 'href' => 'alup_fulfillments', 'icon' => 'list-checks'],
         ['key' => 'google_oauth', 'label' => 'Google OAuth', 'href' => 'google_oauth', 'icon' => 'key-round'],
         ['key' => 'smtp', 'label' => 'SMTP (E-mail)', 'href' => 'smtp', 'icon' => 'mail'],
         ['key' => 'email_templates', 'label' => 'Templates E-mail', 'href' => 'email_templates', 'icon' => 'file-text'],
@@ -97,6 +100,7 @@ $menuGroups = [
           foreach ($group['items'] as $item) {
               if ($activeMenu === (string)$item['key']) { $groupHasActive = true; break; }
           }
+          $groupClosedClass = in_array((string)$group['label'], ['Pessoas', 'Sistema'], true) ? 'text-white hover:text-white' : 'text-zinc-500 hover:text-zinc-300';
         ?>
           <?php if (count($group['items']) === 1):
               $solo = $group['items'][0];
@@ -114,7 +118,7 @@ $menuGroups = [
           <div x-data="{ open: <?= $groupHasActive ? 'true' : 'false' ?> }" class="border-t border-white/[0.04] pt-1">
             <button @click="open = !open" type="button"
                     class="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] uppercase tracking-wider font-semibold transition-colors"
-                    :class="open ? 'text-greenx' : 'text-zinc-500 hover:text-zinc-300'">
+                  :class="open ? 'text-greenx' : '<?= $groupClosedClass ?>'">
               <i data-lucide="<?= htmlspecialchars((string)($group['icon'] ?? 'folder'), ENT_QUOTES, 'UTF-8') ?>" class="w-3.5 h-3.5"></i>
               <span class="flex-1 text-left"><?= htmlspecialchars((string)$group['label'], ENT_QUOTES, 'UTF-8') ?></span>
               <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>

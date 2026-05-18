@@ -67,6 +67,14 @@ try {
     if ($pixTotal <= 0) {
         _checkoutLog('WALLET_FULL', ['orderId' => $orderId]);
 
+        // Fulfillment AlUp pós-pagamento (não bloqueia resposta; falhas vão para fila)
+        try {
+            require_once __DIR__ . '/../../src/alup_api.php';
+            alupFulfillOrder($conn, (int)$orderId);
+        } catch (\Throwable $e) {
+            error_log('[place_order/alup] fulfill error order #' . $orderId . ': ' . $e->getMessage());
+        }
+
         // Get the chat conversation ID (created by escrowInitializeOrderItems → chatAutoOpenAfterPurchase)
         $chatConvId = 0;
         try {

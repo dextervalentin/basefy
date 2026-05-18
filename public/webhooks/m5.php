@@ -248,6 +248,16 @@ try {
             throw $txErr;
         }
 
+        // Fulfillment AlUp pós-pagamento (fora da transação; falhas vão para fila com retry)
+        try {
+            if (isset($orderId) && (int)$orderId > 0) {
+                require_once __DIR__ . '/../../src/alup_api.php';
+                alupFulfillOrder($conn, (int)$orderId);
+            }
+        } catch (\Throwable $e) {
+            error_log('[webhook/m5/alup] fulfill error order #' . ($orderId ?? 0) . ': ' . $e->getMessage());
+        }
+
     } elseif (in_array($event, ['pix_out.update', 'pix_reversal_out.update'], true)) {
         // ── PIX enviado (saque) ──
         // Localiza wallet_withdrawal pelo transaction_id (que pode ser o M5 pix.id armazenado) OU pela observação
