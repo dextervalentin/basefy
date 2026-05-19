@@ -110,7 +110,9 @@ $categorias = array_values(array_filter(
 ));
 $homeCategorias = array_slice($categorias, 0, 12);
 
-// === Catalog (Fase 2 - Commit C): sidebar de categorias + grid 4x3 ===
+// === Catalog (Commit D): sidebar all-categories + horizontal list cards + live search ===
+require_once dirname(__DIR__) . '/src/stock_items.php';
+
 $catalogCatSlug = trim((string)($_GET['cat'] ?? ''));
 $catalogCatId = 0;
 $catalogActiveCategory = null;
@@ -123,20 +125,98 @@ if ($catalogCatSlug !== '') {
         }
     }
 }
-$catalogFilters = ['limit' => 12];
-if ($q !== '') {
-    $catalogFilters['q'] = $q;
-} elseif ($catalogCatId > 0) {
-    $catalogFilters['category_id'] = $catalogCatId;
-}
-$catalogProducts = sfListProducts($conn, $catalogFilters);
-// Counts per category (single grouped query) for sidebar badges
+
+// Counts per category — dynamic column names via sfProductColumns
 $catalogCounts = [];
 try {
-    if ($res = $conn->query("SELECT categoria_id, COUNT(*) AS total FROM products WHERE COALESCE(ativo,1)=1 AND COALESCE(approval_status,'aprovado')='aprovado' GROUP BY categoria_id")) {
-        while ($r = $res->fetch_assoc()) { $catalogCounts[(int)$r['categoria_id']] = (int)$r['total']; }
+    $_pcols = sfProductColumns($conn);
+    $_catCol = $_pcols['category'] ?? 'categoria_id';
+    $_actCol = $_pcols['active'] ?? null;
+    $_apprCol = $_pcols['approval_status'] ?? null;
+    $_w = [];
+    if ($_actCol)  $_w[] = "COALESCE($_actCol,1)=1";
+    if ($_apprCol) $_w[] = "COALESCE($_apprCol,'aprovado')='aprovado'";
+    $_whereSql = $_w ? ('WHERE ' . implode(' AND ', $_w)) : '';
+    $_sql = "SELECT $_catCol AS cat_id, COUNT(*) AS total FROM products $_whereSql GROUP BY $_catCol";
+    if ($res = $conn->query($_sql)) {
+        while ($r = $res->fetch_assoc()) { $catalogCounts[(int)$r['cat_id']] = (int)$r['total']; }
     }
 } catch (Throwable $e) { $catalogCounts = []; }
+
+// Catalog sections
+$catalogSections = []; // [ ['key'=>..., 'label'=>..., 'icon'=>..., 'sub'=>..., 'products'=>[...], 'category'=>?, 'href'=>?] ]
+if ($q !== '') {
+    $catalogSections[] = [
+        'key' => 'busca', 'label' => 'Resultados para "' . $q . '"', 'icon' => 'search',
+        'sub' => '', 'products' => sfListProducts($conn, ['limit' => 40, 'q' => $q]),
+    ];
+} elseif ($catalogActiveCategory) {
+    $catalogSections[] = [
+        'key' => 'cat-' . (int)$catalogActiveCategory['id'],
+        'label' => (string)$catalogActiveCategory['nome'],
+        'icon' => 'layout-grid', 'sub' => 'Produtos desta categoria',
+        'products' => sfListProducts($conn, ['limit' => 40, 'category_id' => (int)$catalogActiveCategory['id']]),
+        'category' => $catalogActiveCategory,
+    ];
+} else {
+    // Novidades (recém-adicionados, ORDER BY id DESC já é default)
+    $catalogSections[] = [
+        'key' => 'novidades', 'label' => 'Novidades', 'icon' => 'rocket',
+        'sub' => 'Recém-adicionados',
+        'products' => sfListProducts($conn, ['limit' => 8]),
+    ];
+    // Mais vendidos
+    $catalogSections[] = [
+        'key' => 'mais-vendidos', 'label' => 'Mais vendidos', 'icon' => 'flame',
+        'sub' => 'Os favoritos da galera',
+        'products' => sfListProducts($conn, ['limit' => 8, 'order' => 'best_sellers']),
+    ];
+    // Per-category sections (skip empty)
+    foreach ($categorias as $catItem) {
+        $_cid = (int)($catItem['id'] ?? 0);
+        if ($_cid <= 0 || (($catalogCounts[$_cid] ?? 0) === 0)) continue;
+        $_prods = sfListProducts($conn, ['limit' => 8, 'category_id' => $_cid]);
+        if (!$_prods) continue;
+        $catalogSections[] = [
+            'key' => 'cat-' . $_cid, 'label' => (string)$catItem['nome'], 'icon' => 'tag',
+            'sub' => '(' . ($catalogCounts[$_cid] ?? count($_prods)) . ')',
+            'products' => $_prods, 'category' => $catItem,
+        ];
+    }
+}
+
+// Batch resolve real stock for auto-delivery products in all sections
+$catalogStockMap = [];
+$_autoIds = [];
+foreach ($catalogSections as $sec) {
+    foreach ($sec['products'] as $pp) {
+        if (!empty($pp['auto_delivery_enabled'])) $_autoIds[(int)$pp['id']] = true;
+    }
+}
+if ($_autoIds) {
+    $_ids = array_keys($_autoIds);
+    $_in = implode(',', array_fill(0, count($_ids), '?'));
+    $_types = str_repeat('i', count($_ids));
+    $_sql = "SELECT product_id, COUNT(*) AS c FROM product_stock_items WHERE status='disponivel' AND product_id IN ($_in) GROUP BY product_id";
+    if ($st = $conn->prepare($_sql)) {
+        $_bind = array_merge([$_types], $_ids);
+        $_refs = [];
+        foreach ($_bind as $k => $v) { $_refs[$k] = &$_bind[$k]; }
+        call_user_func_array([$st, 'bind_param'], $_refs);
+        if ($st->execute()) {
+            $rr = $st->get_result();
+            while ($row = $rr->fetch_assoc()) { $catalogStockMap[(int)$row['product_id']] = (int)$row['c']; }
+        }
+        $st->close();
+    }
+}
+// Helper to compute display stock for a product
+$catalogStockOf = function(array $p) use ($catalogStockMap): array {
+    $auto = !empty($p['auto_delivery_enabled']);
+    $pid  = (int)($p['id'] ?? 0);
+    $qty  = $auto ? ($catalogStockMap[$pid] ?? 0) : (int)($p['quantidade'] ?? 0);
+    return ['qty' => $qty, 'auto' => $auto];
+};
 
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 $homeFeaturedCategory = null;
@@ -410,145 +490,266 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     </div>
     <?php endif; ?>
 
-    <!-- =========== CATÁLOGO — Sidebar de categorias + grid 4x3 (Commit C) =========== -->
-    <section id="catalogo" class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div class="flex items-end justify-between mb-6 sm:mb-8 flex-wrap gap-3">
-            <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="layout-grid" class="w-3 h-3"></i>
-                    <?= $q !== '' ? 'Busca' : 'Catálogo' ?>
-                </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">
-                    <?php if ($q !== ''): ?>
-                        Resultados para "<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>"
-                    <?php elseif ($catalogActiveCategory): ?>
-                        <?= htmlspecialchars((string)$catalogActiveCategory['nome'], ENT_QUOTES, 'UTF-8') ?>
-                    <?php else: ?>
-                        Explore o catálogo
-                    <?php endif; ?>
-                </h2>
-                <p class="text-sm text-zinc-500 mt-1">
-                    <?= $q !== ''
-                        ? count($catalogProducts) . ' produto(s) encontrado(s)'
-                        : ($catalogActiveCategory ? 'Produtos desta categoria' : 'Filtre pela esquerda e abra o produto para detalhes') ?>
-                </p>
+    <!-- =========== CATALOGO — Sidebar todas categorias + horizontal cards + busca live (Commit D) =========== -->
+    <section id="catalogo" class="max-w-[1440px] mx-auto px-3 sm:px-6 py-8 sm:py-12">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center shrink-0">
+                <i data-lucide="badge-check" class="w-5 h-5 text-greenx"></i>
             </div>
-            <?php if ($catalogActiveCategory || $q !== ''): ?>
-            <a href="<?= BASE_PATH ?>/" class="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-greenx transition-colors px-3 py-1.5 rounded-lg border border-white/10 hover:border-greenx/40">
-                <i data-lucide="x" class="w-3.5 h-3.5"></i> Limpar filtro
-            </a>
-            <?php endif; ?>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-bold leading-tight">Loja Oficial</h1>
+                <p class="text-[11px] sm:text-xs text-zinc-500 leading-tight">Produtos exclusivos da comunidade</p>
+            </div>
         </div>
 
-        <div class="catalog-shell grid gap-5 sm:gap-6 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div class="catalog-shell grid gap-4 sm:gap-5 lg:grid-cols-[200px_minmax(0,1fr)] items-start" data-catalog>
 
-            <!-- ====== SIDEBAR (filtro de categorias) ====== -->
-            <aside class="catalog-sidebar rounded-2xl border border-white/[0.06] bg-blackx2/60 backdrop-blur-sm p-3 sm:p-4 self-start lg:sticky lg:top-24">
-                <div class="flex items-center justify-between mb-3 px-1">
-                    <h3 class="text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-400 flex items-center gap-1.5">
-                        <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-greenx"></i> Categorias
-                    </h3>
-                    <button type="button" class="lg:hidden text-zinc-500 hover:text-white" onclick="this.closest('.catalog-sidebar').classList.toggle('cat-collapsed')" aria-label="Alternar lista">
-                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            <!-- ============ SIDEBAR (desktop fixed / mobile = popup overlay) ============ -->
+            <aside id="catalogSidebar" class="catalog-sidebar rounded-2xl border border-white/[0.06] bg-blackx2/70 backdrop-blur-sm p-2.5 self-start lg:sticky lg:top-24">
+                <div class="flex items-center justify-between px-1.5 mb-2">
+                    <div class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400">
+                        <i data-lucide="sliders-horizontal" class="w-3 h-3 text-greenx"></i> Categorias
+                    </div>
+                    <button type="button" class="lg:hidden text-zinc-500 hover:text-white" onclick="catalogClosePopup()" aria-label="Fechar">
+                        <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <ul class="catalog-cat-list flex flex-col gap-1 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto pr-1">
+                <ul class="catalog-cat-list flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto pr-0.5">
                     <li>
                         <a href="<?= BASE_PATH ?>/"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
-                            <span class="flex items-center gap-2">
-                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Todas
+                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                            <span class="flex items-center gap-1.5 truncate">
+                                <i data-lucide="package" class="w-3.5 h-3.5 shrink-0"></i>
+                                <span class="truncate">Todos</span>
                             </span>
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/30 text-greenx' : 'bg-white/[0.06] text-zinc-500' ?>"><?= array_sum($catalogCounts) ?></span>
+                            <span class="text-[10px] font-bold text-zinc-500 shrink-0"><?= array_sum($catalogCounts) ?></span>
                         </a>
                     </li>
-                    <?php foreach ($categorias as $catItem):
-                        $cId = (int)($catItem['id'] ?? 0);
-                        $cSlug = trim((string)($catItem['slug'] ?? ''));
-                        $isActive = ($catalogActiveCategory && (int)$catalogActiveCategory['id'] === $cId);
-                        $count = $catalogCounts[$cId] ?? 0;
-                        if ($cSlug === '' || $count === 0) continue;
+                    <?php
+                    // Map known category names to lucide icons
+                    $catIconMap = [
+                        'meta' => 'facebook', 'facebook' => 'facebook',
+                        'google' => 'chrome', 'google ads' => 'chrome', 'g-ads' => 'chrome',
+                        'tiktok' => 'music', 'tik tok' => 'music',
+                        'gmail' => 'mail', 'email' => 'mail', 'outlook' => 'mail', 'mail' => 'mail',
+                        'instagram' => 'instagram',
+                        'proxy' => 'globe', 'vpn' => 'globe',
+                        'shopify' => 'shopping-bag',
+                        'ia' => 'sparkles', 'inteligencia artificial' => 'sparkles',
+                        'youtube' => 'youtube',
+                        'whatsapp' => 'message-circle',
+                    ];
+                    foreach ($categorias as $catItem):
+                        $_cid = (int)($catItem['id'] ?? 0);
+                        $_cslug = trim((string)($catItem['slug'] ?? ''));
+                        $_cname = (string)($catItem['nome'] ?? '');
+                        if ($_cid <= 0 || $_cslug === '') continue;
+                        $_count = $catalogCounts[$_cid] ?? 0;
+                        $_isActive = ($catalogActiveCategory && (int)$catalogActiveCategory['id'] === $_cid);
+                        $_iconKey = mb_strtolower(trim($_cname));
+                        $_icon = $catIconMap[$_iconKey] ?? 'tag';
+                        if ($_icon === 'tag') {
+                            foreach ($catIconMap as $kk => $vv) {
+                                if ($kk && str_contains($_iconKey, $kk)) { $_icon = $vv; break; }
+                            }
+                        }
                     ?>
                     <li>
-                        <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars($cSlug, ENT_QUOTES, 'UTF-8') ?>#catalogo"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all <?= $isActive ? 'bg-greenx/15 text-greenx border border-greenx/30 font-semibold' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
-                            <span class="truncate"><?= htmlspecialchars((string)$catItem['nome'], ENT_QUOTES, 'UTF-8') ?></span>
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 <?= $isActive ? 'bg-greenx/30 text-greenx' : 'bg-white/[0.06] text-zinc-500' ?>"><?= $count ?></span>
+                        <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars($_cslug, ENT_QUOTES, 'UTF-8') ?>#catalogo"
+                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= $_isActive ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                            <span class="flex items-center gap-1.5 min-w-0">
+                                <i data-lucide="<?= $_icon ?>" class="w-3.5 h-3.5 shrink-0"></i>
+                                <span class="truncate"><?= htmlspecialchars($_cname, ENT_QUOTES, 'UTF-8') ?></span>
+                            </span>
+                            <span class="text-[10px] font-bold text-zinc-500 shrink-0"><?= $_count ?></span>
                         </a>
                     </li>
                     <?php endforeach; ?>
                 </ul>
             </aside>
 
-            <!-- ====== GRID (4 colunas × 3 linhas = 12 produtos) ====== -->
-            <div>
-                <?php if ($catalogProducts): ?>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    <?php foreach ($catalogProducts as $i => $p):
-                        $pStock = (int)($p['quantidade'] ?? 0);
-                        $pAutoDel = !empty($p['auto_delivery_enabled']);
-                        $pUrl = sfProductUrl($p);
+            <!-- ============ RIGHT COLUMN: search + sections ============ -->
+            <div class="min-w-0">
+                <!-- Search input (live filter) -->
+                <div class="relative mb-4">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"></i>
+                    <input type="text" id="catalogSearch" placeholder="Buscar produtos..."
+                           class="w-full bg-blackx2/70 border border-white/[0.06] rounded-xl pl-10 pr-10 py-2.5 sm:py-3 text-[13px] sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-greenx/50 transition-colors">
+                    <button type="button" id="catalogSearchClear" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white" aria-label="Limpar">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- Sections container -->
+                <div id="catalogSections" class="flex flex-col gap-6">
+                    <?php foreach ($catalogSections as $sec):
+                        $secKey = (string)$sec['key'];
+                        $secProducts = $sec['products'] ?? [];
+                        if (!$secProducts) continue;
                     ?>
-                    <a href="<?= htmlspecialchars($pUrl, ENT_QUOTES, 'UTF-8') ?>"
-                       class="product-card-c group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.08] hover:-translate-y-1 transition-all duration-300 animate-fade-in-up stagger-<?= min($i + 1, 8) ?>"
-                       title="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                        <div class="relative overflow-hidden">
-                            <div class="aspect-square overflow-hidden bg-blackx">
-                                <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
-                                     alt="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                     loading="lazy">
+                    <section class="catalog-section" data-section-key="<?= htmlspecialchars($secKey, ENT_QUOTES, 'UTF-8') ?>">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-greenx/10 text-greenx border border-greenx/20">
+                                <i data-lucide="<?= htmlspecialchars((string)($sec['icon'] ?? 'tag'), ENT_QUOTES, 'UTF-8') ?>" class="w-3.5 h-3.5"></i>
+                                <h2 class="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider"><?= htmlspecialchars((string)$sec['label'], ENT_QUOTES, 'UTF-8') ?></h2>
                             </div>
-                            <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide bg-black/70 backdrop-blur-sm text-white border border-white/10">
-                                <?= htmlspecialchars((string)($p['categoria_nome'] ?? 'Geral'), ENT_QUOTES, 'UTF-8') ?>
-                            </span>
-                            <?php if ($pStock <= 0 && !$pAutoDel): ?>
-                            <span class="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-red-500/90 text-white">Esgotado</span>
+                            <?php if (!empty($sec['sub'])): ?>
+                            <span class="text-[11px] text-zinc-500 truncate"><?= htmlspecialchars((string)$sec['sub'], ENT_QUOTES, 'UTF-8') ?></span>
                             <?php endif; ?>
-                            <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            <div class="flex-1 h-px bg-white/[0.06]"></div>
+                            <?php if (!empty($sec['category'])): ?>
+                            <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars((string)$sec['category']['slug'], ENT_QUOTES, 'UTF-8') ?>#catalogo" class="text-[11px] font-semibold text-greenx hover:underline shrink-0 hidden sm:inline">Ver mais</a>
+                            <?php endif; ?>
                         </div>
-                        <div class="p-2.5 sm:p-3 flex flex-col flex-1 gap-1.5">
-                            <p class="font-semibold text-[12px] sm:text-[13px] leading-tight truncate text-zinc-100 group-hover:text-greenx transition-colors" title="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                                <?= htmlspecialchars((string)($p['nome'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?>
-                            </p>
-                            <p class="text-base sm:text-lg font-bold text-greenx leading-none"><?= sfDisplayPrice($p) ?></p>
-                            <div class="flex items-center justify-between text-[10px] sm:text-[11px] text-zinc-500 mt-auto pt-1 border-t border-white/[0.04]">
-                                <?php if (!empty($p['vendedor_nome'])): ?>
-                                <span class="flex items-center gap-1 truncate min-w-0">
-                                    <i data-lucide="store" class="w-3 h-3 text-greenx/70 shrink-0"></i>
-                                    <span class="truncate"><?= htmlspecialchars((string)$p['vendedor_nome'], ENT_QUOTES, 'UTF-8') ?></span>
-                                </span>
-                                <?php else: ?><span></span><?php endif; ?>
-                                <span class="flex items-center gap-1 shrink-0 <?= ($pStock > 0 || $pAutoDel) ? 'text-zinc-400' : 'text-red-400/80' ?>">
-                                    <i data-lucide="package" class="w-3 h-3"></i>
-                                    <?php if ($pAutoDel): ?>
-                                        Digital
-                                    <?php elseif ($pStock > 0): ?>
-                                        <?= $pStock ?> un.
-                                    <?php else: ?>
-                                        0
-                                    <?php endif; ?>
-                                </span>
-                            </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                            <?php foreach ($secProducts as $p):
+                                $st = $catalogStockOf($p);
+                                $pStock = (int)$st['qty'];
+                                $pAuto = (bool)$st['auto'];
+                                $pName = (string)($p['nome'] ?? 'Produto');
+                                $pVendor = (string)($p['vendedor_nome'] ?? '');
+                                $pUrl = sfProductUrl($p);
+                                $pImg = sfImageUrl((string)($p['imagem'] ?? ''));
+                                // stock badge — last few / muted
+                                if ($pStock <= 0 && !$pAuto) {
+                                    $stockTxt = 'Sem estoque'; $stockCls = 'text-red-400/80';
+                                } elseif ($pAuto && $pStock <= 0) {
+                                    $stockTxt = 'Digital'; $stockCls = 'text-zinc-500';
+                                } elseif ($pStock > 0 && $pStock <= 5) {
+                                    $stockTxt = 'Últimas ' . $pStock . 'un'; $stockCls = 'text-amber-400 font-medium';
+                                } else {
+                                    $stockTxt = $pStock . ' em estoque'; $stockCls = 'text-zinc-500';
+                                }
+                            ?>
+                            <a href="<?= htmlspecialchars($pUrl, ENT_QUOTES, 'UTF-8') ?>"
+                               class="catalog-product group flex items-center gap-2.5 bg-blackx2 border border-white/[0.06] rounded-xl p-2 hover:border-greenx/40 hover:shadow-[0_8px_24px_rgba(136,0,228,0.08)] transition-all duration-200"
+                               data-name="<?= htmlspecialchars(mb_strtolower($pName), ENT_QUOTES, 'UTF-8') ?>"
+                               data-vendor="<?= htmlspecialchars(mb_strtolower($pVendor), ENT_QUOTES, 'UTF-8') ?>"
+                               title="<?= htmlspecialchars($pName, ENT_QUOTES, 'UTF-8') ?>">
+                                <div class="relative shrink-0 w-12 h-12 rounded-md overflow-hidden bg-blackx">
+                                    <img src="<?= htmlspecialchars($pImg, ENT_QUOTES, 'UTF-8') ?>" alt=""
+                                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="text-[12px] sm:text-[13px] font-semibold text-zinc-100 line-clamp-1 leading-tight group-hover:text-greenx transition-colors">
+                                        <?= htmlspecialchars($pName, ENT_QUOTES, 'UTF-8') ?>
+                                    </h3>
+                                    <div class="flex items-baseline gap-1.5 mt-0.5">
+                                        <span class="text-[12px] sm:text-[13px] font-bold text-white"><?= sfDisplayPrice($p) ?></span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2 mt-1">
+                                        <?php if ($pVendor !== ''): ?>
+                                        <span class="flex items-center gap-1 min-w-0 text-[10px] text-zinc-500">
+                                            <i data-lucide="store" class="w-2.5 h-2.5 text-greenx/80 shrink-0"></i>
+                                            <span class="truncate"><?= htmlspecialchars($pVendor, ENT_QUOTES, 'UTF-8') ?></span>
+                                        </span>
+                                        <?php else: ?><span></span><?php endif; ?>
+                                        <span class="flex items-center gap-1 shrink-0 text-[10px] <?= $stockCls ?>">
+                                            <i data-lucide="package" class="w-2.5 h-2.5"></i>
+                                            <?= htmlspecialchars($stockTxt, ENT_QUOTES, 'UTF-8') ?>
+                                        </span>
+                                    </div>
+                                </div>
+                            </a>
+                            <?php endforeach; ?>
                         </div>
-                    </a>
+                    </section>
                     <?php endforeach; ?>
-                </div>
-                <?php else: ?>
-                <div class="rounded-2xl border border-white/[0.06] bg-blackx2 p-10 sm:p-14 text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
-                        <i data-lucide="package-open" class="w-6 h-6 text-zinc-600"></i>
+
+                    <!-- Empty state -->
+                    <?php if (!$catalogSections || (count($catalogSections) === 1 && empty($catalogSections[0]['products']))): ?>
+                    <div class="rounded-2xl border border-white/[0.06] bg-blackx2 p-10 sm:p-14 text-center">
+                        <div class="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                            <i data-lucide="package-open" class="w-6 h-6 text-zinc-600"></i>
+                        </div>
+                        <h3 class="text-base font-semibold text-zinc-300">Nenhum produto encontrado</h3>
+                        <p class="text-sm text-zinc-500 mt-2">Tente outra categoria ou limpe a busca.</p>
+                        <a href="<?= BASE_PATH ?>/" class="inline-flex mt-5 rounded-xl bg-white/[0.06] border border-white/[0.08] px-5 py-2.5 text-sm text-zinc-300 hover:text-white hover:border-greenx/40 transition-all">Ver tudo</a>
                     </div>
-                    <h3 class="text-base font-semibold text-zinc-300">Nenhum produto encontrado</h3>
-                    <p class="text-sm text-zinc-500 mt-2 max-w-sm mx-auto">
-                        <?= $q !== '' ? 'Tente termos diferentes ou limpe a busca.' : 'Esta categoria ainda não tem produtos disponíveis.' ?>
-                    </p>
-                    <a href="<?= BASE_PATH ?>/" class="inline-flex mt-5 rounded-xl bg-white/[0.06] border border-white/[0.08] px-5 py-2.5 text-sm text-zinc-300 hover:text-white hover:border-greenx/40 transition-all">Ver tudo</a>
+                    <?php endif; ?>
+
+                    <!-- No results from live search -->
+                    <div id="catalogNoResults" class="hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-8 text-center">
+                        <i data-lucide="search-x" class="w-6 h-6 text-zinc-600 mx-auto mb-2"></i>
+                        <p class="text-sm text-zinc-400">Nada encontrado com este termo.</p>
+                    </div>
                 </div>
-                <?php endif; ?>
             </div>
         </div>
+
+        <!-- Floating button (mobile) — opens sidebar popup -->
+        <button type="button" id="catalogSidebarToggle" onclick="catalogOpenPopup()" class="lg:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 w-9 h-16 rounded-r-xl bg-greenx/90 backdrop-blur text-white shadow-lg shadow-greenx/40 flex items-center justify-center border border-l-0 border-greenx/60" aria-label="Abrir categorias">
+            <i data-lucide="chevrons-right" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Backdrop for mobile popup -->
+        <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden" onclick="catalogClosePopup()"></div>
     </section>
+
+    <style>
+      /* Sidebar popup animation (mobile only) */
+      @media (max-width: 1023px) {
+        .catalog-sidebar { position: fixed; left: 12px; top: 50%; transform: translate(-110%, -50%) scale(.92); opacity: 0; width: min(260px, 78vw); max-height: 80vh; z-index: 50; transition: transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .22s ease; box-shadow: 0 24px 60px -12px rgba(0,0,0,.6), 0 0 0 1px rgba(136,0,228,.2); pointer-events: none; }
+        .catalog-sidebar.is-open { transform: translate(0, -50%) scale(1); opacity: 1; pointer-events: auto; }
+        #catalogSidebarBackdrop.is-open { display: block; animation: catBackdropIn .25s ease; }
+        @keyframes catBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+      }
+      .catalog-product.is-hidden { display: none; }
+      .catalog-section.is-empty { display: none; }
+    </style>
+
+    <script>
+    (function(){
+      'use strict';
+      var input = document.getElementById('catalogSearch');
+      var clearBtn = document.getElementById('catalogSearchClear');
+      var noRes  = document.getElementById('catalogNoResults');
+      var sidebar = document.getElementById('catalogSidebar');
+      var backdrop = document.getElementById('catalogSidebarBackdrop');
+      if (!input) return;
+
+      function applyFilter(){
+        var q = (input.value || '').toLowerCase().trim();
+        clearBtn.classList.toggle('hidden', !q);
+        var sections = document.querySelectorAll('.catalog-section');
+        var totalShown = 0;
+        sections.forEach(function(sec){
+          var cards = sec.querySelectorAll('.catalog-product');
+          var shown = 0;
+          cards.forEach(function(c){
+            var n = c.getAttribute('data-name') || '';
+            var v = c.getAttribute('data-vendor') || '';
+            var match = !q || n.indexOf(q) >= 0 || v.indexOf(q) >= 0;
+            c.classList.toggle('is-hidden', !match);
+            if (match) shown++;
+          });
+          sec.classList.toggle('is-empty', shown === 0);
+          totalShown += shown;
+        });
+        if (noRes) noRes.classList.toggle('hidden', totalShown > 0 || !q);
+      }
+
+      input.addEventListener('input', applyFilter);
+      clearBtn.addEventListener('click', function(){ input.value = ''; applyFilter(); input.focus(); });
+
+      // Mobile sidebar popup
+      window.catalogOpenPopup = function(){
+        if (!sidebar) return;
+        sidebar.classList.add('is-open');
+        if (backdrop){ backdrop.classList.remove('hidden'); backdrop.classList.add('is-open'); }
+        document.body.style.overflow = 'hidden';
+      };
+      window.catalogClosePopup = function(){
+        if (!sidebar) return;
+        sidebar.classList.remove('is-open');
+        if (backdrop){ backdrop.classList.remove('is-open'); setTimeout(function(){ backdrop.classList.add('hidden'); }, 240); }
+        document.body.style.overflow = '';
+      };
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
+    })();
+    </script>
+
 
     <?php if ($q === ''): ?>
     <!-- =========== HOME BANNER =========== -->

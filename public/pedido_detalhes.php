@@ -186,6 +186,7 @@ $avatarInitial = static function (string $name): string {
 <style>
   /* ── Pedido Detalhes — Premium 2-col Layout (Phase 2 Commit A) ── */
   .pd-wrap { max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 1023px) { .pd-wrap { max-width: 100%; overflow-x: hidden; } body { overflow-x: hidden; } }
   .pd-back { display:inline-flex; align-items:center; gap:.5rem; padding:.45rem .75rem; border-radius:.6rem; border:1px solid #1f1f23; font-size:.75rem; color:#d1d1d6; transition: all .15s; }
   .pd-back:hover { border-color:#8800E4; color:#fff; background: rgba(136,0,228,.06); }
   .pd-hero { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem 1.25rem; margin-bottom:1.25rem; }
@@ -324,14 +325,23 @@ $avatarInitial = static function (string $name): string {
   /* Mobile ordering: timeline → produto → chat → ações → tx → ajuda → reviews */
   @media (max-width: 1023px) {
     .pd-left, .pd-right { display:contents; }
-    .pd-card-timeline { order: 1; }
-    .pd-card-prod     { order: 2; }
-    .pd-card-chat     { order: 3; }
-    .pd-card-actions  { order: 4; }
-    .pd-card-items    { order: 5; }
-    .pd-card-tx       { order: 6; }
-    .pd-card-help     { order: 7; }
+    .pd-card-prod     { order: 1; }
+    .pd-card-actions  { order: 2; }
+    .pd-card-tx       { order: 3; }
+    .pd-card-help     { order: 4; }
+    .pd-card-timeline { order: 5; }
+    .pd-card-chat     { order: 6; }
+    .pd-card-items    { order: 7; }
     .pd-card-reviews  { order: 8; }
+    .pd-card { max-width: 100%; overflow: hidden; }
+    .pd-tl { gap: .35rem; }
+    .pd-tl-bubble { width: 2.4rem; height: 2.4rem; }
+    .pd-tl-label { font-size: .62rem; }
+    .pd-paste-row { justify-content: center; gap: .3rem; }
+    .pd-paste-input { width: 2.3rem; height: 2.7rem; font-size: 1rem; }
+    .pd-msg-list { height: 280px; }
+    .pd-msg { max-width: 88%; }
+    .pd-sys-box { font-size: .68rem; word-break: break-all; }
   }
 </style>
 
