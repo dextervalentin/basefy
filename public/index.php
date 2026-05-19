@@ -110,6 +110,34 @@ $categorias = array_values(array_filter(
 ));
 $homeCategorias = array_slice($categorias, 0, 12);
 
+// === Catalog (Fase 2 - Commit C): sidebar de categorias + grid 4x3 ===
+$catalogCatSlug = trim((string)($_GET['cat'] ?? ''));
+$catalogCatId = 0;
+$catalogActiveCategory = null;
+if ($catalogCatSlug !== '') {
+    foreach ($categorias as $catItem) {
+        if (mb_strtolower(trim((string)($catItem['slug'] ?? ''))) === mb_strtolower($catalogCatSlug)) {
+            $catalogActiveCategory = $catItem;
+            $catalogCatId = (int)($catItem['id'] ?? 0);
+            break;
+        }
+    }
+}
+$catalogFilters = ['limit' => 12];
+if ($q !== '') {
+    $catalogFilters['q'] = $q;
+} elseif ($catalogCatId > 0) {
+    $catalogFilters['category_id'] = $catalogCatId;
+}
+$catalogProducts = sfListProducts($conn, $catalogFilters);
+// Counts per category (single grouped query) for sidebar badges
+$catalogCounts = [];
+try {
+    if ($res = $conn->query("SELECT categoria_id, COUNT(*) AS total FROM products WHERE COALESCE(ativo,1)=1 AND COALESCE(approval_status,'aprovado')='aprovado' GROUP BY categoria_id")) {
+        while ($r = $res->fetch_assoc()) { $catalogCounts[(int)$r['categoria_id']] = (int)$r['total']; }
+    }
+} catch (Throwable $e) { $catalogCounts = []; }
+
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 $homeFeaturedCategory = null;
 if ($homeFeaturedCategorySetting !== '') {
@@ -382,119 +410,145 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     </div>
     <?php endif; ?>
 
-    <!-- =========== CATEGORIAS — Premium cards =========== -->
-    <?php if ($homeCategorias): ?>
-    <section id="categorias" class="max-w-[1440px] mx-auto px-4 sm:px-6 py-14 sm:py-20">
-        <div class="flex items-center justify-between mb-8 sm:mb-10">
+    <!-- =========== CATÁLOGO — Sidebar de categorias + grid 4x3 (Commit C) =========== -->
+    <section id="catalogo" class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <div class="flex items-end justify-between mb-6 sm:mb-8 flex-wrap gap-3">
             <div>
                 <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
                     <i data-lucide="layout-grid" class="w-3 h-3"></i>
-                    Categorias
+                    <?= $q !== '' ? 'Busca' : 'Catálogo' ?>
                 </div>
-                <h2 class="text-xl sm:text-2xl font-bold">Explorar categorias</h2>
-                <p class="text-sm text-zinc-500 mt-1">Navegue por tipo de produto</p>
+                <h2 class="text-2xl sm:text-3xl font-bold">
+                    <?php if ($q !== ''): ?>
+                        Resultados para "<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>"
+                    <?php elseif ($catalogActiveCategory): ?>
+                        <?= htmlspecialchars((string)$catalogActiveCategory['nome'], ENT_QUOTES, 'UTF-8') ?>
+                    <?php else: ?>
+                        Explore o catálogo
+                    <?php endif; ?>
+                </h2>
+                <p class="text-sm text-zinc-500 mt-1">
+                    <?= $q !== ''
+                        ? count($catalogProducts) . ' produto(s) encontrado(s)'
+                        : ($catalogActiveCategory ? 'Produtos desta categoria' : 'Filtre pela esquerda e abra o produto para detalhes') ?>
+                </p>
             </div>
-            <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver todas <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
+            <?php if ($catalogActiveCategory || $q !== ''): ?>
+            <a href="<?= BASE_PATH ?>/" class="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-greenx transition-colors px-3 py-1.5 rounded-lg border border-white/10 hover:border-greenx/40">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Limpar filtro
+            </a>
+            <?php endif; ?>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-            <?php foreach ($homeCategorias as $i => $cat):
-                $catImg = trim((string)($cat['imagem'] ?? ''));
-                $catImgUrl = ($catImg !== '' && $catImg !== 'https://placehold.co/1200x800/111827/9ca3af?text=Produto') ? sfImageUrl($catImg) : '';
-            ?>
-            <a href="<?= sfCategoryUrl($cat) ?>"
-                class="cat-card group relative flex flex-col items-center justify-end text-center rounded-2xl border border-white/[0.06] bg-blackx2 overflow-hidden hover:border-greenx/30 transition-all duration-500 animate-fade-in stagger-<?= min($i + 1, 6) ?> h-[108px] sm:h-[122px]">
-                <?php if ($catImgUrl): ?>
-                <img src="<?= htmlspecialchars($catImgUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-110 transition-all duration-700" loading="lazy">
-                <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/20"></div>
-                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-t from-greenx/20 via-transparent to-transparent"></div>
-                <div class="relative z-10 w-full px-3 pb-3">
-                    <span class="inline-block max-w-full px-2.5 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-[12px] sm:text-sm font-bold text-white keep-white group-hover:bg-greenx/90 group-hover:border-greenx/50 transition-all duration-300 cat-name-pill line-clamp-2 leading-tight"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></span>
+
+        <div class="catalog-shell grid gap-5 sm:gap-6 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+
+            <!-- ====== SIDEBAR (filtro de categorias) ====== -->
+            <aside class="catalog-sidebar rounded-2xl border border-white/[0.06] bg-blackx2/60 backdrop-blur-sm p-3 sm:p-4 self-start lg:sticky lg:top-24">
+                <div class="flex items-center justify-between mb-3 px-1">
+                    <h3 class="text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-400 flex items-center gap-1.5">
+                        <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-greenx"></i> Categorias
+                    </h3>
+                    <button type="button" class="lg:hidden text-zinc-500 hover:text-white" onclick="this.closest('.catalog-sidebar').classList.toggle('cat-collapsed')" aria-label="Alternar lista">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <ul class="catalog-cat-list flex flex-col gap-1 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto pr-1">
+                    <li>
+                        <a href="<?= BASE_PATH ?>/"
+                           class="cat-filter-link flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                            <span class="flex items-center gap-2">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Todas
+                            </span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/30 text-greenx' : 'bg-white/[0.06] text-zinc-500' ?>"><?= array_sum($catalogCounts) ?></span>
+                        </a>
+                    </li>
+                    <?php foreach ($categorias as $catItem):
+                        $cId = (int)($catItem['id'] ?? 0);
+                        $cSlug = trim((string)($catItem['slug'] ?? ''));
+                        $isActive = ($catalogActiveCategory && (int)$catalogActiveCategory['id'] === $cId);
+                        $count = $catalogCounts[$cId] ?? 0;
+                        if ($cSlug === '' || $count === 0) continue;
+                    ?>
+                    <li>
+                        <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars($cSlug, ENT_QUOTES, 'UTF-8') ?>#catalogo"
+                           class="cat-filter-link flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all <?= $isActive ? 'bg-greenx/15 text-greenx border border-greenx/30 font-semibold' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                            <span class="truncate"><?= htmlspecialchars((string)$catItem['nome'], ENT_QUOTES, 'UTF-8') ?></span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 <?= $isActive ? 'bg-greenx/30 text-greenx' : 'bg-white/[0.06] text-zinc-500' ?>"><?= $count ?></span>
+                        </a>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+            </aside>
+
+            <!-- ====== GRID (4 colunas × 3 linhas = 12 produtos) ====== -->
+            <div>
+                <?php if ($catalogProducts): ?>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <?php foreach ($catalogProducts as $i => $p):
+                        $pStock = (int)($p['quantidade'] ?? 0);
+                        $pAutoDel = !empty($p['auto_delivery_enabled']);
+                        $pUrl = sfProductUrl($p);
+                    ?>
+                    <a href="<?= htmlspecialchars($pUrl, ENT_QUOTES, 'UTF-8') ?>"
+                       class="product-card-c group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.08] hover:-translate-y-1 transition-all duration-300 animate-fade-in-up stagger-<?= min($i + 1, 8) ?>"
+                       title="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        <div class="relative overflow-hidden">
+                            <div class="aspect-square overflow-hidden bg-blackx">
+                                <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                     alt="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                     loading="lazy">
+                            </div>
+                            <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide bg-black/70 backdrop-blur-sm text-white border border-white/10">
+                                <?= htmlspecialchars((string)($p['categoria_nome'] ?? 'Geral'), ENT_QUOTES, 'UTF-8') ?>
+                            </span>
+                            <?php if ($pStock <= 0 && !$pAutoDel): ?>
+                            <span class="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-red-500/90 text-white">Esgotado</span>
+                            <?php endif; ?>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        </div>
+                        <div class="p-2.5 sm:p-3 flex flex-col flex-1 gap-1.5">
+                            <p class="font-semibold text-[12px] sm:text-[13px] leading-tight truncate text-zinc-100 group-hover:text-greenx transition-colors" title="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars((string)($p['nome'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?>
+                            </p>
+                            <p class="text-base sm:text-lg font-bold text-greenx leading-none"><?= sfDisplayPrice($p) ?></p>
+                            <div class="flex items-center justify-between text-[10px] sm:text-[11px] text-zinc-500 mt-auto pt-1 border-t border-white/[0.04]">
+                                <?php if (!empty($p['vendedor_nome'])): ?>
+                                <span class="flex items-center gap-1 truncate min-w-0">
+                                    <i data-lucide="store" class="w-3 h-3 text-greenx/70 shrink-0"></i>
+                                    <span class="truncate"><?= htmlspecialchars((string)$p['vendedor_nome'], ENT_QUOTES, 'UTF-8') ?></span>
+                                </span>
+                                <?php else: ?><span></span><?php endif; ?>
+                                <span class="flex items-center gap-1 shrink-0 <?= ($pStock > 0 || $pAutoDel) ? 'text-zinc-400' : 'text-red-400/80' ?>">
+                                    <i data-lucide="package" class="w-3 h-3"></i>
+                                    <?php if ($pAutoDel): ?>
+                                        Digital
+                                    <?php elseif ($pStock > 0): ?>
+                                        <?= $pStock ?> un.
+                                    <?php else: ?>
+                                        0
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                    <?php endforeach; ?>
                 </div>
                 <?php else: ?>
-                <div class="absolute inset-0 bg-gradient-to-br from-greenx/16 via-purple-500/10 to-fuchsia-500/10"></div>
-                <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-t from-greenx/15 via-transparent to-transparent"></div>
-                <div class="relative z-10 w-full px-3 py-4 flex flex-col items-center justify-center h-full">
-                    <p class="text-[12px] sm:text-sm font-bold group-hover:text-greenx transition-colors line-clamp-2 leading-tight"><?= htmlspecialchars((string)$cat['nome'], ENT_QUOTES, 'UTF-8') ?></p>
-                    <span class="mt-1 text-[10px] text-zinc-500">Explorar</span>
+                <div class="rounded-2xl border border-white/[0.06] bg-blackx2 p-10 sm:p-14 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="package-open" class="w-6 h-6 text-zinc-600"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-zinc-300">Nenhum produto encontrado</h3>
+                    <p class="text-sm text-zinc-500 mt-2 max-w-sm mx-auto">
+                        <?= $q !== '' ? 'Tente termos diferentes ou limpe a busca.' : 'Esta categoria ainda não tem produtos disponíveis.' ?>
+                    </p>
+                    <a href="<?= BASE_PATH ?>/" class="inline-flex mt-5 rounded-xl bg-white/[0.06] border border-white/[0.08] px-5 py-2.5 text-sm text-zinc-300 hover:text-white hover:border-greenx/40 transition-all">Ver tudo</a>
                 </div>
                 <?php endif; ?>
-            </a>
-            <?php endforeach; ?>
-        </div>
-        <div class="mt-5 text-center sm:hidden">
-            <a href="<?= BASE_PATH ?>/categorias" class="text-xs text-greenx hover:underline font-semibold inline-flex items-center gap-1">Ver todas as categorias <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
-        </div>
-    </section>
-    <?php endif; ?>
-
-    <!-- =========== DESTAQUES POR CATEGORIA =========== -->
-    <?php if ($homeFeaturedCategory && $homeFeaturedProducts && $q === ''): ?>
-    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div class="flex items-center justify-between mb-8 sm:mb-10">
-            <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="sparkles" class="w-3 h-3"></i>
-                    Categoria destaque
-                </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">Destaques de <?= htmlspecialchars((string)$homeFeaturedCategory['nome'], ENT_QUOTES, 'UTF-8') ?></h2>
-                <p class="text-sm text-zinc-500 mt-1">Produtos selecionados desta categoria</p>
             </div>
-            <a href="<?= sfCategoryUrl($homeFeaturedCategory) ?>" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver categoria <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-5">
-            <?php foreach ($homeFeaturedProducts as $i => $p): ?>
-            <article class="product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/20 hover:shadow-2xl hover:shadow-greenx/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 5) ?>">
-                <a href="<?= sfProductUrl($p) ?>" class="block relative overflow-hidden">
-                    <div class="aspect-square overflow-hidden bg-blackx">
-                        <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
-                             alt="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy">
-                    </div>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <span class="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-bold uppercase tracking-wide bg-greenx text-white shadow-md">
-                        <?= htmlspecialchars((string)($p['categoria_nome'] ?? 'Geral'), ENT_QUOTES, 'UTF-8') ?>
-                    </span>
-                </a>
-                <button type="button" class="fav-btn absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center text-zinc-400 hover:text-red-400 hover:border-red-400/40 hover:bg-red-500/10 transition-all z-10" data-product-id="<?= (int)$p['id'] ?>" title="Favoritar">
-                    <i data-lucide="heart" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
-                </button>
-                <div class="p-1.5 sm:p-4 flex flex-col flex-1">
-                    <a href="<?= sfProductUrl($p) ?>" class="font-bold text-[10px] sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.4rem] leading-snug hover:text-greenx transition-colors block">
-                        <?= htmlspecialchars((string)($p['nome'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?>
-                    </a>
-                    <?php if (!empty($p['vendedor_nome'])): ?>
-                    <div class="hidden sm:flex items-center gap-1.5 text-[10px] text-zinc-500 mt-2">
-                        <i data-lucide="store" class="w-3 h-3 text-greenx/70 shrink-0"></i>
-                        <span class="truncate"><?= htmlspecialchars((string)$p['vendedor_nome'], ENT_QUOTES, 'UTF-8') ?></span>
-                    </div>
-                    <?php endif; ?>
-                    <div class="mt-auto pt-2">
-                        <span class="text-xs sm:text-base font-bold text-greenx whitespace-nowrap"><?= sfDisplayPrice($p) ?></span>
-                    </div>
-                    <?php
-                    $hasCategoryVariants = (($p['tipo'] ?? '') === 'dinamico' && !empty($p['variantes']));
-                    $categoryVarsJson = $hasCategoryVariants ? htmlspecialchars(is_string($p['variantes']) ? $p['variantes'] : json_encode($p['variantes']), ENT_QUOTES, 'UTF-8') : '';
-                    ?>
-                    <form method="post" class="mt-2 sm:mt-3"
-                        <?= $hasCategoryVariants ? 'data-variants="' . $categoryVarsJson . '" data-product-name="' . htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') . '" data-product-image="' . htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') . '"' : '' ?>>
-                        <input type="hidden" name="action" value="add_cart">
-                        <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
-                        <input type="hidden" name="qty" value="1">
-                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                            <i data-lucide="shopping-bag" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
-                            Comprar
-                        </button>
-                    </form>
-                </div>
-            </article>
-            <?php endforeach; ?>
-        </div>
-        <div class="mt-5 text-center sm:hidden">
-            <a href="<?= sfCategoryUrl($homeFeaturedCategory) ?>" class="text-xs text-greenx hover:underline font-semibold inline-flex items-center gap-1">Ver categoria <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
     </section>
-    <?php endif; ?>
 
     <?php if ($q === ''): ?>
     <!-- =========== HOME BANNER =========== -->
@@ -507,91 +561,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         </a>
     </section>
     <?php endif; ?>
-
-    <!-- =========== PRODUTOS EM DESTAQUE =========== -->
-    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div class="flex items-center justify-between mb-8 sm:mb-10">
-            <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="flame" class="w-3 h-3"></i>
-                    <?= $q !== '' ? 'Busca' : 'Destaques' ?>
-                </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">
-                    <?= $q !== '' ? 'Resultados para "' . htmlspecialchars($q, ENT_QUOTES, 'UTF-8') . '"' : 'Em destaque' ?>
-                </h2>
-                <p class="text-sm text-zinc-500 mt-1"><?= $q !== '' ? count($destaques) . ' produto(s) encontrado(s)' : 'Selecionados especialmente para você' ?></p>
-            </div>
-            <a href="<?= BASE_PATH ?>/categorias"
-               class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">
-                Ver tudo <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
-            </a>
-        </div>
-
-        <?php if ($destaques): ?>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-5">
-            <?php foreach ($destaques as $i => $p): ?>
-            <article class="product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/20 hover:shadow-2xl hover:shadow-greenx/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 8) ?>">
-                <a href="<?= sfProductUrl($p) ?>" class="block relative overflow-hidden">
-                    <div class="aspect-square overflow-hidden bg-blackx">
-                        <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
-                             alt="<?= htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy">
-                    </div>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <span class="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-bold uppercase tracking-wide bg-greenx text-white shadow-md">
-                        <?= htmlspecialchars((string)($p['categoria_nome'] ?? 'Geral'), ENT_QUOTES, 'UTF-8') ?>
-                    </span>
-                </a>
-                <button type="button" class="fav-btn absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center text-zinc-400 hover:text-red-400 hover:border-red-400/40 hover:bg-red-500/10 transition-all z-10" data-product-id="<?= (int)$p['id'] ?>" title="Favoritar">
-                    <i data-lucide="heart" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
-                </button>
-                <div class="p-1.5 sm:p-4 flex flex-col flex-1">
-                    <a href="<?= sfProductUrl($p) ?>"
-                       class="font-bold text-[10px] sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.4rem] leading-snug hover:text-greenx transition-colors block">
-                        <?= htmlspecialchars((string)($p['nome'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?>
-                    </a>
-                    <?php if (!empty($p['vendedor_nome'])): ?>
-                    <div class="hidden sm:flex items-center gap-1.5 text-[10px] text-zinc-500 mt-2">
-                        <i data-lucide="store" class="w-3 h-3 text-greenx/70 shrink-0"></i>
-                        <span class="truncate"><?= htmlspecialchars((string)$p['vendedor_nome'], ENT_QUOTES, 'UTF-8') ?></span>
-                    </div>
-                    <?php endif; ?>
-                    <div class="mt-auto pt-2">
-                        <span class="text-xs sm:text-base font-bold text-greenx whitespace-nowrap"><?= sfDisplayPrice($p) ?></span>
-                    </div>
-                    <?php
-                    $hasVariants = (($p['tipo'] ?? '') === 'dinamico' && !empty($p['variantes']));
-                    $varsJson = $hasVariants ? htmlspecialchars(is_string($p['variantes']) ? $p['variantes'] : json_encode($p['variantes']), ENT_QUOTES, 'UTF-8') : '';
-                    ?>
-                    <form method="post" class="mt-2 sm:mt-3"
-                        <?= $hasVariants ? 'data-variants="' . $varsJson . '" data-product-name="' . htmlspecialchars((string)($p['nome'] ?? ''), ENT_QUOTES, 'UTF-8') . '" data-product-image="' . htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') . '"' : '' ?>>
-                        <input type="hidden" name="action" value="add_cart">
-                        <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
-                        <input type="hidden" name="qty" value="1">
-                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                            <i data-lucide="shopping-bag" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
-                            Comprar
-                        </button>
-                    </form>
-                </div>
-            </article>
-            <?php endforeach; ?>
-        </div>
-        <?php else: ?>
-        <div class="rounded-3xl border border-white/[0.06] bg-blackx2 p-12 sm:p-16 text-center">
-            <div class="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
-                <i data-lucide="package-open" class="w-7 h-7 text-zinc-600"></i>
-            </div>
-            <h3 class="text-lg font-semibold text-zinc-300">Nenhum produto encontrado</h3>
-            <p class="text-sm text-zinc-500 mt-2 max-w-sm mx-auto">
-                <?= $q !== '' ? 'Não encontramos resultados para sua busca. Tente termos diferentes.' : 'Produtos serão exibidos aqui quando disponíveis.' ?>
-            </p>
-            <?php if ($q !== ''): ?>
-            <a href="<?= BASE_PATH ?>/" class="inline-flex mt-5 rounded-xl bg-white/[0.06] border border-white/[0.08] px-5 py-2.5 text-sm text-zinc-300 hover:text-white hover:border-white/[0.15] transition-all">Limpar busca</a>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-    </section>
 
     <?php if ($topVendedores && $q === ''): ?>
     <!-- =========== RANKING DE VENDEDORES =========== -->
