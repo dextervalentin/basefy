@@ -278,6 +278,49 @@ $avatarInitial = static function (string $name): string {
   .pd-rev-item { padding:.95rem; border-radius:.75rem; background:#0e0e10; border:1px solid #1f1f23; }
   .pd-rev-item + .pd-rev-item { margin-top:.7rem; }
 
+  /* ── Inline chat embed (Commit B) ── */
+  .pd-chat-embed { margin-top:.15rem; border:1px solid #1f1f23; border-radius:.85rem; background:#0e0e10; overflow:hidden; display:flex; flex-direction:column; }
+  .pd-chat-head { display:flex; align-items:center; gap:.6rem; padding:.65rem .8rem; border-bottom:1px solid #1f1f23; background: linear-gradient(180deg, rgba(136,0,228,.05), transparent); }
+  .pd-chat-head-name { font-size:.82rem; font-weight:700; color:#f4f4f5; line-height:1.2; }
+  .pd-chat-head-sub { font-size:.62rem; color:#a1a1aa; display:flex; align-items:center; gap:.35rem; margin-top:.1rem; }
+  .pd-online-dot { width:.45rem; height:.45rem; background:#22c55e; border-radius:9999px; box-shadow:0 0 0 3px rgba(34,197,94,.15); display:inline-block; }
+  .pd-msg-list { height:340px; overflow-y:auto; padding:.85rem; display:flex; flex-direction:column; gap:.35rem; scroll-behavior:smooth; background: radial-gradient(circle at 0% 0%, rgba(136,0,228,.03), transparent 40%); }
+  .pd-msg-list::-webkit-scrollbar { width:6px; }
+  .pd-msg-list::-webkit-scrollbar-thumb { background:#2a2a2f; border-radius:9999px; }
+  .pd-msg-loading, .pd-msg-empty { color:#71717a; font-size:.72rem; text-align:center; padding:1rem; display:flex; align-items:center; justify-content:center; gap:.4rem; flex:1; }
+  .pd-msg-day { font-size:.58rem; font-weight:700; color:#71717a; text-align:center; text-transform:uppercase; letter-spacing:.08em; margin:.6rem 0 .25rem; padding:.18rem .5rem; align-self:center; background:rgba(255,255,255,.03); border-radius:9999px; }
+  .pd-msg { max-width:80%; padding:.55rem .75rem; border-radius:.75rem; font-size:.78rem; line-height:1.42; word-wrap:break-word; word-break:break-word; }
+  .pd-msg-time { font-size:.55rem; color:#71717a; margin-top:.2rem; opacity:.85; }
+  .pd-msg.mine { background: linear-gradient(135deg, #8800E4, #c084fc); color:#fff; align-self:flex-end; border-bottom-right-radius:.22rem; box-shadow: 0 2px 8px rgba(136,0,228,.18); }
+  .pd-msg.mine .pd-msg-time { color: rgba(255,255,255,.78); text-align:right; }
+  .pd-msg.theirs { background:#18181b; color:#e4e4e7; align-self:flex-start; border:1px solid #27272a; border-bottom-left-radius:.22rem; }
+  .pd-msg.sys { background: linear-gradient(180deg, rgba(136,0,228,.08), rgba(136,0,228,.03)); border:1px dashed rgba(136,0,228,.32); color:#d4d4d8; align-self:stretch; max-width:100%; padding:.65rem .8rem; }
+  .pd-msg.sys .pd-sys-hd { font-size:.62rem; font-weight:700; color:#c084fc; text-transform:uppercase; letter-spacing:.06em; margin-bottom:.25rem; display:flex; align-items:center; gap:.35rem; }
+  .pd-msg.sys .pd-sys-body { font-size:.74rem; color:#d4d4d8; white-space:pre-wrap; }
+  .pd-msg.sys.t-dlvr { background: linear-gradient(180deg, rgba(34,197,94,.07), rgba(34,197,94,.02)); border-color: rgba(34,197,94,.32); }
+  .pd-msg.sys.t-dlvr .pd-sys-hd { color:#86efac; }
+  .pd-msg.sys.t-code { background: linear-gradient(180deg, rgba(250,204,21,.07), rgba(250,204,21,.02)); border-color: rgba(250,204,21,.32); }
+  .pd-msg.sys.t-code .pd-sys-hd { color:#facc15; }
+  .pd-sys-box { margin-top:.45rem; padding:.5rem .65rem; background:#0a0a0a; border:1px solid #27272a; border-radius:.5rem; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .pd-sys-box button { background: rgba(136,0,228,.15); border:1px solid rgba(136,0,228,.35); color:#c084fc; padding:.25rem .55rem; border-radius:.35rem; font-size:.62rem; font-weight:600; cursor:pointer; }
+  .pd-chat-form { display:flex; gap:.4rem; padding:.55rem; border-top:1px solid #1f1f23; background:#0a0a0a; align-items:flex-end; }
+  .pd-chat-input { flex:1; min-width:0; background:#18181b; border:1px solid #27272a; border-radius:.55rem; padding:.55rem .7rem; color:#f4f4f5; font-size:.78rem; resize:none; max-height:90px; min-height:2.3rem; transition: border-color .15s; font-family: inherit; }
+  .pd-chat-input:focus { outline:none; border-color:#8800E4; }
+  .pd-chat-send { width:2.4rem; height:2.4rem; border-radius:.55rem; background: linear-gradient(135deg, #8800E4, #c084fc); color:#fff; display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; transition: transform .15s, box-shadow .15s; flex-shrink:0; }
+  .pd-chat-send:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(136,0,228,.4); }
+  .pd-chat-send:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* Paste-to-chat 6-box (Commit B) */
+  .pd-paste-block { margin-top:.85rem; padding:.95rem; border-radius:.85rem; background: linear-gradient(180deg, rgba(136,0,228,.06), rgba(136,0,228,.02)); border:1px solid rgba(136,0,228,.25); }
+  .pd-paste-row { display:flex; gap:.4rem; justify-content:flex-start; flex-wrap:wrap; margin:.6rem 0; }
+  .pd-paste-input { width:2.6rem; height:3rem; border-radius:.55rem; background:#0e0e10; border:1px solid rgba(136,0,228,.35); color:#c084fc; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size:1.15rem; font-weight:700; text-align:center; text-transform:uppercase; transition: all .15s; padding:0; }
+  .pd-paste-input:focus { outline:none; border-color:#c084fc; box-shadow: 0 0 0 3px rgba(192,132,252,.18); }
+  .pd-paste-input.filled { background: rgba(136,0,228,.1); border-color: #c084fc; }
+  .pd-paste-actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.4rem; }
+  .pd-paste-msg { font-size:.7rem; margin-top:.55rem; min-height:1rem; }
+  .pd-paste-msg.ok { color:#86efac; }
+  .pd-paste-msg.err { color:#fca5a5; }
+
   /* Mobile ordering: timeline → produto → chat → ações → tx → ajuda → reviews */
   @media (max-width: 1023px) {
     .pd-left, .pd-right { display:contents; }
@@ -451,10 +494,10 @@ $avatarInitial = static function (string $name): string {
         </div>
       </div>
 
-      <!-- Chat da Transação (Commit A = shortcut; Commit B = inline polling) -->
+      <!-- Chat da Transação (inline embed + polling — Commit B) -->
       <div class="pd-card pd-card-chat">
         <h3 class="pd-card-title"><i data-lucide="message-circle" class="w-4 h-4"></i> Chat da Transação</h3>
-        <p class="pd-chat-sub">Comunique-se com segurança através da plataforma.</p>
+        <p class="pd-chat-sub">Comunique-se com segurança pela plataforma. Atualiza em tempo real.</p>
         <details class="pd-policy">
           <summary><i data-lucide="clipboard-list" class="w-4 h-4"></i> Políticas de confirmação e disputas</summary>
           <ul>
@@ -466,28 +509,53 @@ $avatarInitial = static function (string $name): string {
         </details>
 
         <?php if ($primaryChatConvId > 0): ?>
-        <button type="button" class="pd-btn-primary" onclick="if(window.openUserChat){window.openUserChat(<?= $primaryChatConvId ?>);}">
-          <i data-lucide="message-circle" class="w-4 h-4"></i> Abrir chat com <?= htmlspecialchars((string)($primaryItem['vendedor_nome'] ?? 'vendedor'), ENT_QUOTES, 'UTF-8') ?>
-        </button>
-        <p class="text-[11px] text-zinc-500 mt-2 text-center">As instruções, conteúdo entregue e código de entrega aparecem no chat.</p>
+        <div class="pd-chat-embed" id="pdChatEmbed" data-conv="<?= (int)$primaryChatConvId ?>" data-uid="<?= (int)$userId ?>">
+          <div class="pd-chat-head">
+            <div class="pd-avatar" style="width:2.2rem;height:2.2rem">
+              <?php if ($primaryVendorAvatarUrl): ?><img src="<?= htmlspecialchars($primaryVendorAvatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt=""><?php else: ?><?= $avatarInitial((string)($primaryItem['vendedor_nome'] ?? '')) ?><?php endif; ?>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="pd-chat-head-name"><?= htmlspecialchars((string)($primaryItem['vendedor_nome'] ?? 'Vendedor'), ENT_QUOTES, 'UTF-8') ?></p>
+              <p class="pd-chat-head-sub"><span class="pd-online-dot"></span> Conversa segura — monitorada</p>
+            </div>
+            <button type="button" class="pd-btn-ghost" onclick="if(window.openUserChat){window.openUserChat(<?= (int)$primaryChatConvId ?>);}" title="Expandir no painel">
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="pd-msg-list" id="pdMsgList">
+            <div class="pd-msg-loading"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Carregando mensagens...</div>
+          </div>
+          <form class="pd-chat-form" id="pdChatForm" onsubmit="return pdChatSend(event)">
+            <textarea id="pdChatInput" class="pd-chat-input" placeholder="Escreva sua mensagem..." rows="1" maxlength="2000"></textarea>
+            <button type="submit" class="pd-chat-send" id="pdChatSendBtn" title="Enviar">
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </form>
+        </div>
         <?php else: ?>
         <div class="p-3 rounded-lg" style="background:#0e0e10; border:1px solid #1f1f23; text-align:center; color:#71717a; font-size:.72rem;">
           O chat será disponibilizado após o pagamento ser confirmado.
         </div>
         <?php endif; ?>
 
-        <?php if ($deliveryCode): ?>
-        <div class="pd-code-block">
-          <p class="pd-code-title"><i data-lucide="key-round" class="w-4 h-4"></i> Código de entrega</p>
-          <p class="pd-code-text">Forneça este código ao vendedor no chat para liberar o pagamento.</p>
-          <div class="pd-code-boxes">
-            <?php for ($ci = 0; $ci < strlen($deliveryCode); $ci++): ?>
-            <span class="pd-code-box"><?= htmlspecialchars($deliveryCode[$ci], ENT_QUOTES, 'UTF-8') ?></span>
+        <?php if ($deliveryCode && $primaryChatConvId > 0): ?>
+        <div class="pd-paste-block" id="pdPasteBlock">
+          <p class="pd-code-title"><i data-lucide="key-round" class="w-4 h-4"></i> Código de entrega — envie pelo chat</p>
+          <p class="pd-code-text">Cole ou digite o código nas 6 caixas abaixo e envie ao vendedor. Use <b style="color:#c084fc">"Usar meu código"</b> para preencher automaticamente.</p>
+          <div class="pd-paste-row" id="pdPasteRow">
+            <?php for ($pi = 0; $pi < 6; $pi++): ?>
+            <input type="text" class="pd-paste-input" maxlength="1" data-pi="<?= $pi ?>" autocomplete="off" inputmode="text" aria-label="Dígito <?= $pi + 1 ?>">
             <?php endfor; ?>
-            <button type="button" class="pd-btn-ghost" style="margin-left:.5rem" onclick="(function(b){navigator.clipboard.writeText('<?= htmlspecialchars($deliveryCode, ENT_QUOTES, 'UTF-8') ?>');b.innerHTML='<i data-lucide=\'check\' class=\'w-3.5 h-3.5\'></i> Copiado';if(window.lucide)lucide.createIcons();setTimeout(function(){b.innerHTML='<i data-lucide=\'copy\' class=\'w-3.5 h-3.5\'></i> Copiar';if(window.lucide)lucide.createIcons();},2000);})(this)">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copiar
+          </div>
+          <div class="pd-paste-actions">
+            <button type="button" class="pd-btn-ghost" id="pdPasteFill" data-code="<?= htmlspecialchars($deliveryCode, ENT_QUOTES, 'UTF-8') ?>">
+              <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i> Usar meu código
+            </button>
+            <button type="button" class="pd-btn-primary" id="pdPasteSend" style="width:auto;padding:.55rem 1rem;font-size:.78rem;">
+              <i data-lucide="send" class="w-4 h-4"></i> Enviar pelo chat
             </button>
           </div>
+          <p class="pd-paste-msg" id="pdPasteMsg"></p>
         </div>
         <?php elseif (in_array($orderStatusLower, ['entregue','concluido'], true)): ?>
         <div class="pd-code-block" style="background: rgba(34,197,94,.05); border-color: rgba(34,197,94,.3);">
@@ -633,6 +701,243 @@ $avatarInitial = static function (string $name): string {
     </div>
   </div>
 </div>
+
+<?php if ($primaryChatConvId > 0): ?>
+<script>
+(function(){
+  'use strict';
+  var API = '<?= BASE_PATH ?>/api/chat.php';
+  var CONV = <?= (int)$primaryChatConvId ?>;
+  var UID  = <?= (int)$userId ?>;
+  var list = document.getElementById('pdMsgList');
+  var inp  = document.getElementById('pdChatInput');
+  var form = document.getElementById('pdChatForm');
+  var sndB = document.getElementById('pdChatSendBtn');
+  if (!list || !inp || !form) return;
+
+  var lastId = 0, lastDay = '', pollTmr = null, sending = false;
+
+  function esc(s){ var d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+  function fmtTime(ts){ if(!ts) return ''; var d=new Date(String(ts).replace(' ','T')); return isNaN(d)?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+  function fmtDay(ts){
+    if(!ts) return '';
+    var d = new Date(String(ts).replace(' ','T')); if(isNaN(d)) return '';
+    var today=new Date(); var y=new Date(); y.setDate(today.getDate()-1);
+    var sameDay=function(a,b){return a.toDateString()===b.toDateString();};
+    if(sameDay(d,today)) return 'Hoje';
+    if(sameDay(d,y)) return 'Ontem';
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  function refreshIcons(){ if(window.lucide && lucide.createIcons) lucide.createIcons(); }
+  function scrollEnd(){ list.scrollTop = list.scrollHeight; }
+
+  function buildSysMsg(type, body, time){
+    var meta = {
+      INSTRUCOES_VENDA: { cls:'t-inst', label:'Instruções de venda', icon:'clipboard-list' },
+      ENTREGA_AUTO:     { cls:'t-dlvr', label:'Produto entregue',    icon:'package-check' },
+      CODIGO_ENTREGA:   { cls:'t-code', label:'Código de entrega',   icon:'key-round' },
+      SISTEMA:          { cls:'t-sys',  label:'Sistema',             icon:'info' }
+    }[type] || { cls:'t-sys', label:'Sistema', icon:'info' };
+    var el = document.createElement('div');
+    el.className = 'pd-msg sys ' + meta.cls;
+    // Header
+    var hd = document.createElement('div');
+    hd.className = 'pd-sys-hd';
+    hd.innerHTML = '<i data-lucide="'+meta.icon+'" class="w-3.5 h-3.5"></i> '+esc(meta.label);
+    el.appendChild(hd);
+    // Body — render box if there's a ━━━ delimiter
+    var boxMatch = body.match(/━+\n([\s\S]*?)\n━+/);
+    if (boxMatch){
+      var before = body.substring(0, body.indexOf('━')).trim();
+      var boxTxt = boxMatch[1].trim();
+      var after  = body.substring(body.lastIndexOf('━')+1).trim();
+      if (before){ var bf=document.createElement('div'); bf.className='pd-sys-body'; bf.textContent=before; el.appendChild(bf); }
+      var bx = document.createElement('div'); bx.className='pd-sys-box';
+      bx.innerHTML = '<span>'+esc(boxTxt)+'</span><button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent.trim());this.textContent=\'Copiado\';setTimeout(()=>this.textContent=\'Copiar\',1800)">Copiar</button>';
+      el.appendChild(bx);
+      if (after){ var af=document.createElement('div'); af.className='pd-sys-body'; af.textContent=after; el.appendChild(af); }
+    } else {
+      var bd=document.createElement('div'); bd.className='pd-sys-body'; bd.textContent=body; el.appendChild(bd);
+    }
+    var tm=document.createElement('div'); tm.className='pd-msg-time'; tm.textContent=fmtTime(time); el.appendChild(tm);
+    return el;
+  }
+
+  function buildMsg(m){
+    var txt = m.message || '';
+    var sm = txt.match(/^\[(INSTRUCOES_VENDA|ENTREGA_AUTO|CODIGO_ENTREGA|SISTEMA)\]\n/);
+    if (sm) return buildSysMsg(sm[1], txt.substring(sm[0].length), m.criado_em);
+    var el = document.createElement('div');
+    el.className = 'pd-msg ' + (m.is_mine ? 'mine' : 'theirs');
+    var body = document.createElement('div'); body.textContent = txt; el.appendChild(body);
+    var tm = document.createElement('div'); tm.className='pd-msg-time'; tm.textContent = fmtTime(m.criado_em); el.appendChild(tm);
+    return el;
+  }
+
+  function appendMsg(m){
+    var day = fmtDay(m.criado_em);
+    if (day && day !== lastDay){
+      lastDay = day;
+      var de = document.createElement('div'); de.className='pd-msg-day'; de.textContent=day; list.appendChild(de);
+    }
+    list.appendChild(buildMsg(m));
+    if (m.id && m.id > lastId) lastId = m.id;
+  }
+
+  function loadMsgs(){
+    fetch(API + '?action=messages&conversation_id=' + CONV, { credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        list.innerHTML = '';
+        lastDay = ''; lastId = 0;
+        if (!j.ok || !j.messages || !j.messages.length){
+          list.innerHTML = '<div class="pd-msg-empty"><i data-lucide="message-circle" class="w-4 h-4"></i> Sem mensagens ainda. Diga oi!</div>';
+          refreshIcons();
+          return;
+        }
+        j.messages.forEach(appendMsg);
+        refreshIcons();
+        scrollEnd();
+      })
+      .catch(function(e){ console.error('pdChat load', e); });
+  }
+
+  function poll(){
+    fetch(API + '?action=poll&conversation_id=' + CONV + '&after_id=' + lastId, { credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (!j.ok || !j.messages || !j.messages.length) return;
+        var empty = list.querySelector('.pd-msg-empty'); if (empty) empty.remove();
+        j.messages.forEach(appendMsg);
+        refreshIcons();
+        scrollEnd();
+      })
+      .catch(function(){});
+  }
+
+  window.pdChatSend = function(e){
+    e && e.preventDefault();
+    if (sending) return false;
+    var txt = inp.value.trim(); if (!txt) return false;
+    sending = true; sndB.disabled = true;
+    var fd = new FormData();
+    fd.append('conversation_id', CONV);
+    fd.append('message', txt);
+    fetch(API + '?action=send', { method:'POST', body:fd, credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.ok && j.msg){
+          var empty = list.querySelector('.pd-msg-empty'); if (empty) empty.remove();
+          appendMsg(j.msg);
+          refreshIcons();
+          scrollEnd();
+          inp.value = '';
+          inp.style.height = 'auto';
+        }
+      })
+      .catch(function(){})
+      .finally(function(){ sending=false; sndB.disabled=false; inp.focus(); });
+    return false;
+  };
+
+  inp.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); window.pdChatSend(e); }
+  });
+  inp.addEventListener('input', function(){
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 90) + 'px';
+  });
+
+  // Initial load + polling
+  loadMsgs();
+  pollTmr = setInterval(poll, 3500);
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden){ if (pollTmr){ clearInterval(pollTmr); pollTmr=null; } }
+    else if (!pollTmr){ poll(); pollTmr = setInterval(poll, 3500); }
+  });
+
+  // ── Paste-to-chat 6 boxes ──
+  var pasteRow  = document.getElementById('pdPasteRow');
+  var pasteMsg  = document.getElementById('pdPasteMsg');
+  var pasteSend = document.getElementById('pdPasteSend');
+  var pasteFill = document.getElementById('pdPasteFill');
+  if (pasteRow){
+    var boxes = Array.prototype.slice.call(pasteRow.querySelectorAll('.pd-paste-input'));
+    function setBoxes(code){
+      var s = String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+      boxes.forEach(function(b,i){
+        b.value = s[i] || '';
+        b.classList.toggle('filled', !!s[i]);
+      });
+      return s;
+    }
+    function readCode(){
+      return boxes.map(function(b){ return (b.value||'').toUpperCase(); }).join('');
+    }
+    boxes.forEach(function(b, idx){
+      b.addEventListener('input', function(){
+        var v = (b.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+        b.value = v.slice(0,1);
+        b.classList.toggle('filled', !!b.value);
+        if (b.value && idx < boxes.length-1) boxes[idx+1].focus();
+      });
+      b.addEventListener('keydown', function(e){
+        if (e.key === 'Backspace' && !b.value && idx > 0){ boxes[idx-1].focus(); }
+        if (e.key === 'ArrowLeft' && idx > 0) boxes[idx-1].focus();
+        if (e.key === 'ArrowRight' && idx < boxes.length-1) boxes[idx+1].focus();
+      });
+      b.addEventListener('paste', function(e){
+        e.preventDefault();
+        var txt = (e.clipboardData || window.clipboardData).getData('text') || '';
+        setBoxes(txt);
+        var s = readCode();
+        if (s.length >= 6) boxes[5].focus(); else boxes[Math.min(s.length, 5)].focus();
+      });
+    });
+    if (pasteFill){
+      pasteFill.addEventListener('click', function(){
+        var code = pasteFill.getAttribute('data-code') || '';
+        setBoxes(code);
+        boxes[5].focus();
+      });
+    }
+    if (pasteSend){
+      pasteSend.addEventListener('click', function(){
+        var code = readCode();
+        if (code.length < 6){
+          pasteMsg.className = 'pd-paste-msg err';
+          pasteMsg.textContent = 'Preencha as 6 caixas com o código.';
+          return;
+        }
+        pasteSend.disabled = true;
+        var fd = new FormData();
+        fd.append('conversation_id', CONV);
+        fd.append('message', 'Código de entrega: ' + code);
+        fetch(API + '?action=send', { method:'POST', body:fd, credentials:'same-origin' })
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            if (j.ok && j.msg){
+              var empty = list.querySelector('.pd-msg-empty'); if (empty) empty.remove();
+              appendMsg(j.msg); refreshIcons(); scrollEnd();
+              pasteMsg.className = 'pd-paste-msg ok';
+              pasteMsg.textContent = 'Código enviado no chat.';
+              setBoxes('');
+            } else {
+              pasteMsg.className = 'pd-paste-msg err';
+              pasteMsg.textContent = (j && j.msg) ? j.msg : 'Erro ao enviar.';
+            }
+          })
+          .catch(function(){
+            pasteMsg.className = 'pd-paste-msg err';
+            pasteMsg.textContent = 'Erro de rede ao enviar.';
+          })
+          .finally(function(){ pasteSend.disabled = false; });
+      });
+    }
+  }
+})();
+</script>
+<?php endif; ?>
 
 <?php
 include $ROOT . '/views/partials/user_layout_end.php';
