@@ -563,19 +563,18 @@ $avatarInitial = static function (string $name): string {
         <?php endif; ?>
 
         <?php if ($deliveryCode && $primaryChatConvId > 0): ?>
+        <?php $deliveryCodeClean = substr(preg_replace('/[^A-Z0-9]/', '', strtoupper((string)$deliveryCode)), 0, 6); ?>
         <div class="pd-paste-block" id="pdPasteBlock">
           <p class="pd-code-title"><i data-lucide="key-round" class="w-4 h-4"></i> Código de entrega — envie pelo chat</p>
-          <p class="pd-code-text">Cole ou digite o código nas 6 caixas abaixo e envie ao vendedor. Use <b style="color:#c084fc">"Usar meu código"</b> para preencher automaticamente.</p>
+          <p class="pd-code-text">O código já está preenchido nas 6 caixas abaixo. Clique em enviar para mandar ao vendedor pelo chat.</p>
           <div class="pd-paste-row" id="pdPasteRow">
             <?php for ($pi = 0; $pi < 6; $pi++): ?>
-            <input type="text" class="pd-paste-input" maxlength="1" data-pi="<?= $pi ?>" autocomplete="off" inputmode="text" aria-label="Dígito <?= $pi + 1 ?>">
+            <?php $digit = $deliveryCodeClean[$pi] ?? ''; ?>
+            <input type="text" class="pd-paste-input <?= $digit !== '' ? 'filled' : '' ?>" maxlength="1" data-pi="<?= $pi ?>" autocomplete="off" inputmode="text" aria-label="Dígito <?= $pi + 1 ?>" value="<?= htmlspecialchars($digit, ENT_QUOTES, 'UTF-8') ?>" readonly>
             <?php endfor; ?>
           </div>
           <div class="pd-paste-actions">
-            <button type="button" class="pd-btn-ghost" id="pdPasteFill" data-code="<?= htmlspecialchars($deliveryCode, ENT_QUOTES, 'UTF-8') ?>">
-              <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i> Usar meu código
-            </button>
-            <button type="button" class="pd-btn-primary" id="pdPasteSend" style="width:auto;padding:.55rem 1rem;font-size:.78rem;">
+            <button type="button" class="pd-btn-primary" id="pdPasteSend" data-code="<?= htmlspecialchars($deliveryCodeClean, ENT_QUOTES, 'UTF-8') ?>" style="width:auto;padding:.55rem 1rem;font-size:.78rem;">
               <i data-lucide="send" class="w-4 h-4"></i> Enviar pelo chat
             </button>
           </div>
@@ -890,6 +889,7 @@ $avatarInitial = static function (string $name): string {
   var pasteFill = document.getElementById('pdPasteFill');
   if (pasteRow){
     var boxes = Array.prototype.slice.call(pasteRow.querySelectorAll('.pd-paste-input'));
+    var pastePreset = (pasteSend && pasteSend.getAttribute('data-code')) || (pasteFill && pasteFill.getAttribute('data-code')) || '';
     function setBoxes(code){
       var s = String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
       boxes.forEach(function(b,i){
@@ -921,6 +921,7 @@ $avatarInitial = static function (string $name): string {
         if (s.length >= 6) boxes[5].focus(); else boxes[Math.min(s.length, 5)].focus();
       });
     });
+    if (pastePreset) setBoxes(pastePreset);
     if (pasteFill){
       pasteFill.addEventListener('click', function(){
         var code = pasteFill.getAttribute('data-code') || '';
@@ -931,6 +932,7 @@ $avatarInitial = static function (string $name): string {
     if (pasteSend){
       pasteSend.addEventListener('click', function(){
         var code = readCode();
+        if (code.length < 6 && pastePreset) code = setBoxes(pastePreset);
         if (code.length < 6){
           pasteMsg.className = 'pd-paste-msg err';
           pasteMsg.textContent = 'Preencha as 6 caixas com o código.';
@@ -939,7 +941,7 @@ $avatarInitial = static function (string $name): string {
         pasteSend.disabled = true;
         var fd = new FormData();
         fd.append('conversation_id', CONV);
-        fd.append('message', 'Código de entrega: ' + code);
+        fd.append('message', '🔑 Código de entrega: ' + code);
         fetch(API + '?action=send', { method:'POST', body:fd, credentials:'same-origin' })
           .then(function(r){ return r.json(); })
           .then(function(j){
@@ -948,7 +950,6 @@ $avatarInitial = static function (string $name): string {
               appendMsg(j.msg); refreshIcons(); scrollEnd();
               pasteMsg.className = 'pd-paste-msg ok';
               pasteMsg.textContent = 'Código enviado no chat.';
-              setBoxes('');
             } else {
               pasteMsg.className = 'pd-paste-msg err';
               pasteMsg.textContent = (j && j.msg) ? j.msg : 'Erro ao enviar.';

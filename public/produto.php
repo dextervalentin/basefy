@@ -88,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         $feedback = 'Selecione uma variante antes de comprar.';
     } else {
         sfCartAdd((int)$produto['id'], $qty, $varianteSelected !== '' ? $varianteSelected : null);
-        $feedback = 'Produto adicionado ao carrinho!';
+        header('Location: ' . BASE_PATH . '/carrinho');
+        exit;
     }
 }
 

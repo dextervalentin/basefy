@@ -520,9 +520,15 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
             <!-- ============ SIDEBAR (desktop fixed / mobile = popup overlay) ============ -->
             <aside id="catalogSidebar" class="catalog-sidebar rounded-2xl border border-white/[0.06] bg-blackx2/70 backdrop-blur-sm p-2.5 self-start lg:sticky lg:top-24">
-                <div class="flex items-center justify-between px-1.5 mb-2">
-                    <div class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-400">
-                        <i data-lucide="sliders-horizontal" class="w-3 h-3 text-greenx"></i> Categorias
+                <div class="flex items-center justify-between px-1.5 mb-3">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-9 h-9 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center shrink-0">
+                            <i data-lucide="layout-grid" class="w-4 h-4 text-greenx"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold text-white leading-tight">Categorias</p>
+                            <p class="text-[11px] text-zinc-500 leading-tight">Filtre seus ativos</p>
+                        </div>
                     </div>
                     <button type="button" class="lg:hidden text-zinc-500 hover:text-white" onclick="catalogClosePopup()" aria-label="Fechar">
                         <i data-lucide="x" class="w-4 h-4"></i>
@@ -606,6 +612,22 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     </button>
                 </div>
 
+                <div class="catalog-mobile-filter lg:hidden flex items-center gap-2 mb-4">
+                    <label class="relative flex-1 min-w-0">
+                        <i data-lucide="filter" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-300 pointer-events-none"></i>
+                        <select id="catalogMobileSort" class="w-full h-11 rounded-xl bg-blackx2 border border-white/[0.08] pl-10 pr-9 text-[13px] font-medium text-zinc-200 outline-none focus:border-greenx/45 appearance-none">
+                            <option value="recentes">Mais Recentes</option>
+                            <option value="vendidos">Mais Vendidos</option>
+                            <option value="menor">Menor Preço</option>
+                            <option value="maior">Maior Preço</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"></i>
+                    </label>
+                    <button type="button" onclick="catalogOpenPopup()" class="w-11 h-11 rounded-xl bg-blackx2 border border-white/[0.08] text-zinc-300 flex items-center justify-center hover:border-greenx/40 hover:text-white transition-all" aria-label="Abrir categorias">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
                 <!-- Sections container -->
                 <div id="catalogSections" class="flex flex-col gap-6">
                     <?php foreach ($catalogSections as $sec):
@@ -628,7 +650,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             <?php endif; ?>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" data-products-grid>
                             <?php foreach ($secProducts as $p):
                                 $st = $catalogStockOf($p);
                                 $pStock = (int)$st['qty'];
@@ -637,6 +659,18 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                                 $pVendor = (string)($p['vendedor_nome'] ?? '');
                                 $pUrl = sfProductUrl($p);
                                 $pImg = sfImageUrl((string)($p['imagem'] ?? ''));
+                                $pSortPrice = (float)($p['preco'] ?? 0);
+                                $pVarsRaw = $p['variantes'] ?? null;
+                                $pVars = is_string($pVarsRaw) ? (json_decode($pVarsRaw, true) ?: []) : (is_array($pVarsRaw) ? $pVarsRaw : []);
+                                if ($pSortPrice <= 0 && $pVars) {
+                                    $varPrices = [];
+                                    foreach ($pVars as $pv) {
+                                        if (is_array($pv) && (float)($pv['preco'] ?? 0) > 0) $varPrices[] = (float)$pv['preco'];
+                                    }
+                                    if ($varPrices) $pSortPrice = min($varPrices);
+                                }
+                                $pCreatedSort = strtotime((string)($p['criado_em'] ?? $p['created_at'] ?? '')) ?: (int)($p['id'] ?? 0);
+                                $pSalesSort = (int)($p['vendas_total'] ?? $p['vendas'] ?? $p['sales'] ?? 0);
                                 // stock badge — last few / muted
                                 if ($pStock <= 0 && !$pAuto) {
                                     $stockTxt = 'Sem estoque'; $stockCls = 'text-red-400/80';
@@ -652,6 +686,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                                class="catalog-product group flex items-center gap-2.5 bg-blackx2 border border-white/[0.06] rounded-xl p-2 hover:border-greenx/40 hover:shadow-[0_8px_24px_rgba(136,0,228,0.08)] transition-all duration-200"
                                data-name="<?= htmlspecialchars(mb_strtolower($pName), ENT_QUOTES, 'UTF-8') ?>"
                                data-vendor="<?= htmlspecialchars(mb_strtolower($pVendor), ENT_QUOTES, 'UTF-8') ?>"
+                               data-price="<?= htmlspecialchars((string)$pSortPrice, ENT_QUOTES, 'UTF-8') ?>"
+                               data-created="<?= htmlspecialchars((string)$pCreatedSort, ENT_QUOTES, 'UTF-8') ?>"
+                               data-sales="<?= htmlspecialchars((string)$pSalesSort, ENT_QUOTES, 'UTF-8') ?>"
                                title="<?= htmlspecialchars($pName, ENT_QUOTES, 'UTF-8') ?>">
                                 <div class="relative shrink-0 w-12 h-12 rounded-md overflow-hidden bg-blackx">
                                     <img src="<?= htmlspecialchars($pImg, ENT_QUOTES, 'UTF-8') ?>" alt=""
@@ -704,11 +741,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
         </div>
 
-        <!-- Floating button (mobile) — opens sidebar popup -->
-        <button type="button" id="catalogSidebarToggle" onclick="catalogOpenPopup()" class="lg:hidden fixed left-0 top-1/2 -translate-y-1/2 z-40 w-9 h-16 rounded-r-xl bg-greenx/90 backdrop-blur text-white shadow-lg shadow-greenx/40 flex items-center justify-center border border-l-0 border-greenx/60" aria-label="Abrir categorias">
-            <i data-lucide="chevrons-right" class="w-5 h-5"></i>
-        </button>
-
         <!-- Backdrop for mobile popup -->
         <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden" onclick="catalogClosePopup()"></div>
     </section>
@@ -716,8 +748,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     <style>
       /* Sidebar popup animation (mobile only) */
       @media (max-width: 1023px) {
-        .catalog-sidebar { position: fixed; left: 12px; top: 50%; transform: translate(-110%, -50%) scale(.92); opacity: 0; width: min(260px, 78vw); max-height: 80vh; z-index: 50; transition: transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .22s ease; box-shadow: 0 24px 60px -12px rgba(0,0,0,.6), 0 0 0 1px rgba(136,0,228,.2); pointer-events: none; }
-        .catalog-sidebar.is-open { transform: translate(0, -50%) scale(1); opacity: 1; pointer-events: auto; }
+                .catalog-sidebar { position: fixed; inset: 0; transform: translateX(105%); opacity: 1; width: 100vw; max-height: 100vh; z-index: 50; border-radius: 0; padding: 1rem; overflow-y: auto; transition: transform .28s cubic-bezier(.2,.85,.25,1); box-shadow: -24px 0 60px -12px rgba(0,0,0,.65), 0 0 0 1px rgba(136,0,228,.24); pointer-events: none; }
+                .catalog-sidebar.is-open { transform: translateX(0); pointer-events: auto; }
+                .catalog-sidebar .catalog-cat-list { max-height: calc(100vh - 92px); }
         #catalogSidebarBackdrop.is-open { display: block; animation: catBackdropIn .25s ease; }
         @keyframes catBackdropIn { from { opacity: 0; } to { opacity: 1; } }
       }
@@ -730,10 +763,32 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
       'use strict';
       var input = document.getElementById('catalogSearch');
       var clearBtn = document.getElementById('catalogSearchClear');
+            var sortSelect = document.getElementById('catalogMobileSort');
       var noRes  = document.getElementById('catalogNoResults');
       var sidebar = document.getElementById('catalogSidebar');
       var backdrop = document.getElementById('catalogSidebarBackdrop');
       if (!input) return;
+
+            function sortCatalog(){
+                if (!sortSelect) return;
+                var mode = sortSelect.value || 'recentes';
+                document.querySelectorAll('[data-products-grid]').forEach(function(grid){
+                    var cards = Array.prototype.slice.call(grid.querySelectorAll('.catalog-product'));
+                    cards.sort(function(a,b){
+                        var ap = parseFloat(a.getAttribute('data-price') || '0');
+                        var bp = parseFloat(b.getAttribute('data-price') || '0');
+                        var ac = parseFloat(a.getAttribute('data-created') || '0');
+                        var bc = parseFloat(b.getAttribute('data-created') || '0');
+                        var as = parseFloat(a.getAttribute('data-sales') || '0');
+                        var bs = parseFloat(b.getAttribute('data-sales') || '0');
+                        if (mode === 'menor') return ap - bp;
+                        if (mode === 'maior') return bp - ap;
+                        if (mode === 'vendidos') return bs - as;
+                        return bc - ac;
+                    });
+                    cards.forEach(function(card){ grid.appendChild(card); });
+                });
+            }
 
       function applyFilter(){
         var q = (input.value || '').toLowerCase().trim();
@@ -758,6 +813,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
       input.addEventListener('input', applyFilter);
       clearBtn.addEventListener('click', function(){ input.value = ''; applyFilter(); input.focus(); });
+    if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
 
       // Mobile sidebar popup (no scroll-lock — page continues to scroll behind it)
       window.catalogOpenPopup = function(){
@@ -788,55 +844,19 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     <?php endif; ?>
 
     <?php if ($q === ''): ?>
-    <!-- =========== PROMO BANNER CARDS (Commit D2) =========== -->
+    <!-- =========== COMUNIDADE BASEFY =========== -->
     <section class="max-w-[1440px] mx-auto px-4 sm:px-6 pb-6 sm:pb-8">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
-            <!-- Card 1: Créditos Lovable -->
-            <a href="#" class="promo-banner group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-5 sm:p-6 flex items-center gap-4 hover:border-pink-400/30 transition-all duration-300 hover:-translate-y-0.5">
-                <div class="absolute -right-10 -top-10 w-44 h-44 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-pink-500/20 to-orange-400/20 border border-pink-400/30 flex items-center justify-center">
-                    <i data-lucide="heart-handshake" class="w-7 h-7 text-pink-300"></i>
-                </div>
-                <div class="relative min-w-0 flex-1">
-                    <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Créditos <span class="text-pink-300">Lovable</span> com <span class="text-amber-300">70% OFF</span></h3>
-                    <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Potencialize seu desenvolvimento com créditos promocionais exclusivos para a plataforma Lovable.</p>
-                    <span class="inline-flex items-center gap-1.5 mt-3 text-[12px] font-semibold text-white bg-white/[0.06] border border-white/[0.08] rounded-full px-3 py-1.5 group-hover:border-pink-400/40 group-hover:bg-pink-400/[0.08] transition-all">
-                        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i> Confira agora
-                    </span>
-                </div>
-            </a>
-            <!-- Card 2: G2 Google Ads -->
-            <a href="#" class="promo-banner group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-5 sm:p-6 flex items-center gap-4 hover:border-blue-400/30 transition-all duration-300 hover:-translate-y-0.5">
-                <div class="absolute -right-10 -top-10 w-44 h-44 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-400/20 border border-blue-400/30 flex items-center justify-center">
-                    <i data-lucide="chrome" class="w-7 h-7 text-blue-300"></i>
-                </div>
-                <div class="relative min-w-0 flex-1">
-                    <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Liberação <span class="text-blue-300">G2 Google Ads</span></h3>
-                    <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Remova travas financeiras e escale seus investimentos com tecnologia vinculada ao Banco Central.</p>
-                    <span class="inline-flex items-center gap-1.5 mt-3 text-[12px] font-semibold text-white bg-white/[0.06] border border-white/[0.08] rounded-full px-3 py-1.5 group-hover:border-blue-400/40 group-hover:bg-blue-400/[0.08] transition-all">
-                        <i data-lucide="zap" class="w-3.5 h-3.5"></i> Começar Agora
-                    </span>
-                </div>
-            </a>
-        </div>
-        <!-- Card 3: WhatsApp full-width -->
         <a href="https://chat.whatsapp.com/J71bKVW5CG4Ht1tH51diah?mode=gi_t" target="_blank" rel="noopener" class="promo-banner group relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.08] via-blackx2 to-blackx2 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 hover:border-emerald-400/50 transition-all duration-300 hover:-translate-y-0.5">
             <div class="absolute -left-20 top-1/2 -translate-y-1/2 w-72 h-72 bg-emerald-500/[0.08] rounded-full blur-3xl pointer-events-none"></div>
             <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
                 <i data-lucide="message-circle" class="w-7 h-7 text-emerald-300"></i>
             </div>
             <div class="relative min-w-0 flex-1">
-                <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Grupos <span class="text-emerald-300">WhatsApp</span> Profissional</h3>
-                <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Descubra e participe dos melhores grupos segmentados. Encontre o seu nicho e expanda sua rede de contatos.</p>
-                <div class="hidden sm:flex items-center gap-4 mt-2 text-[11px] text-zinc-500">
-                    <span class="flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-emerald-300/80"></i> Grupos ativos</span>
-                    <span class="flex items-center gap-1"><i data-lucide="search" class="w-3 h-3 text-emerald-300/80"></i> Busca por nicho</span>
-                    <span class="flex items-center gap-1"><i data-lucide="badge-check" class="w-3 h-3 text-emerald-300/80"></i> Grupos verificados</span>
-                </div>
+                <h3 class="text-lg sm:text-xl font-bold text-white leading-tight">Comunidade <span class="text-emerald-300">Basefy</span></h3>
+                <p class="text-[13px] sm:text-sm text-zinc-400 mt-1 leading-relaxed max-w-3xl">Entre para o grupo oficial da Basefy e conecte-se com pessoas do mercado de tráfego, performance e ativos digitais.</p>
             </div>
             <span class="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white font-bold px-5 py-2.5 text-[13px] shadow-lg shadow-emerald-500/30 transition-all">
-                Explorar grupos <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                Acessar grupo <i data-lucide="arrow-right" class="w-4 h-4"></i>
             </span>
         </a>
     </section>
@@ -962,13 +982,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     Premium
                 </div>
                 <h2 class="text-2xl sm:text-3xl font-bold">Produtos Premium</h2>
-                <p class="text-sm text-zinc-500 mt-1"><?= $premiumVendorId > 0 ? 'Curadoria exclusiva &middot; ' . htmlspecialchars($premiumVendorName, ENT_QUOTES, 'UTF-8') : 'Curadoria exclusiva' ?></p>
             </div>
             <a href="<?= BASE_PATH ?>/?premium=1#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-300 hover:underline font-semibold">Ver todos <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
-        <div class="flex gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory sm:gap-5">
+        <div class="premium-slider" data-premium-slider>
+          <div class="premium-track" data-premium-track>
             <?php foreach ($populares as $i => $p): ?>
-                    <article class="product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-amber-400/30 hover:shadow-2xl hover:shadow-amber-400/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> shrink-0 w-[170px] sm:w-[200px] snap-start <?= $i === 0 ? 'ml-4 sm:ml-0' : '' ?><?= $i === count($populares) - 1 ? ' mr-4 sm:mr-0' : '' ?>">
+                    <article class="premium-card product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-amber-400/30 hover:shadow-2xl hover:shadow-amber-400/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> snap-start">
                 <a href="<?= sfProductUrl($p) ?>" class="block relative overflow-hidden">
                     <div class="aspect-square overflow-hidden bg-blackx">
                         <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
@@ -1014,7 +1034,80 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 </div>
             </article>
             <?php endforeach; ?>
+                    </div>
+                    <div class="premium-dots" data-premium-dots aria-label="Navegação dos produtos premium"></div>
         </div>
+                <style>
+                    .premium-track { display:flex; gap:1rem; overflow-x:auto; scroll-snap-type:x mandatory; scroll-behavior:smooth; cursor:grab; user-select:none; padding:.15rem .05rem .9rem; scrollbar-width:none; touch-action:pan-y; }
+                    .premium-track::-webkit-scrollbar { display:none; }
+                    .premium-track.is-dragging { cursor:grabbing; scroll-behavior:auto; }
+                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; }
+                    .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:.75rem; }
+                    .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; transition:width .2s ease, background .2s ease; }
+                    .premium-dot.is-active { width:1.35rem; background:#f59e0b; }
+                    @media (max-width:1023px){ .premium-card { flex-basis:calc((100% - 2rem) / 3); } }
+                    @media (max-width:639px){ .premium-track{ gap:.75rem; } .premium-card { flex-basis:calc((100% - .75rem) / 2); } }
+                </style>
+                <script>
+                (function(){
+                    var root = document.querySelector('[data-premium-slider]');
+                    if (!root) return;
+                    var track = root.querySelector('[data-premium-track]');
+                    var dots = root.querySelector('[data-premium-dots]');
+                    var cards = Array.prototype.slice.call(track.querySelectorAll('.premium-card'));
+                    if (!track || !dots || !cards.length) return;
+
+                    function perPage(){ return window.innerWidth >= 1024 ? 5 : (window.innerWidth >= 640 ? 3 : 2); }
+                    function pageCount(){ return Math.max(1, Math.ceil(cards.length / perPage())); }
+                    function updateDots(){
+                        var pp = perPage();
+                        var gap = parseFloat(getComputedStyle(track).gap || '0') || 0;
+                        var step = ((cards[0] && cards[0].getBoundingClientRect().width) || 1) + gap;
+                        var page = Math.round(track.scrollLeft / Math.max(1, step * pp));
+                        dots.querySelectorAll('.premium-dot').forEach(function(dot, idx){ dot.classList.toggle('is-active', idx === page); });
+                    }
+                    function buildDots(){
+                        dots.innerHTML = '';
+                        var total = pageCount();
+                        dots.style.display = total > 1 ? 'flex' : 'none';
+                        for (var i = 0; i < total; i++) {
+                            (function(page){
+                                var dot = document.createElement('button');
+                                dot.type = 'button';
+                                dot.className = 'premium-dot';
+                                dot.setAttribute('aria-label', 'Ir para página ' + (page + 1));
+                                dot.addEventListener('click', function(){
+                                    var target = cards[Math.min(cards.length - 1, page * perPage())];
+                                    if (target) track.scrollTo({ left: target.offsetLeft - track.offsetLeft, behavior:'smooth' });
+                                });
+                                dots.appendChild(dot);
+                            })(i);
+                        }
+                        updateDots();
+                    }
+
+                    var dragging = false, startX = 0, startScroll = 0, moved = false;
+                    track.addEventListener('pointerdown', function(e){
+                        if (e.button !== 0) return;
+                        dragging = true; moved = false; startX = e.clientX; startScroll = track.scrollLeft;
+                        track.classList.add('is-dragging');
+                        track.setPointerCapture(e.pointerId);
+                    });
+                    track.addEventListener('pointermove', function(e){
+                        if (!dragging) return;
+                        var dx = e.clientX - startX;
+                        if (Math.abs(dx) > 4) moved = true;
+                        track.scrollLeft = startScroll - dx;
+                    });
+                    function stopDrag(){ dragging = false; track.classList.remove('is-dragging'); }
+                    track.addEventListener('pointerup', stopDrag);
+                    track.addEventListener('pointercancel', stopDrag);
+                    track.addEventListener('click', function(e){ if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
+                    track.addEventListener('scroll', function(){ window.requestAnimationFrame(updateDots); }, { passive:true });
+                    window.addEventListener('resize', buildDots);
+                    buildDots();
+                })();
+                </script>
     </section>
     <?php endif; ?>
 
