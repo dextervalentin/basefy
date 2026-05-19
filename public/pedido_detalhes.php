@@ -257,8 +257,17 @@ $avatarInitial = static function (string $name): string {
   .pd-policy ul li { margin-bottom:.3rem; list-style: disc; }
 
   /* Item list compact */
-  .pd-item-row { display:flex; gap:.85rem; padding:.7rem; border-radius:.7rem; background:#0e0e10; border:1px solid #1f1f23; align-items:center; }
+  .pd-item-row { padding:.7rem; border-radius:.7rem; background:#0e0e10; border:1px solid #1f1f23; }
   .pd-item-row + .pd-item-row { margin-top:.5rem; }
+  .pd-item-head { display:flex; gap:.85rem; align-items:center; }
+  .pd-item-head > a { flex-shrink:0; }
+  .pd-item-body { flex:1; min-width:0; }
+  .pd-item-sub-m { display:none; }
+  .pd-delivery-full { margin-top:.65rem; padding:.6rem .75rem; border-radius:.65rem; background:rgba(34,197,94,.05); border:1px solid rgba(34,197,94,.25); }
+  .pd-delivery-full .pd-delivery-head { display:flex; align-items:center; gap:.4rem; margin-bottom:.35rem; }
+  .pd-delivery-full .pd-delivery-head .pd-delivery-time { margin-left:auto; font-size:10px; color:#71717a; }
+  .pd-delivery-content { font-size:.78rem; color:#e4e4e7; word-break:break-all; white-space:pre-wrap; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .pd-delivery-content a { color:#86efac; }
   .pd-item-thumb { width:3rem; height:3rem; border-radius:.55rem; object-fit:cover; border:1px solid #1f1f23; background:#0a0a0a; flex-shrink:0; }
   .pd-item-name { font-size:.83rem; font-weight:600; color:#f4f4f5; line-height:1.3; }
   .pd-item-meta { font-size:.68rem; color:#71717a; margin-top:.15rem; }
@@ -342,6 +351,11 @@ $avatarInitial = static function (string $name): string {
     .pd-msg-list { height: 280px; }
     .pd-msg { max-width: 88%; }
     .pd-sys-box { font-size: .68rem; word-break: break-all; }
+    .pd-item-head { align-items: flex-start; }
+    .pd-item-head > .pd-item-sub { display: none; }
+    .pd-item-sub-m { display:block; margin-top:.25rem; font-size:.95rem; color:#c084fc; font-weight:700; }
+    .pd-delivery-full { padding:.55rem .65rem; }
+    .pd-delivery-content { font-size:.72rem; }
   }
 </style>
 
@@ -588,30 +602,33 @@ $avatarInitial = static function (string $name): string {
           $orderIsPaid = in_array($orderStatusLower, ['pago','entregue','concluido'], true);
         ?>
         <div class="pd-item-row">
-          <a href="<?= sfProductUrl(['id'=>(int)$it['product_id'],'slug'=>(string)($it['produto_slug']??'')]) ?>" class="flex-shrink-0">
-            <img src="<?= htmlspecialchars($imgUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" class="pd-item-thumb">
-          </a>
-          <div class="flex-1 min-w-0">
-            <p class="pd-item-name truncate"><?= $prodNome ?></p>
-            <p class="pd-item-meta">Vendedor: <?= $vendorNome ?> · Qtd <?= (int)$it['quantidade'] ?> · Unit R$ <?= number_format((float)$it['preco_unit'], 2, ',', '.') ?></p>
-            <?php if ($deliveryContent !== '' && $orderIsPaid):
-              $isUrl = (bool)preg_match('#^https?://#i', $deliveryContent);
-            ?>
-            <div class="mt-2 p-2 rounded-lg" style="background:rgba(34,197,94,.05); border:1px solid rgba(34,197,94,.25);">
-              <div class="flex items-center gap-1.5 mb-1">
-                <i data-lucide="download" class="w-3.5 h-3.5" style="color:#86efac"></i>
-                <span class="text-[11px] font-bold" style="color:#86efac">Entrega digital recebida</span>
-                <?php if ($deliveredAt !== ''): ?><span class="text-[10px] text-zinc-500 ml-auto"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($deliveredAt)), ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
-              </div>
-              <?php if ($isUrl): ?>
-              <a href="<?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener" class="text-xs text-greenx hover:text-white break-all"><?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?></a>
-              <?php else: ?>
-              <p class="text-xs text-zinc-300 break-all whitespace-pre-wrap"><?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?></p>
-              <?php endif; ?>
+          <div class="pd-item-head">
+            <a href="<?= sfProductUrl(['id'=>(int)$it['product_id'],'slug'=>(string)($it['produto_slug']??'')]) ?>" class="flex-shrink-0">
+              <img src="<?= htmlspecialchars($imgUrl, ENT_QUOTES, 'UTF-8') ?>" alt="" class="pd-item-thumb">
+            </a>
+            <div class="pd-item-body">
+              <p class="pd-item-name truncate"><?= $prodNome ?></p>
+              <p class="pd-item-meta">Vendedor: <?= $vendorNome ?> &middot; Qtd <?= (int)$it['quantidade'] ?> &middot; Unit R$ <?= number_format((float)$it['preco_unit'], 2, ',', '.') ?></p>
+              <div class="pd-item-sub-m">R$ <?= number_format((float)$it['subtotal'], 2, ',', '.') ?></div>
             </div>
+            <div class="pd-item-sub">R$ <?= number_format((float)$it['subtotal'], 2, ',', '.') ?></div>
+          </div>
+          <?php if ($deliveryContent !== '' && $orderIsPaid):
+            $isUrl = (bool)preg_match('#^https?://#i', $deliveryContent);
+          ?>
+          <div class="pd-delivery-full">
+            <div class="pd-delivery-head">
+              <i data-lucide="download" class="w-3.5 h-3.5" style="color:#86efac"></i>
+              <span class="text-[11px] font-bold" style="color:#86efac">Entrega digital recebida</span>
+              <?php if ($deliveredAt !== ''): ?><span class="pd-delivery-time"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($deliveredAt)), ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
+            </div>
+            <?php if ($isUrl): ?>
+            <div class="pd-delivery-content"><a href="<?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener"><?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?></a></div>
+            <?php else: ?>
+            <div class="pd-delivery-content"><?= htmlspecialchars($deliveryContent, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
           </div>
-          <div class="pd-item-sub">R$ <?= number_format((float)$it['subtotal'], 2, ',', '.') ?></div>
+          <?php endif; ?>
         </div>
         <?php endforeach; ?>
       </div>

@@ -90,6 +90,10 @@ $feedback = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'add_cart') {
     $varPost = trim((string)($_POST['variante'] ?? ''));
     sfCartAdd((int)($_POST['product_id'] ?? 0), max(1, (int)($_POST['qty'] ?? 1)), $varPost !== '' ? $varPost : null);
+    if ((string)($_POST['redirect_to'] ?? '') === 'carrinho') {
+        header('Location: ' . BASE_PATH . '/carrinho');
+        exit;
+    }
     $feedback = 'Produto adicionado ao carrinho!';
 }
 
@@ -103,7 +107,19 @@ if ($q !== '') {
         $destaques = homeListProductsByVendorRounds($conn, [], 10, 2);
     }
 }
-$populares  = sfListProducts($conn, ['limit' => 5, 'order' => 'best_sellers']);
+$populares  = [];
+// Resolve "Augusto Gomes" vendor id once (used by Premium tab and "Produtos Premium" slider)
+$premiumVendorId = 0;
+$premiumVendorName = 'Augusto Gomes';
+if ($_r = $conn->query("SELECT id, nome FROM users WHERE LOWER(TRIM(nome)) LIKE 'augusto gomes%' ORDER BY id ASC LIMIT 1")) {
+    if ($row = $_r->fetch_assoc()) { $premiumVendorId = (int)$row['id']; $premiumVendorName = (string)$row['nome']; }
+}
+if ($premiumVendorId > 0) {
+    $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $premiumVendorId]);
+}
+if (!$populares) {
+    $populares = sfListProducts($conn, ['limit' => 10, 'order' => 'best_sellers']);
+}
 $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'
@@ -112,6 +128,9 @@ $homeCategorias = array_slice($categorias, 0, 12);
 
 // === Catalog (Commit D): sidebar all-categories + horizontal list cards + live search ===
 require_once dirname(__DIR__) . '/src/stock_items.php';
+
+// $premiumVendorId / $premiumVendorName resolved earlier (above $populares)
+$catalogIsPremium = (string)($_GET['premium'] ?? '') === '1';
 
 $catalogCatSlug = trim((string)($_GET['cat'] ?? ''));
 $catalogCatId = 0;
@@ -126,22 +145,16 @@ if ($catalogCatSlug !== '') {
     }
 }
 
-// Counts per category — dynamic column names via sfProductColumns
+// Counts per category — usar sfListProducts garante match exato com sfListados
 $catalogCounts = [];
-try {
-    $_pcols = sfProductColumns($conn);
-    $_catCol = $_pcols['category'] ?? 'categoria_id';
-    $_actCol = $_pcols['active'] ?? null;
-    $_apprCol = $_pcols['approval_status'] ?? null;
-    $_w = [];
-    if ($_actCol)  $_w[] = "COALESCE($_actCol,1)=1";
-    if ($_apprCol) $_w[] = "COALESCE($_apprCol,'aprovado')='aprovado'";
-    $_whereSql = $_w ? ('WHERE ' . implode(' AND ', $_w)) : '';
-    $_sql = "SELECT $_catCol AS cat_id, COUNT(*) AS total FROM products $_whereSql GROUP BY $_catCol";
-    if ($res = $conn->query($_sql)) {
-        while ($r = $res->fetch_assoc()) { $catalogCounts[(int)$r['cat_id']] = (int)$r['total']; }
-    }
-} catch (Throwable $e) { $catalogCounts = []; }
+$catalogTotalCount = 0;
+foreach ($categorias as $catItem) {
+    $_cid = (int)($catItem['id'] ?? 0);
+    if ($_cid <= 0) continue;
+    $_n = count(sfListProducts($conn, ['category_id' => $_cid, 'limit' => 100]));
+    if ($_n > 0) $catalogCounts[$_cid] = $_n;
+    $catalogTotalCount += $_n;
+}
 
 // Catalog sections
 $catalogSections = []; // [ ['key'=>..., 'label'=>..., 'icon'=>..., 'sub'=>..., 'products'=>[...], 'category'=>?, 'href'=>?] ]
@@ -149,6 +162,12 @@ if ($q !== '') {
     $catalogSections[] = [
         'key' => 'busca', 'label' => 'Resultados para "' . $q . '"', 'icon' => 'search',
         'sub' => '', 'products' => sfListProducts($conn, ['limit' => 40, 'q' => $q]),
+    ];
+} elseif ($catalogIsPremium && $premiumVendorId > 0) {
+    $catalogSections[] = [
+        'key' => 'premium', 'label' => 'Produtos Premium', 'icon' => 'crown',
+        'sub' => 'Produtos exclusivos · ' . $premiumVendorName,
+        'products' => sfListProducts($conn, ['limit' => 40, 'vendor_id' => $premiumVendorId]),
     ];
 } elseif ($catalogActiveCategory) {
     $catalogSections[] = [
@@ -159,30 +178,12 @@ if ($q !== '') {
         'category' => $catalogActiveCategory,
     ];
 } else {
-    // Novidades (recém-adicionados, ORDER BY id DESC já é default)
+    // "Todos" — uma única lista com todos os produtos
     $catalogSections[] = [
-        'key' => 'novidades', 'label' => 'Novidades', 'icon' => 'rocket',
-        'sub' => 'Recém-adicionados',
-        'products' => sfListProducts($conn, ['limit' => 8]),
+        'key' => 'todos', 'label' => 'Todos os produtos', 'icon' => 'layout-grid',
+        'sub' => $catalogTotalCount . ' produtos disponíveis',
+        'products' => sfListProducts($conn, ['limit' => 100]),
     ];
-    // Mais vendidos
-    $catalogSections[] = [
-        'key' => 'mais-vendidos', 'label' => 'Mais vendidos', 'icon' => 'flame',
-        'sub' => 'Os favoritos da galera',
-        'products' => sfListProducts($conn, ['limit' => 8, 'order' => 'best_sellers']),
-    ];
-    // Per-category sections (skip empty)
-    foreach ($categorias as $catItem) {
-        $_cid = (int)($catItem['id'] ?? 0);
-        if ($_cid <= 0 || (($catalogCounts[$_cid] ?? 0) === 0)) continue;
-        $_prods = sfListProducts($conn, ['limit' => 8, 'category_id' => $_cid]);
-        if (!$_prods) continue;
-        $catalogSections[] = [
-            'key' => 'cat-' . $_cid, 'label' => (string)$catItem['nome'], 'icon' => 'tag',
-            'sub' => '(' . ($catalogCounts[$_cid] ?? count($_prods)) . ')',
-            'products' => $_prods, 'category' => $catItem,
-        ];
-    }
 }
 
 // Batch resolve real stock for auto-delivery products in all sections
@@ -214,8 +215,21 @@ if ($_autoIds) {
 $catalogStockOf = function(array $p) use ($catalogStockMap): array {
     $auto = !empty($p['auto_delivery_enabled']);
     $pid  = (int)($p['id'] ?? 0);
-    $qty  = $auto ? ($catalogStockMap[$pid] ?? 0) : (int)($p['quantidade'] ?? 0);
-    return ['qty' => $qty, 'auto' => $auto];
+    if ($auto) {
+        $qty = $catalogStockMap[$pid] ?? 0;
+    } else {
+        // Try variantes JSON first (multi-variant products store stock there)
+        $variantes = $p['variantes'] ?? null;
+        $varArr = is_string($variantes) ? (json_decode($variantes, true) ?: []) : (is_array($variantes) ? $variantes : []);
+        $varStock = 0;
+        if ($varArr) {
+            foreach ($varArr as $v) {
+                if (is_array($v)) $varStock += (int)($v['quantidade'] ?? 0);
+            }
+        }
+        $qty = $varStock > 0 ? $varStock : (int)($p['quantidade'] ?? 0);
+    }
+    return ['qty' => (int)$qty, 'auto' => $auto];
 };
 
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
@@ -517,14 +531,26 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <ul class="catalog-cat-list flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto pr-0.5">
                     <li>
                         <a href="<?= BASE_PATH ?>/"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= (!$catalogActiveCategory && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= (!$catalogActiveCategory && !$catalogIsPremium && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
                             <span class="flex items-center gap-1.5 truncate">
                                 <i data-lucide="package" class="w-3.5 h-3.5 shrink-0"></i>
                                 <span class="truncate">Todos</span>
                             </span>
-                            <span class="text-[10px] font-bold text-zinc-500 shrink-0"><?= array_sum($catalogCounts) ?></span>
+                            <span class="text-[10px] font-bold text-zinc-500 shrink-0"><?= (int)$catalogTotalCount ?></span>
                         </a>
                     </li>
+                    <?php if ($premiumVendorId > 0): ?>
+                    <li>
+                        <a href="<?= BASE_PATH ?>/?premium=1#catalogo"
+                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= $catalogIsPremium ? 'bg-gradient-to-r from-amber-400/20 to-yellow-300/10 text-amber-300 border border-amber-400/40 shadow-[0_0_18px_rgba(251,191,36,0.22)]' : 'text-amber-200/80 hover:bg-amber-400/[0.06] hover:text-amber-300 border border-transparent' ?>">
+                            <span class="flex items-center gap-1.5 truncate">
+                                <i data-lucide="crown" class="w-3.5 h-3.5 shrink-0"></i>
+                                <span class="truncate">Premium</span>
+                            </span>
+                            <i data-lucide="sparkles" class="w-3 h-3 text-amber-400 shrink-0"></i>
+                        </a>
+                    </li>
+                    <?php endif; ?>
                     <?php
                     // Map known category names to lucide icons
                     $catIconMap = [
@@ -733,18 +759,16 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
       input.addEventListener('input', applyFilter);
       clearBtn.addEventListener('click', function(){ input.value = ''; applyFilter(); input.focus(); });
 
-      // Mobile sidebar popup
+      // Mobile sidebar popup (no scroll-lock — page continues to scroll behind it)
       window.catalogOpenPopup = function(){
         if (!sidebar) return;
         sidebar.classList.add('is-open');
         if (backdrop){ backdrop.classList.remove('hidden'); backdrop.classList.add('is-open'); }
-        document.body.style.overflow = 'hidden';
       };
       window.catalogClosePopup = function(){
         if (!sidebar) return;
         sidebar.classList.remove('is-open');
         if (backdrop){ backdrop.classList.remove('is-open'); setTimeout(function(){ backdrop.classList.add('hidden'); }, 240); }
-        document.body.style.overflow = '';
       };
       document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
     })();
@@ -759,6 +783,61 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <source media="(max-width: 639px)" srcset="<?= htmlspecialchars($homeBannerMobileUrl, ENT_QUOTES, 'UTF-8') ?>">
                 <img src="<?= htmlspecialchars($homeBannerPcUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Banner promocional da Basefy" class="home-banner-image transition-transform duration-700 group-hover:scale-[1.01]" decoding="async" fetchpriority="high">
             </picture>
+        </a>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($q === ''): ?>
+    <!-- =========== PROMO BANNER CARDS (Commit D2) =========== -->
+    <section class="max-w-[1440px] mx-auto px-4 sm:px-6 pb-6 sm:pb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <!-- Card 1: Créditos Lovable -->
+            <a href="#" class="promo-banner group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-5 sm:p-6 flex items-center gap-4 hover:border-pink-400/30 transition-all duration-300 hover:-translate-y-0.5">
+                <div class="absolute -right-10 -top-10 w-44 h-44 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-pink-500/20 to-orange-400/20 border border-pink-400/30 flex items-center justify-center">
+                    <i data-lucide="heart-handshake" class="w-7 h-7 text-pink-300"></i>
+                </div>
+                <div class="relative min-w-0 flex-1">
+                    <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Créditos <span class="text-pink-300">Lovable</span> com <span class="text-amber-300">70% OFF</span></h3>
+                    <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Potencialize seu desenvolvimento com créditos promocionais exclusivos para a plataforma Lovable.</p>
+                    <span class="inline-flex items-center gap-1.5 mt-3 text-[12px] font-semibold text-white bg-white/[0.06] border border-white/[0.08] rounded-full px-3 py-1.5 group-hover:border-pink-400/40 group-hover:bg-pink-400/[0.08] transition-all">
+                        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i> Confira agora
+                    </span>
+                </div>
+            </a>
+            <!-- Card 2: G2 Google Ads -->
+            <a href="#" class="promo-banner group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-5 sm:p-6 flex items-center gap-4 hover:border-blue-400/30 transition-all duration-300 hover:-translate-y-0.5">
+                <div class="absolute -right-10 -top-10 w-44 h-44 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-400/20 border border-blue-400/30 flex items-center justify-center">
+                    <i data-lucide="chrome" class="w-7 h-7 text-blue-300"></i>
+                </div>
+                <div class="relative min-w-0 flex-1">
+                    <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Liberação <span class="text-blue-300">G2 Google Ads</span></h3>
+                    <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Remova travas financeiras e escale seus investimentos com tecnologia vinculada ao Banco Central.</p>
+                    <span class="inline-flex items-center gap-1.5 mt-3 text-[12px] font-semibold text-white bg-white/[0.06] border border-white/[0.08] rounded-full px-3 py-1.5 group-hover:border-blue-400/40 group-hover:bg-blue-400/[0.08] transition-all">
+                        <i data-lucide="zap" class="w-3.5 h-3.5"></i> Começar Agora
+                    </span>
+                </div>
+            </a>
+        </div>
+        <!-- Card 3: WhatsApp full-width -->
+        <a href="https://chat.whatsapp.com/J71bKVW5CG4Ht1tH51diah?mode=gi_t" target="_blank" rel="noopener" class="promo-banner group relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.08] via-blackx2 to-blackx2 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 hover:border-emerald-400/50 transition-all duration-300 hover:-translate-y-0.5">
+            <div class="absolute -left-20 top-1/2 -translate-y-1/2 w-72 h-72 bg-emerald-500/[0.08] rounded-full blur-3xl pointer-events-none"></div>
+            <div class="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
+                <i data-lucide="message-circle" class="w-7 h-7 text-emerald-300"></i>
+            </div>
+            <div class="relative min-w-0 flex-1">
+                <h3 class="text-base sm:text-lg font-bold text-white leading-tight">Grupos <span class="text-emerald-300">WhatsApp</span> Profissional</h3>
+                <p class="text-[12px] sm:text-[13px] text-zinc-400 mt-1 leading-snug">Descubra e participe dos melhores grupos segmentados. Encontre o seu nicho e expanda sua rede de contatos.</p>
+                <div class="hidden sm:flex items-center gap-4 mt-2 text-[11px] text-zinc-500">
+                    <span class="flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-emerald-300/80"></i> Grupos ativos</span>
+                    <span class="flex items-center gap-1"><i data-lucide="search" class="w-3 h-3 text-emerald-300/80"></i> Busca por nicho</span>
+                    <span class="flex items-center gap-1"><i data-lucide="badge-check" class="w-3 h-3 text-emerald-300/80"></i> Grupos verificados</span>
+                </div>
+            </div>
+            <span class="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white font-bold px-5 py-2.5 text-[13px] shadow-lg shadow-emerald-500/30 transition-all">
+                Explorar grupos <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </span>
         </a>
     </section>
     <?php endif; ?>
@@ -873,23 +952,23 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     </section>
     <?php endif; ?>
 
-    <!-- =========== MAIS POPULARES =========== -->
+    <!-- =========== PRODUTOS PREMIUM =========== -->
     <?php if ($populares && $q === ''): ?>
     <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
         <div class="flex items-center justify-between mb-8 sm:mb-10">
             <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="trending-up" class="w-3 h-3"></i>
-                    Popular
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider mb-3">
+                    <i data-lucide="crown" class="w-3 h-3"></i>
+                    Premium
                 </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">Mais populares</h2>
-                <p class="text-sm text-zinc-500 mt-1">Produtos mais vendidos da plataforma</p>
+                <h2 class="text-2xl sm:text-3xl font-bold">Produtos Premium</h2>
+                <p class="text-sm text-zinc-500 mt-1"><?= $premiumVendorId > 0 ? 'Curadoria exclusiva &middot; ' . htmlspecialchars($premiumVendorName, ENT_QUOTES, 'UTF-8') : 'Curadoria exclusiva' ?></p>
             </div>
-            <a href="<?= BASE_PATH ?>/categorias" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver todos <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
+            <a href="<?= BASE_PATH ?>/?premium=1#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-300 hover:underline font-semibold">Ver todos <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
-        <div class="flex gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory sm:mx-0 sm:px-0 sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 sm:gap-5 sm:overflow-visible">
+        <div class="flex gap-3 overflow-x-auto pb-3 scrollbar-hide snap-x snap-mandatory sm:gap-5">
             <?php foreach ($populares as $i => $p): ?>
-            <article class="product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/20 hover:shadow-2xl hover:shadow-greenx/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> min-w-[150px] sm:min-w-0 snap-start <?= $i === 0 ? 'ml-4 sm:ml-0' : '' ?><?= $i === count($populares) - 1 ? ' mr-4 sm:mr-0' : '' ?>">
+                    <article class="product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-amber-400/30 hover:shadow-2xl hover:shadow-amber-400/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> shrink-0 w-[170px] sm:w-[200px] snap-start <?= $i === 0 ? 'ml-4 sm:ml-0' : '' ?><?= $i === count($populares) - 1 ? ' mr-4 sm:mr-0' : '' ?>">
                 <a href="<?= sfProductUrl($p) ?>" class="block relative overflow-hidden">
                     <div class="aspect-square overflow-hidden bg-blackx">
                         <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
@@ -926,7 +1005,8 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <input type="hidden" name="action" value="add_cart">
                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                         <input type="hidden" name="qty" value="1">
-                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                        <input type="hidden" name="redirect_to" value="carrinho">
+                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-500 text-black font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-amber-400/20 hover:shadow-amber-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all">
                             <i data-lucide="shopping-bag" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
                             Comprar
                         </button>
