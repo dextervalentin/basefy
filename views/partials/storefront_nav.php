@@ -35,7 +35,7 @@ $_isPendingVendor = false;
                    class="px-3.5 py-2 rounded-xl text-sm font-medium transition-all <?= $currentPage === 'home' ? 'bg-white/[0.08] text-white' : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]' ?>">
                     Início
                 </a>
-                <a href="<?= BASE_PATH ?>/categorias"
+                <a href="<?= BASE_PATH ?>/#catalogo"
                    class="px-3.5 py-2 rounded-xl text-sm font-medium transition-all <?= $currentPage === 'categorias' ? 'bg-white/[0.08] text-white' : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]' ?>">
                     Catálogo
                 </a>
@@ -274,7 +274,7 @@ $_isPendingVendor = false;
            class="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all <?= $currentPage === 'home' ? 'bg-greenx/[0.12] text-greenx border border-greenx/30' : 'text-zinc-300 hover:bg-white/[0.04] border border-transparent' ?>">
             <i data-lucide="home" class="w-4 h-4"></i> Início
         </a>
-        <a href="<?= BASE_PATH ?>/categorias"
+        <a href="<?= BASE_PATH ?>/#catalogo"
            class="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all <?= $currentPage === 'categorias' ? 'bg-greenx/[0.12] text-greenx border border-greenx/30' : 'text-zinc-300 hover:bg-white/[0.04] border border-transparent' ?>">
             <i data-lucide="grid-3x3" class="w-4 h-4"></i> Catálogo
         </a>

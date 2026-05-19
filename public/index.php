@@ -166,7 +166,7 @@ if ($q !== '') {
 } elseif ($catalogIsPremium && $premiumVendorId > 0) {
     $catalogSections[] = [
         'key' => 'premium', 'label' => 'Produtos Premium', 'icon' => 'crown',
-        'sub' => 'Produtos exclusivos · ' . $premiumVendorName,
+        'sub' => 'Produtos exclusivos',
         'products' => sfListProducts($conn, ['limit' => 40, 'vendor_id' => $premiumVendorId]),
     ];
 } elseif ($catalogActiveCategory) {
@@ -506,20 +506,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
     <!-- =========== CATALOGO — Sidebar todas categorias + horizontal cards + busca live (Commit D) =========== -->
     <section id="catalogo" class="max-w-[1440px] mx-auto px-3 sm:px-6 py-8 sm:py-12">
-        <div class="flex items-center gap-3 mb-5">
-            <div class="w-10 h-10 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center shrink-0">
-                <i data-lucide="badge-check" class="w-5 h-5 text-greenx"></i>
-            </div>
-            <div class="min-w-0">
-                <h1 class="text-xl sm:text-2xl font-bold leading-tight">Loja Oficial</h1>
-                <p class="text-[11px] sm:text-xs text-zinc-500 leading-tight">Produtos exclusivos da comunidade</p>
-            </div>
-        </div>
-
         <div class="catalog-shell grid gap-4 sm:gap-5 lg:grid-cols-[200px_minmax(0,1fr)] items-start" data-catalog>
 
             <!-- ============ SIDEBAR (desktop fixed / mobile = popup overlay) ============ -->
-            <aside id="catalogSidebar" class="catalog-sidebar rounded-2xl border border-white/[0.06] bg-blackx2/70 backdrop-blur-sm p-2.5 self-start lg:sticky lg:top-24">
+            <aside id="catalogSidebar" class="catalog-sidebar hidden lg:block rounded-2xl border border-white/[0.06] bg-blackx2/70 backdrop-blur-sm p-2.5 self-start lg:sticky lg:top-24">
                 <div class="flex items-center justify-between px-1.5 mb-3">
                     <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-9 h-9 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center shrink-0">
@@ -748,10 +738,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     <style>
       /* Sidebar popup animation (mobile only) */
       @media (max-width: 1023px) {
-                .catalog-sidebar { position: fixed; inset: 0; transform: translateX(105%); opacity: 1; width: 100vw; max-height: 100vh; z-index: 50; border-radius: 0; padding: 1rem; overflow-y: auto; transition: transform .28s cubic-bezier(.2,.85,.25,1); box-shadow: -24px 0 60px -12px rgba(0,0,0,.65), 0 0 0 1px rgba(136,0,228,.24); pointer-events: none; }
-                .catalog-sidebar.is-open { transform: translateX(0); pointer-events: auto; }
-                .catalog-sidebar .catalog-cat-list { max-height: calc(100vh - 92px); }
-        #catalogSidebarBackdrop.is-open { display: block; animation: catBackdropIn .25s ease; }
+                .catalog-sidebar { position: fixed; inset: 0; width: 100%; height: 100vh; height: 100dvh; max-height: none; z-index: 80; border-radius: 0; padding: 1rem; overflow-y: auto; opacity: 0; visibility: hidden; transform: none; transition: opacity .2s ease, visibility .2s ease; box-shadow: none; pointer-events: none; }
+                .catalog-sidebar.is-open { display: block !important; opacity: 1; visibility: visible; pointer-events: auto; }
+                .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 92px); }
+                #catalogSidebarBackdrop.is-open { display: block; z-index: 70; animation: catBackdropIn .25s ease; }
         @keyframes catBackdropIn { from { opacity: 0; } to { opacity: 1; } }
       }
       .catalog-product.is-hidden { display: none; }
@@ -853,7 +843,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
             <div class="relative min-w-0 flex-1">
                 <h3 class="text-lg sm:text-xl font-bold text-white leading-tight">Comunidade <span class="text-emerald-300">Basefy</span></h3>
-                <p class="text-[13px] sm:text-sm text-zinc-400 mt-1 leading-relaxed max-w-3xl">Entre para o grupo oficial da Basefy e conecte-se com pessoas do mercado de tráfego, performance e ativos digitais.</p>
+                <p class="text-[13px] sm:text-sm text-zinc-400 mt-1 leading-relaxed max-w-3xl">Entre para o grupo oficial da Basefy e conecte-se com pessoas<br>do mercado de tráfego, performance e ativos digitais.</p>
             </div>
             <span class="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white font-bold px-5 py-2.5 text-[13px] shadow-lg shadow-emerald-500/30 transition-all">
                 Acessar grupo <i data-lucide="arrow-right" class="w-4 h-4"></i>
@@ -1026,7 +1016,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                         <input type="hidden" name="qty" value="1">
                         <input type="hidden" name="redirect_to" value="carrinho">
-                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-500 text-black font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-amber-400/20 hover:shadow-amber-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
                             <i data-lucide="shopping-bag" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
                             Comprar
                         </button>
@@ -1041,7 +1031,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     .premium-track { display:flex; gap:1rem; overflow-x:auto; scroll-snap-type:x mandatory; scroll-behavior:smooth; cursor:grab; user-select:none; padding:.15rem .05rem .9rem; scrollbar-width:none; touch-action:pan-y; }
                     .premium-track::-webkit-scrollbar { display:none; }
                     .premium-track.is-dragging { cursor:grabbing; scroll-behavior:auto; }
-                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; }
+                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; scroll-snap-align:start; scroll-snap-stop:always; }
                     .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:.75rem; }
                     .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; transition:width .2s ease, background .2s ease; }
                     .premium-dot.is-active { width:1.35rem; background:#f59e0b; }
@@ -1057,13 +1047,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     var cards = Array.prototype.slice.call(track.querySelectorAll('.premium-card'));
                     if (!track || !dots || !cards.length) return;
 
-                    function perPage(){ return window.innerWidth >= 1024 ? 5 : (window.innerWidth >= 640 ? 3 : 2); }
-                    function pageCount(){ return Math.max(1, Math.ceil(cards.length / perPage())); }
-                    function updateDots(){
-                        var pp = perPage();
+                    function pageCount(){ return Math.max(1, cards.length); }
+                    function cardStep(){
                         var gap = parseFloat(getComputedStyle(track).gap || '0') || 0;
-                        var step = ((cards[0] && cards[0].getBoundingClientRect().width) || 1) + gap;
-                        var page = Math.round(track.scrollLeft / Math.max(1, step * pp));
+                        return ((cards[0] && cards[0].getBoundingClientRect().width) || 1) + gap;
+                    }
+                    function updateDots(){
+                        var page = Math.round(track.scrollLeft / Math.max(1, cardStep()));
                         dots.querySelectorAll('.premium-dot').forEach(function(dot, idx){ dot.classList.toggle('is-active', idx === page); });
                     }
                     function buildDots(){
@@ -1075,9 +1065,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                                 var dot = document.createElement('button');
                                 dot.type = 'button';
                                 dot.className = 'premium-dot';
-                                dot.setAttribute('aria-label', 'Ir para página ' + (page + 1));
+                                dot.setAttribute('aria-label', 'Ir para produto ' + (page + 1));
                                 dot.addEventListener('click', function(){
-                                    var target = cards[Math.min(cards.length - 1, page * perPage())];
+                                    var target = cards[Math.min(cards.length - 1, page)];
                                     if (target) track.scrollTo({ left: target.offsetLeft - track.offsetLeft, behavior:'smooth' });
                                 });
                                 dots.appendChild(dot);
