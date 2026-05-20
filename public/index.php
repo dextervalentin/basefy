@@ -799,6 +799,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             var loading = false;
             var searchTimer = null;
             var closeTimer = null;
+            var sidebarParent = sidebar ? sidebar.parentNode : null;
+            var sidebarNext = sidebar ? sidebar.nextSibling : null;
+            var backdropParent = backdrop ? backdrop.parentNode : null;
+            var backdropNext = backdrop ? backdrop.nextSibling : null;
 
             function lockPageScroll(){
                 document.body.style.overflow = 'hidden';
@@ -808,6 +812,16 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             function unlockPageScroll(){
                 document.body.style.overflow = '';
                 document.documentElement.style.overflow = '';
+            }
+
+            function moveDrawerToBody(){
+                if (sidebar && sidebar.parentNode !== document.body) document.body.appendChild(sidebar);
+                if (backdrop && backdrop.parentNode !== document.body) document.body.appendChild(backdrop);
+            }
+
+            function restoreDrawerPosition(){
+                if (sidebar && sidebarParent && sidebar.parentNode === document.body) sidebarParent.insertBefore(sidebar, sidebarNext);
+                if (backdrop && backdropParent && backdrop.parentNode === document.body) backdropParent.insertBefore(backdrop, backdropNext);
             }
 
             function sortCatalog(){
@@ -920,6 +934,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             window.catalogOpenPopup = function(){
                 if (!sidebar) return;
                 window.clearTimeout(closeTimer);
+                moveDrawerToBody();
                 sidebar.classList.remove('hidden');
                 if (backdrop){ backdrop.classList.remove('hidden'); }
                 lockPageScroll();
@@ -937,6 +952,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 closeTimer = window.setTimeout(function(){
                     if (backdrop) backdrop.classList.add('hidden');
                     if (!sidebar.classList.contains('is-open') && window.innerWidth < 1024) sidebar.classList.add('hidden');
+                    restoreDrawerPosition();
                 }, 300);
             };
             document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
