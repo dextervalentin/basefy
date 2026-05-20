@@ -7,7 +7,8 @@ require_once __DIR__ . '/notifications.php';
 function escrowSettingsDefaults(): array
 {
     return [
-        'wallet.auto_release_days' => '7',
+        'wallet.auto_release_days' => '3',
+        'wallet.confirmed_release_hours' => '24',
         'wallet.platform_fee_percent' => '5.00',
         'wallet.auto_release_enabled' => '1',
         'wallet.platform_admin_user_id' => '0',
@@ -36,6 +37,15 @@ function escrowEnsureDefaults($conn): void
     foreach (escrowSettingsDefaults() as $key => $value) {
         escrowSettingSet($conn, $key, escrowSettingGet($conn, $key, $value));
     }
+
+    $policyVersion = escrowSettingGet($conn, 'wallet.policy_defaults_version', '');
+    if ($policyVersion !== '2026-05-dispute-rules') {
+        if (escrowSettingGet($conn, 'wallet.auto_release_days', '7') === '7') {
+            escrowSettingSet($conn, 'wallet.auto_release_days', '3');
+        }
+        escrowSettingSet($conn, 'wallet.confirmed_release_hours', escrowSettingGet($conn, 'wallet.confirmed_release_hours', '24'));
+        escrowSettingSet($conn, 'wallet.policy_defaults_version', '2026-05-dispute-rules');
+    }
 }
 
 function escrowRules($conn): array
@@ -43,7 +53,8 @@ function escrowRules($conn): array
     escrowEnsureDefaults($conn);
 
     return [
-        'auto_release_days' => max(1, (int)escrowSettingGet($conn, 'wallet.auto_release_days', '7')),
+        'auto_release_days' => max(1, (int)escrowSettingGet($conn, 'wallet.auto_release_days', '3')),
+        'confirmed_release_hours' => max(1, (int)escrowSettingGet($conn, 'wallet.confirmed_release_hours', '24')),
         'platform_fee_percent' => max(0.0, min(100.0, (float)escrowSettingGet($conn, 'wallet.platform_fee_percent', '5.00'))),
         'auto_release_enabled' => escrowSettingGet($conn, 'wallet.auto_release_enabled', '1') === '1',
         'platform_admin_user_id' => (int)escrowSettingGet($conn, 'wallet.platform_admin_user_id', '0'),

@@ -107,6 +107,18 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <span class="text-zinc-500 text-xs block">Categoria</span>
                     <span class="font-medium"><?= htmlspecialchars((string)(ticketCategories()[$ticket['categoria']]['label'] ?? $ticket['categoria'])) ?></span>
                 </div>
+                <?php if (!empty($ticket['motivo'])): ?>
+                <div>
+                    <span class="text-zinc-500 text-xs block">Motivo</span>
+                    <span class="font-medium"><?= htmlspecialchars((string)$ticket['motivo']) ?></span>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($ticket['resolution_due_at'])): ?>
+                <div>
+                    <span class="text-zinc-500 text-xs block">Prazo de resolução</span>
+                    <span class="font-medium text-orange-300"><?= fmtDate((string)$ticket['resolution_due_at']) ?></span>
+                </div>
+                <?php endif; ?>
                 <div>
                     <span class="text-zinc-500 text-xs block">Data de criação</span>
                     <span class="font-medium"><?= fmtDate((string)$ticket['criado_em']) ?></span>

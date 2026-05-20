@@ -13,6 +13,7 @@ require_once $ROOT . '/src/wallet_escrow.php';
 require_once $ROOT . '/src/media.php';
 require_once $ROOT . '/src/storefront.php';
 require_once $ROOT . '/src/reviews.php';
+require_once $ROOT . '/src/tickets.php';
 
 exigirLogin();
 
@@ -54,6 +55,93 @@ if ($st) {
 if (!$order) {
     header('Location: ' . BASE_PATH . '/meus_pedidos');
     exit;
+}
+
+$disputeReasons = ticketDisputeReasons();
+$disputeResolutionDays = 3;
+$autoReleaseDays = max(1, (int)escrowSettingGet($conn, 'wallet.auto_release_days', '3'));
+$confirmedReleaseHours = max(1, (int)escrowSettingGet($conn, 'wallet.confirmed_release_hours', '24'));
+
+$findOrderDisputeId = static function ($conn, int $orderId, int $userId, bool $onlyOpen): int {
+  $sql = "SELECT id FROM support_tickets WHERE user_id = ? AND order_id = ? AND categoria = 'pedido_disputa'";
+  if ($onlyOpen) {
+    $sql .= " AND status IN ('aberto','em_andamento','respondido')";
+  }
+  $sql .= " ORDER BY id DESC LIMIT 1";
+  $stDispute = $conn->prepare($sql);
+  if (!$stDispute) return 0;
+  $stDispute->bind_param('ii', $userId, $orderId);
+  $stDispute->execute();
+  $row = $stDispute->get_result()->fetch_assoc();
+  $stDispute->close();
+  return (int)($row['id'] ?? 0);
+};
+
+$existingOpenDisputeId = $findOrderDisputeId($conn, $orderId, $userId, true);
+$hasAnyDisputeBeforePost = $findOrderDisputeId($conn, $orderId, $userId, false) > 0;
+$orderStatusLower = strtolower(trim((string)$order['status']));
+$canOpenDispute = in_array($orderStatusLower, ['pago', 'paid', 'enviado', 'entregue', 'concluido'], true);
+$disputeUnavailableReason = $canOpenDispute ? '' : 'Aguarde a confirmação do pagamento para abrir um ticket deste pedido.';
+
+if ($canOpenDispute && in_array($orderStatusLower, ['entregue', 'concluido'], true)) {
+  $confirmedAt = null;
+  $stConfirmed = $conn->prepare("SELECT MAX(released_at) AS confirmed_at FROM order_items WHERE order_id = ? AND released_at IS NOT NULL");
+  if ($stConfirmed) {
+    $stConfirmed->bind_param('i', $orderId);
+    $stConfirmed->execute();
+    $confirmedRow = $stConfirmed->get_result()->fetch_assoc();
+    $stConfirmed->close();
+    $confirmedAt = (string)($confirmedRow['confirmed_at'] ?? '');
+  }
+  if ($confirmedAt !== '') {
+    $confirmedLimit = strtotime($confirmedAt . ' +' . $confirmedReleaseHours . ' hours');
+    if ($confirmedLimit !== false && $confirmedLimit < time()) {
+      $canOpenDispute = false;
+      $disputeUnavailableReason = 'O prazo de ' . $confirmedReleaseHours . ' hora(s) após a confirmação da entrega já terminou.';
+    }
+  }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'open_order_dispute') {
+  $reasonKey = trim((string)($_POST['motivo'] ?? ''));
+  $reasonLabel = ticketDisputeReasonLabel($reasonKey);
+  $details = trim((string)($_POST['detalhes'] ?? ''));
+
+  if ($existingOpenDisputeId > 0) {
+    $err = 'Já existe um ticket aberto para este pedido.';
+  } elseif (!$canOpenDispute) {
+    $err = $disputeUnavailableReason;
+  } elseif ($reasonLabel === '') {
+    $err = 'Selecione o motivo do ticket.';
+  } elseif (mb_strlen($details) < 10) {
+    $err = 'Adicione detalhes com pelo menos 10 caracteres.';
+  } else {
+    $now = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));
+    $deadline = $now->modify('+' . $disputeResolutionDays . ' days');
+    $deadlineDb = $deadline->format('Y-m-d H:i:s');
+    $deadlineHuman = $deadline->format('d/m/Y H:i');
+    $titulo = 'Disputa do pedido #' . $orderId . ' - ' . $reasonLabel;
+    $mensagem = "Pedido: #" . $orderId . "\n"
+      . "Motivo: " . $reasonLabel . "\n"
+      . "Prazo de resolução: até " . $deadlineHuman . "\n\n"
+      . "Detalhes:\n" . $details;
+
+    $result = ticketCreate($conn, $userId, 'pedido_disputa', $titulo, $mensagem, $orderId, [
+      'motivo' => $reasonLabel,
+      'resolution_due_at' => $deadlineDb,
+    ]);
+
+    if (!empty($result['ok'])) {
+      $newTicketId = (int)$result['id'];
+      if (!$hasAnyDisputeBeforePost) {
+        $conn->query("UPDATE order_items SET auto_release_at = auto_release_at + INTERVAL '3 days' WHERE order_id = " . (int)$orderId . " AND released_at IS NULL AND auto_release_at IS NOT NULL");
+      }
+      $existingOpenDisputeId = $newTicketId;
+      $msg = 'Ticket #' . $newTicketId . ' aberto com sucesso. O prazo do pedido foi estendido em +3 dias para análise.';
+    } else {
+      $err = (string)($result['error'] ?? 'Erro ao abrir ticket.');
+    }
+  }
 }
 
 $items = [];
@@ -479,18 +567,90 @@ $avatarInitial = static function (string $name): string {
       </div>
 
       <!-- Precisa de ajuda? -->
-      <div class="pd-card pd-card-help">
+      <div class="pd-card pd-card-help" x-data="{open:false, step:'policy', motivo:''}">
         <h3 class="pd-card-title"><i data-lucide="life-buoy" class="w-4 h-4"></i> Precisa de ajuda?</h3>
         <p class="pd-help-text">Nossa equipe monitora todas as transações para garantir sua segurança. Reporte qualquer problema imediatamente.</p>
-        <?php if ($primaryChatConvId > 0): ?>
-        <button type="button" class="pd-btn-danger" onclick="if(window.openUserChat){window.openUserChat(<?= $primaryChatConvId ?>);} else { alert('Abra o chat pelo menu para reportar.'); }">
+        <?php if ($existingOpenDisputeId > 0): ?>
+        <a href="<?= BASE_PATH ?>/ticket_detalhe?id=<?= (int)$existingOpenDisputeId ?>" class="pd-btn-primary">
+          <i data-lucide="ticket-check" class="w-4 h-4"></i> Ver ticket aberto
+        </a>
+        <?php elseif ($canOpenDispute): ?>
+        <button type="button" class="pd-btn-danger" @click="open=true;step='policy'">
           <i data-lucide="alert-triangle" class="w-4 h-4"></i> Reportar Problema
         </button>
         <?php else: ?>
-        <button type="button" class="pd-btn-danger" onclick="alert('Aguarde a confirmação do pedido para reportar um problema.');">
+        <button type="button" class="pd-btn-danger" disabled title="<?= htmlspecialchars($disputeUnavailableReason, ENT_QUOTES, 'UTF-8') ?>" style="opacity:.55;cursor:not-allowed">
           <i data-lucide="alert-triangle" class="w-4 h-4"></i> Reportar Problema
         </button>
+        <p class="text-xs text-orange-300 mt-2"><?= htmlspecialchars($disputeUnavailableReason, ENT_QUOTES, 'UTF-8') ?></p>
         <?php endif; ?>
+
+        <div x-show="open" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" style="display:none" @click.self="open=false">
+          <div class="w-full max-w-2xl rounded-2xl border border-blackx3 bg-blackx2 shadow-2xl overflow-hidden" @click.stop>
+            <div class="flex items-center justify-between gap-3 border-b border-blackx3 p-4">
+              <div>
+                <h3 class="text-lg font-bold" x-text="step==='policy' ? 'Abrir ticket' : 'Selecione o motivo'"></h3>
+                <p class="text-xs text-zinc-500 mt-0.5">Pedido #<?= (int)$orderId ?></p>
+              </div>
+              <button type="button" @click="open=false" class="w-9 h-9 rounded-lg border border-blackx3 text-zinc-400 hover:text-white hover:border-greenx transition">
+                <i data-lucide="x" class="w-4 h-4 mx-auto"></i>
+              </button>
+            </div>
+
+            <div class="p-4 md:p-5 max-h-[76vh] overflow-y-auto">
+              <div x-show="step==='policy'" class="space-y-4">
+                <div class="rounded-xl border border-purple-400/25 bg-purple-500/10 p-4">
+                  <h4 class="font-bold mb-3 flex items-center gap-2">
+                    <i data-lucide="shield-question" class="w-4 h-4 text-purple-300"></i>
+                    Políticas de confirmação e disputas
+                  </h4>
+                  <div class="space-y-3 text-sm text-zinc-300 leading-relaxed">
+                    <p><strong>Início da contagem:</strong> O prazo começa a contar no momento em que o pagamento é confirmado.</p>
+                    <p><strong>Prazo de liberação:</strong> Caso o comprador não confirme a entrega, o saldo será liberado automaticamente ao vendedor após <?= (int)$autoReleaseDays ?> dia(s).</p>
+                    <p><strong>Confirmação da entrega:</strong> Ao confirmar a entrega ou enviar o código de confirmação, o comprador declara que recebeu o pedido corretamente e que o produto está funcionando conforme esperado.</p>
+                    <p><strong>Após a confirmação:</strong> O saldo será liberado ao vendedor em até <?= (int)$confirmedReleaseHours ?> hora(s).</p>
+                    <p><strong>Tickets e disputas:</strong> Após a confirmação da entrega, será possível abrir ticket apenas dentro do prazo de <?= (int)$confirmedReleaseHours ?> hora(s). Após esse período, não será mais possível abrir disputas, solicitar cancelamentos, reversões ou estornos relacionados ao pedido.</p>
+                    <p><strong>Reclamações e denúncias:</strong> Abrir uma denúncia neste pedido adiciona +<?= (int)$disputeResolutionDays ?> dias ao prazo de liberação para análise e resolução. Essa extensão ocorre apenas uma vez por pedido.</p>
+                  </div>
+                </div>
+                <div class="flex items-center justify-end gap-2">
+                  <button type="button" @click="open=false" class="pd-btn-ghost">Cancelar</button>
+                  <button type="button" @click="step='form'" class="pd-btn-primary" style="width:auto;padding:.55rem 1rem">
+                    Seguir com ticket
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+
+              <form x-show="step==='form'" method="post" class="space-y-4" style="display:none">
+                <input type="hidden" name="action" value="open_order_dispute">
+                <div>
+                  <label class="block text-sm font-semibold text-zinc-300 mb-3">Selecione o motivo:</label>
+                  <div class="grid gap-2">
+                    <?php foreach ($disputeReasons as $reasonKey => $reasonLabel): ?>
+                    <label class="flex items-center gap-3 rounded-xl border border-blackx3 bg-blackx/50 p-3 text-sm text-zinc-200 hover:border-greenx/40 transition cursor-pointer">
+                      <input type="radio" name="motivo" value="<?= htmlspecialchars($reasonKey, ENT_QUOTES, 'UTF-8') ?>" x-model="motivo" required class="accent-purple-500">
+                      <span><?= htmlspecialchars($reasonLabel . ($reasonKey === 'outro' ? ' > descreva' : ''), ENT_QUOTES, 'UTF-8') ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+                <div x-show="motivo" x-transition style="display:none">
+                  <label class="block text-sm font-semibold text-zinc-300 mb-2">Adicionar detalhes <span class="text-red-300">*</span></label>
+                  <textarea name="detalhes" rows="5" minlength="10" required placeholder="Descreva o que aconteceu, informe datas, mensagens relevantes e qualquer prova que ajude a análise."
+                            class="w-full rounded-xl bg-blackx border border-blackx3 px-3 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-greenx resize-y"></textarea>
+                </div>
+                <div class="flex items-center justify-between gap-3 pt-1">
+                  <button type="button" @click="step='policy'" class="pd-btn-ghost">Voltar</button>
+                  <button type="submit" class="pd-btn-primary" style="width:auto;padding:.55rem 1rem">
+                    <i data-lucide="ticket-plus" class="w-4 h-4"></i>
+                    Abrir ticket
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -525,10 +685,12 @@ $avatarInitial = static function (string $name): string {
         <details class="pd-policy">
           <summary><i data-lucide="clipboard-list" class="w-4 h-4"></i> Políticas de confirmação e disputas</summary>
           <ul>
-            <li>Confirme o recebimento somente após testar o produto recebido.</li>
-            <li>Em caso de problema, abra disputa em até 7 dias após a entrega.</li>
-            <li>Toda comunicação ocorre por aqui — não negocie fora da plataforma.</li>
-            <li>O pagamento ao vendedor só é liberado após sua confirmação.</li>
+            <li>O prazo começa a contar no momento em que o pagamento é confirmado.</li>
+            <li>Sem confirmação do comprador, o saldo é liberado automaticamente ao vendedor após <?= (int)$autoReleaseDays ?> dia(s).</li>
+            <li>Ao confirmar a entrega ou enviar o código, o comprador declara que recebeu o pedido corretamente.</li>
+            <li>Após a confirmação, o saldo será liberado ao vendedor em até <?= (int)$confirmedReleaseHours ?> hora(s).</li>
+            <li>Após a confirmação, tickets e disputas podem ser abertos apenas dentro do prazo de <?= (int)$confirmedReleaseHours ?> hora(s).</li>
+            <li>Abrir uma denúncia adiciona +<?= (int)$disputeResolutionDays ?> dias ao prazo de liberação, uma única vez por pedido.</li>
           </ul>
         </details>
 

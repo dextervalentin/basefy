@@ -22,6 +22,8 @@ function ticketsEnsureTable($conn): void
                 titulo VARCHAR(255) NOT NULL,
                 mensagem TEXT NOT NULL,
                 order_id INTEGER DEFAULT NULL,
+                motivo VARCHAR(120) DEFAULT NULL,
+                resolution_due_at TIMESTAMP DEFAULT NULL,
                 status VARCHAR(30) NOT NULL DEFAULT 'aberto',
                 admin_resposta TEXT DEFAULT NULL,
                 admin_id INTEGER DEFAULT NULL,
@@ -30,6 +32,8 @@ function ticketsEnsureTable($conn): void
                 atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ");
+        $conn->query("ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS motivo VARCHAR(120) DEFAULT NULL");
+        $conn->query("ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMP DEFAULT NULL");
         // Attachment table for ticket files
         $conn->query("
             CREATE TABLE IF NOT EXISTS support_ticket_attachments (
@@ -61,6 +65,10 @@ function ticketsEnsureTable($conn): void
 function ticketCategories(): array
 {
     return [
+        'pedido_disputa' => [
+            'label' => 'Pedido / Disputa',
+            'desc'  => 'Categoria voltada para tickets abertos a partir de um pedido, com motivo e prazo de resolução.',
+        ],
         'alteracao_cadastral' => [
             'label' => 'Alteração Cadastral e Verificação',
             'desc'  => 'Categoria voltada para alteração de dados cadastrais, verificação de identidade e documentos.',
@@ -97,14 +105,39 @@ function ticketCategories(): array
 }
 
 /**
+ * Reasons available when opening a dispute from an order.
+ */
+function ticketDisputeReasons(): array
+{
+    return [
+        'nao_recebi_ativo' => 'Não recebi o ativo',
+        'ativo_problema_invalido' => 'Ativo com problema / inválido',
+        'entrega_incompleta' => 'Entrega incompleta',
+        'produto_diferente_anunciado' => 'Produto diferente do anunciado',
+        'suspeita_fraude' => 'Suspeita de fraude',
+        'conduta_inadequada' => 'Conduta inadequada',
+        'contato_externo' => 'Contato externo',
+        'outro' => 'Outro',
+    ];
+}
+
+function ticketDisputeReasonLabel(string $key): string
+{
+    $reasons = ticketDisputeReasons();
+    return $reasons[$key] ?? '';
+}
+
+/**
  * Create a new ticket
  */
-function ticketCreate($conn, int $userId, string $categoria, string $titulo, string $mensagem, ?int $orderId = null): array
+function ticketCreate($conn, int $userId, string $categoria, string $titulo, string $mensagem, ?int $orderId = null, array $extra = []): array
 {
     ticketsEnsureTable($conn);
     $titulo   = trim($titulo);
     $mensagem = trim($mensagem);
     $categoria = trim($categoria);
+    $motivo = trim((string)($extra['motivo'] ?? ''));
+    $resolutionDueAt = trim((string)($extra['resolution_due_at'] ?? ''));
 
     if ($titulo === '') return ['ok' => false, 'error' => 'Informe um título para o ticket.'];
     if ($mensagem === '') return ['ok' => false, 'error' => 'Descreva o problema.'];
@@ -121,10 +154,12 @@ function ticketCreate($conn, int $userId, string $categoria, string $titulo, str
     if ($dup > 0) return ['ok' => false, 'error' => 'Você já abriu um ticket com este título recentemente. Aguarde.'];
 
     $stmt = $conn->prepare(
-        "INSERT INTO support_tickets (user_id, categoria, titulo, mensagem, order_id) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO support_tickets (user_id, categoria, titulo, mensagem, order_id, motivo, resolution_due_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     $oid = $orderId ?: null;
-    $stmt->bind_param('isssi', $userId, $categoria, $titulo, $mensagem, $oid);
+    $motivoValue = $motivo !== '' ? $motivo : null;
+    $deadlineValue = $resolutionDueAt !== '' ? $resolutionDueAt : null;
+    $stmt->bind_param('isssiss', $userId, $categoria, $titulo, $mensagem, $oid, $motivoValue, $deadlineValue);
     $stmt->execute();
     $ticketId = $conn->insert_id;
     $stmt->close();
@@ -295,7 +330,7 @@ function ticketAddMessage($conn, int $ticketId, int $userId, string $mensagem, b
             $ownerRow = $stOwner->get_result()->fetch_assoc();
             $stOwner->close();
             if ($ownerRow && (int)$ownerRow['user_id'] > 0) {
-                notificationsCreate($conn, (int)$ownerRow['user_id'], 'ticket', 'Resposta no seu ticket', 'O suporte respondeu ao seu ticket #' . $ticketId . '. Confira a resposta.', '/ticket?id=' . $ticketId);
+                notificationsCreate($conn, (int)$ownerRow['user_id'], 'ticket', 'Resposta no seu ticket', 'O suporte respondeu ao seu ticket #' . $ticketId . '. Confira a resposta.', '/ticket_detalhe?id=' . $ticketId);
             }
         } catch (\Throwable $e) { error_log('[Tickets] Notification error: ' . $e->getMessage()); }
     }

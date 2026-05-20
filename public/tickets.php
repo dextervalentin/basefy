@@ -135,6 +135,12 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             <?= htmlspecialchars((string)(ticketCategories()[$ticket['categoria']]['label'] ?? $ticket['categoria'])) ?>
                             &middot; <?= fmtDate((string)$ticket['criado_em']) ?>
                         </p>
+                        <?php if (!empty($ticket['motivo']) || !empty($ticket['resolution_due_at'])): ?>
+                        <p class="text-xs text-zinc-400 mt-1">
+                            <?php if (!empty($ticket['motivo'])): ?>Motivo: <?= htmlspecialchars((string)$ticket['motivo']) ?><?php endif; ?>
+                            <?php if (!empty($ticket['resolution_due_at'])): ?><?= !empty($ticket['motivo']) ? ' · ' : '' ?>Prazo: <?= fmtDate((string)$ticket['resolution_due_at']) ?><?php endif; ?>
+                        </p>
+                        <?php endif; ?>
                     </div>
                     <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-600 group-hover:text-greenx transition-colors mt-1"></i>
                 </div>

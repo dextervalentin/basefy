@@ -95,6 +95,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
         <thead><tr class="text-zinc-400 border-b border-blackx3">
           <th class="text-left py-3 pr-3">ID</th>
           <th class="text-left py-3 pr-3">Categoria</th>
+          <th class="text-left py-3 pr-3">Motivo / Prazo</th>
           <th class="text-left py-3 pr-3">Título</th>
           <th class="text-left py-3 pr-3">Status</th>
           <th class="text-left py-3 pr-3">Data</th>
@@ -106,6 +107,16 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
               data-href="<?= BASE_PATH ?>/ticket_detalhe?id=<?= (int)$row['id'] ?>" tabindex="0">
             <td class="py-3 pr-3 font-mono text-xs">#<?= (int)$row['id'] ?></td>
             <td class="py-3 pr-3 text-xs"><?= htmlspecialchars((string)($cats[$row['categoria']]['label'] ?? $row['categoria'])) ?></td>
+            <td class="py-3 pr-3 text-xs">
+              <?php if (!empty($row['motivo'])): ?>
+                <span class="block text-zinc-200 font-medium"><?= htmlspecialchars((string)$row['motivo']) ?></span>
+              <?php endif; ?>
+              <?php if (!empty($row['resolution_due_at'])): ?>
+                <span class="block text-orange-300">Até <?= fmtDate((string)$row['resolution_due_at']) ?></span>
+              <?php else: ?>
+                <span class="text-zinc-600">-</span>
+              <?php endif; ?>
+            </td>
             <td class="py-3 pr-3 max-w-[200px]"><span class="truncate block"><?= htmlspecialchars((string)$row['titulo']) ?></span></td>
             <td class="py-3 pr-3">
               <span class="px-2.5 py-1 rounded-full text-xs font-medium <?= ticketStatusBadge((string)$row['status']) ?>">
@@ -125,7 +136,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
             </td>
           </tr>
         <?php endforeach; ?>
-        <?php if (!$lista['itens']): ?><tr><td colspan="6" class="py-6 text-zinc-500">Nenhum ticket encontrado.</td></tr><?php endif; ?>
+        <?php if (!$lista['itens']): ?><tr><td colspan="7" class="py-6 text-zinc-500">Nenhum ticket encontrado.</td></tr><?php endif; ?>
         </tbody>
       </table>
     </div>
@@ -188,6 +199,8 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
         '<div><span class="text-zinc-400">ID:</span> #'+tk.id+'</div>'+
         '<div><span class="text-zinc-400">Status:</span> <span class="px-2 py-0.5 rounded-full text-xs font-medium '+statusBadge(tk.status)+'">'+statusLabel(tk.status)+'</span></div>'+
         '<div><span class="text-zinc-400">Categoria:</span> '+escH(cats[tk.categoria]||tk.categoria)+'</div>'+
+        (tk.motivo?'<div><span class="text-zinc-400">Motivo:</span> '+escH(tk.motivo)+'</div>':'')+
+        (tk.resolution_due_at?'<div><span class="text-zinc-400">Prazo:</span> '+fmtDate(tk.resolution_due_at)+'</div>':'')+
         '<div><span class="text-zinc-400">Criado em:</span> '+fmtDate(tk.criado_em)+'</div>'+
         (tk.order_id?'<div><span class="text-zinc-400">Pedido:</span> #'+tk.order_id+'</div>':'')+
         '</div>'+

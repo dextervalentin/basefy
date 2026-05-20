@@ -14,13 +14,15 @@ $msg = '';
 $err = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $days = max(1, min(60, (int)($_POST['auto_release_days'] ?? 7)));
+  $days = max(1, min(60, (int)($_POST['auto_release_days'] ?? 3)));
+  $confirmedHours = max(1, min(168, (int)($_POST['confirmed_release_hours'] ?? 24)));
     $fee = max(0, min(100, (float)($_POST['platform_fee_percent'] ?? 5)));
     $enabled = isset($_POST['auto_release_enabled']) ? '1' : '0';
   $withdrawAutoEnabled = '0';
     $adminId = max(0, (int)($_POST['platform_admin_user_id'] ?? 0));
 
     escrowSettingSet($conn, 'wallet.auto_release_days', (string)$days);
+    escrowSettingSet($conn, 'wallet.confirmed_release_hours', (string)$confirmedHours);
     escrowSettingSet($conn, 'wallet.platform_fee_percent', number_format($fee, 2, '.', ''));
     escrowSettingSet($conn, 'wallet.auto_release_enabled', $enabled);
     escrowSettingSet($conn, 'wallet.withdraw_auto_enabled', $withdrawAutoEnabled);
@@ -53,6 +55,13 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     <div>
       <label class="block text-sm text-zinc-300 mb-1">Dias para auto-liberação</label>
       <input type="number" min="1" max="60" name="auto_release_days" value="<?= (int)$rules['auto_release_days'] ?>" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2">
+      <p class="text-xs text-zinc-500 mt-1">Quando o comprador não confirma a entrega.</p>
+    </div>
+
+    <div>
+      <label class="block text-sm text-zinc-300 mb-1">Horas após confirmação da entrega</label>
+      <input type="number" min="1" max="168" name="confirmed_release_hours" value="<?= (int)$rules['confirmed_release_hours'] ?>" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2">
+      <p class="text-xs text-zinc-500 mt-1">Padrão atual: 24 horas.</p>
     </div>
 
     <div>
