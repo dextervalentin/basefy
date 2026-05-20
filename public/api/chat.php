@@ -51,6 +51,7 @@ try {
         'get_delivery_status' => apiChatGetDeliveryStatus($conn, $userId),
         'admin_conversations' => apiChatAdminConversations($conn, $role),
         'admin_messages'      => apiChatAdminMessages($conn, $role),
+        'admin_send'          => apiChatAdminSend($conn, $userId, $role),
         default         => apiNotFound(),
     };
 } catch (Throwable $e) {
@@ -461,15 +462,19 @@ function apiChatAdminMessages($conn, string $role): void
     $messages = chatGetMessagesAdmin($conn, $convId, $page, 100);
 
     $buyerId = (int)$conv['buyer_id'];
-    $formatted = array_map(function ($m) use ($buyerId) {
+    $vendorId = (int)$conv['vendor_id'];
+    $formatted = array_map(function ($m) use ($buyerId, $vendorId) {
+        $senderId = (int)$m['sender_id'];
         return [
             'id'            => (int)$m['id'],
-            'sender_id'     => (int)$m['sender_id'],
+            'sender_id'     => $senderId,
             'sender_name'   => $m['sender_name'],
             'message'       => $m['message'],
             'criado_em'     => $m['criado_em'],
             'is_read'       => (bool)$m['is_read'],
-            'is_buyer'      => (int)$m['sender_id'] === $buyerId,
+            'is_buyer'      => $senderId === $buyerId,
+            'is_vendor'     => $senderId === $vendorId,
+            'is_admin'      => $senderId !== $buyerId && $senderId !== $vendorId,
         ];
     }, $messages);
 
@@ -486,6 +491,61 @@ function apiChatAdminMessages($conn, string $role): void
         ],
         'messages' => $formatted,
     ]);
+}
+
+function apiChatAdminSend($conn, int $adminId, string $role): void
+{
+    if ($role !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'msg' => 'Acesso negado']);
+        return;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['ok' => false, 'msg' => 'Método não permitido']);
+        return;
+    }
+
+    $convId = (int)($_POST['conversation_id'] ?? 0);
+    $message = trim((string)($_POST['message'] ?? ''));
+
+    if ($convId <= 0 || $message === '') {
+        echo json_encode(['ok' => false, 'msg' => 'Dados incompletos']);
+        return;
+    }
+
+    if (mb_strlen($message) > 2000) {
+        echo json_encode(['ok' => false, 'msg' => 'Mensagem muito longa (máx 2000 caracteres)']);
+        return;
+    }
+
+    $conv = chatGetConversationAdmin($conn, $convId);
+    if (!$conv) {
+        echo json_encode(['ok' => false, 'msg' => 'Conversa não encontrada']);
+        return;
+    }
+
+    $msg = chatSendAdminMessage($conn, $convId, $adminId, $message);
+    if (!$msg) {
+        echo json_encode(['ok' => false, 'msg' => 'Erro ao enviar mensagem']);
+        return;
+    }
+
+    echo json_encode([
+        'ok' => true,
+        'msg' => [
+            'id' => (int)$msg['id'],
+            'sender_id' => (int)$msg['sender_id'],
+            'sender_name' => 'Equipe Basefy',
+            'message' => $msg['message'],
+            'criado_em' => $msg['criado_em'],
+            'is_read' => (bool)($msg['is_read'] ?? false),
+            'is_buyer' => false,
+            'is_vendor' => false,
+            'is_admin' => true,
+        ],
+    ], JSON_UNESCAPED_UNICODE);
 }
 
 // ─── Delivery code confirmation via chat widget ────────────

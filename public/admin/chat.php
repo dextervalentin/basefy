@@ -255,6 +255,15 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 }
 .admin-msg.buyer .admin-msg-sender { color: #A855F7; }
 .admin-msg.vendor .admin-msg-sender { color: #A855F7; }
+.admin-msg.admin {
+    align-self: center;
+    max-width: 90%;
+    background: linear-gradient(135deg, rgba(168,85,247,0.16), rgba(136,0,228,0.08));
+    color: #f3e8ff;
+    border: 1px solid rgba(168,85,247,0.28);
+    box-shadow: 0 12px 32px rgba(88,28,135,0.18);
+}
+.admin-msg.admin .admin-msg-sender { color: #d8b4fe; }
 .admin-msg .admin-msg-time {
     font-size: 10px;
     margin-top: 4px;
@@ -294,6 +303,43 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 }
 .chat-no-data svg { width: 48px; height: 48px; color: #333; margin: 0 auto 12px; }
 .chat-no-data p { font-size: 14px; }
+
+.chat-modal-compose {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, rgba(168,85,247,0.04), rgba(0,0,0,0.2));
+}
+.chat-modal-compose textarea {
+    flex: 1;
+    min-height: 42px;
+    max-height: 120px;
+    resize: vertical;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    outline: none;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+.chat-modal-compose textarea:focus { border-color: rgba(168,85,247,0.45); }
+.chat-modal-send {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, var(--t-accent), var(--t-accent-hover));
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .18s, filter .18s, opacity .18s;
+}
+.chat-modal-send:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.chat-modal-send:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 </style>
 
 <!-- Stats cards -->
@@ -452,6 +498,12 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         <div class="chat-modal-body" id="modalBody">
             <div class="chat-loading"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Carregando…</div>
         </div>
+        <form class="chat-modal-compose" id="chatAdminReplyForm" data-no-transition>
+            <textarea id="chatAdminReply" rows="1" maxlength="2000" placeholder="Responder como Equipe Basefy..."></textarea>
+            <button type="submit" class="chat-modal-send" id="chatAdminReplyBtn" title="Enviar resposta">
+                <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+        </form>
     </div>
 </div>
 
@@ -463,13 +515,19 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     const modalTitle = document.getElementById('modalTitle');
     const modalSubtitle = document.getElementById('modalSubtitle');
     const modalBody = document.getElementById('modalBody');
+    const replyForm = document.getElementById('chatAdminReplyForm');
+    const replyInput = document.getElementById('chatAdminReply');
+    const replyBtn = document.getElementById('chatAdminReplyBtn');
+    let activeConvId = 0;
 
     // View thread
     window.viewThread = async function(convId) {
+        activeConvId = convId;
         modal.classList.add('open');
         modalTitle.textContent = 'Conversa #' + convId;
         modalSubtitle.textContent = 'Carregando…';
         modalBody.innerHTML = '<div class="chat-loading"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Carregando…</div>';
+        if (replyInput) replyInput.value = '';
 
         try {
             const r = await fetch(API + '?action=admin_messages&conversation_id=' + convId);
@@ -502,24 +560,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                     modalBody.appendChild(dateEl);
                 }
 
-                const el = document.createElement('div');
-                el.className = 'admin-msg ' + (m.is_buyer ? 'buyer' : 'vendor');
-
-                const sender = document.createElement('div');
-                sender.className = 'admin-msg-sender';
-                sender.textContent = m.is_buyer ? '🛒 ' + m.sender_name : '🏪 ' + m.sender_name;
-                el.appendChild(sender);
-
-                const text = document.createElement('div');
-                text.textContent = m.message;
-                el.appendChild(text);
-
-                const time = document.createElement('div');
-                time.className = 'admin-msg-time';
-                time.textContent = formatTime(m.criado_em) + (m.is_read ? '' : ' · não lida');
-                el.appendChild(time);
-
-                modalBody.appendChild(el);
+                appendThreadMessage(m);
             });
 
             requestAnimationFrame(() => { modalBody.scrollTop = modalBody.scrollHeight; });
@@ -529,6 +570,35 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             modalBody.innerHTML = '<div class="chat-no-data"><p>Erro ao carregar mensagens</p></div>';
         }
     };
+
+    if (replyForm) {
+        replyForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const text = (replyInput.value || '').trim();
+            if (!activeConvId || !text) return;
+            replyBtn.disabled = true;
+            try {
+                const fd = new FormData();
+                fd.append('conversation_id', activeConvId);
+                fd.append('message', text);
+                const r = await fetch(API + '?action=admin_send', { method: 'POST', body: fd });
+                const j = await r.json();
+                if (!j.ok) {
+                    alert(j.msg || 'Erro ao enviar mensagem.');
+                    return;
+                }
+                appendThreadMessage(j.msg);
+                replyInput.value = '';
+                requestAnimationFrame(() => { modalBody.scrollTop = modalBody.scrollHeight; });
+            } catch(e) {
+                console.error('Admin chat send error', e);
+                alert('Erro ao enviar mensagem.');
+            } finally {
+                replyBtn.disabled = false;
+                replyInput.focus();
+            }
+        });
+    }
 
     // Close modal
     modalClose.addEventListener('click', () => modal.classList.remove('open'));
@@ -544,6 +614,27 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         const d = document.createElement('div');
         d.textContent = s || '';
         return d.innerHTML;
+    }
+
+    function appendThreadMessage(m) {
+        const el = document.createElement('div');
+        el.className = 'admin-msg ' + (m.is_admin ? 'admin' : (m.is_buyer ? 'buyer' : 'vendor'));
+
+        const sender = document.createElement('div');
+        sender.className = 'admin-msg-sender';
+        sender.textContent = m.is_admin ? 'Equipe Basefy' : (m.is_buyer ? 'Comprador: ' + m.sender_name : 'Vendedor: ' + m.sender_name);
+        el.appendChild(sender);
+
+        const text = document.createElement('div');
+        text.textContent = m.is_admin ? String(m.message || '').replace(/^Equipe Basefy:\s*\n?/, '') : m.message;
+        el.appendChild(text);
+
+        const time = document.createElement('div');
+        time.className = 'admin-msg-time';
+        time.textContent = formatTime(m.criado_em) + (m.is_read ? '' : ' · não lida');
+        el.appendChild(time);
+
+        modalBody.appendChild(el);
     }
 
     function formatDateFull(dt) {

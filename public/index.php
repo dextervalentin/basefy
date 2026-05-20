@@ -41,6 +41,36 @@ function homeProductVendorRows($conn, array $filters, int $limit = 40): array
     return $rs ? ($rs->fetch_all(MYSQLI_ASSOC) ?: []) : [];
 }
 
+function homeFindVendorByKeywords($conn, array $keywords): array
+{
+    foreach ($keywords as $keyword) {
+        $keyword = mb_strtolower(trim((string)$keyword));
+        if ($keyword === '') continue;
+        try {
+            $like = '%' . $keyword . '%';
+            $st = $conn->prepare(
+                "SELECT u.id, COALESCE(NULLIF(TRIM(sp.nome_loja), ''), u.nome) AS display_name
+                 FROM users u
+                 LEFT JOIN seller_profiles sp ON sp.user_id = u.id
+                 WHERE LOWER(COALESCE(sp.nome_loja, '')) LIKE ?
+                    OR LOWER(COALESCE(u.nome, '')) LIKE ?
+                    OR LOWER(COALESCE(u.email, '')) LIKE ?
+                 ORDER BY u.id ASC
+                 LIMIT 1"
+            );
+            if (!$st) continue;
+            $st->bind_param('sss', $like, $like, $like);
+            $st->execute();
+            $row = $st->get_result()->fetch_assoc();
+            $st->close();
+            if ($row) {
+                return ['id' => (int)$row['id'], 'name' => (string)($row['display_name'] ?? 'LevelUp')];
+            }
+        } catch (\Throwable $e) {}
+    }
+    return ['id' => 0, 'name' => 'LevelUp'];
+}
+
 function homeListProductsByVendorRounds($conn, array $filters, int $limit, int $maxPerVendor = 2): array
 {
     $buckets = [];
@@ -158,8 +188,13 @@ function homeRenderCatalogProductCard(array $product, callable $stockResolver): 
         if ($variantPrices) $sortPrice = min($variantPrices);
     }
     $createdSort = strtotime((string)($product['criado_em'] ?? $product['created_at'] ?? '')) ?: (int)($product['id'] ?? 0);
-    $salesSort = (int)($product['vendas_total'] ?? $product['vendas'] ?? $product['sales'] ?? 0);
-    if ($productStock <= 0 && !$autoDelivery) {
+    $salesSort = (int)($product['sales_total'] ?? $product['vendas_total'] ?? $product['vendas'] ?? $product['sales'] ?? 0);
+    $productType = mb_strtolower(trim((string)($product['tipo'] ?? 'produto')));
+    $isService = in_array($productType, ['servico', 'serviço', 'service'], true);
+    if ($productStock <= 0 && $isService) {
+        $stockText = 'Serviço';
+        $stockClass = 'text-purple-300/90';
+    } elseif ($productStock <= 0 && !$autoDelivery) {
         $stockText = 'Sem estoque';
         $stockClass = 'text-red-400/80';
     } elseif ($autoDelivery && $productStock <= 0) {
@@ -284,18 +319,21 @@ if ($q !== '') {
     }
 }
 $populares  = [];
-// Resolve "Augusto Gomes" vendor id once (used by Premium tab and "Produtos Premium" slider)
-$premiumVendorId = 0;
-$premiumVendorName = 'Augusto Gomes';
-if ($_r = $conn->query("SELECT id, nome FROM users WHERE LOWER(TRIM(nome)) LIKE 'augusto gomes%' ORDER BY id ASC LIMIT 1")) {
-    if ($row = $_r->fetch_assoc()) { $premiumVendorId = (int)$row['id']; $premiumVendorName = (string)$row['nome']; }
-}
-if ($premiumVendorId > 0) {
-    $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $premiumVendorId]);
+$spotlightVendor = homeFindVendorByKeywords($conn, ['levelup', 'level up']);
+$spotlightVendorId = (int)$spotlightVendor['id'];
+$spotlightVendorName = (string)$spotlightVendor['name'];
+if ($spotlightVendorId > 0) {
+    $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $spotlightVendorId, 'order' => 'best_sellers']);
+    if (!$populares) {
+        $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $spotlightVendorId]);
+    }
 }
 if (!$populares) {
     $populares = sfListProducts($conn, ['limit' => 10, 'order' => 'best_sellers']);
 }
+$spotlightSubtitle = $spotlightVendorId > 0
+    ? 'Mais vendidos da ' . $spotlightVendorName
+    : 'Produtos mais vendidos da plataforma';
 $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'
@@ -1112,23 +1150,24 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     </section>
     <?php endif; ?>
 
-    <!-- =========== PRODUTOS PREMIUM =========== -->
+    <!-- =========== PRODUTOS EM DESTAQUE =========== -->
     <?php if ($populares && $q === ''): ?>
     <section class="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-14">
         <div class="flex items-center justify-between mb-8 sm:mb-10">
             <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider mb-3">
-                    <i data-lucide="crown" class="w-3 h-3"></i>
-                    Premium
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-greenx/10 border border-greenx/25 text-greenx text-[11px] font-bold uppercase tracking-wider mb-3">
+                    <i data-lucide="sparkles" class="w-3 h-3"></i>
+                    Destaques
                 </div>
-                <h2 class="text-2xl sm:text-3xl font-bold">Produtos Premium</h2>
+                <h2 class="text-2xl sm:text-3xl font-bold">Produtos em destaque</h2>
+                <p class="text-sm text-zinc-500 mt-1"><?= htmlspecialchars($spotlightSubtitle, ENT_QUOTES, 'UTF-8') ?></p>
             </div>
-            <a href="<?= BASE_PATH ?>/#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-300 hover:underline font-semibold">Ver catálogo <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
+            <a href="<?= BASE_PATH ?>/#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver catálogo <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
         <div class="premium-slider" data-premium-slider>
           <div class="premium-track" data-premium-track>
             <?php foreach ($populares as $i => $p): ?>
-                    <article class="premium-card product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-amber-400/30 hover:shadow-2xl hover:shadow-amber-400/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> snap-start">
+                    <article class="premium-card product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> snap-start">
                 <a href="<?= sfProductUrl($p) ?>" class="block relative overflow-hidden">
                     <div class="aspect-square overflow-hidden bg-blackx">
                         <img src="<?= htmlspecialchars(sfImageUrl((string)($p['imagem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
@@ -1175,7 +1214,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </article>
             <?php endforeach; ?>
                     </div>
-                    <div class="premium-dots" data-premium-dots aria-label="Navegação dos produtos premium"></div>
+                    <div class="premium-dots" data-premium-dots aria-label="Navegação dos produtos em destaque"></div>
         </div>
                 <style>
                     .premium-slider { position:relative; overflow:hidden; padding:.15rem .05rem .25rem; }
@@ -1186,7 +1225,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     .premium-card img, .premium-card a { -webkit-user-drag:none; user-drag:none; }
                     .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:1rem; }
                     .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; cursor:pointer; transition:width .25s ease, background .25s ease; }
-                    .premium-dot.is-active { width:1.5rem; background:#f59e0b; }
+                    .premium-dot.is-active { width:1.5rem; background:var(--t-accent,#8800E4); }
                     @media (max-width:1023px){ .premium-card { flex-basis:calc((100% - 2rem) / 3); } }
                     @media (max-width:639px){ .premium-track{ gap:.75rem; } .premium-card { flex-basis:calc((100% - .75rem) / 2); } }
                 </style>

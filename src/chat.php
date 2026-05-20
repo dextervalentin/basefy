@@ -321,6 +321,51 @@ function chatSendSystemMessage($conn, int $conversationId, int $senderId, string
     return $msg;
 }
 
+function chatSendAdminMessage($conn, int $conversationId, int $adminId, string $message): ?array
+{
+    $conversationId = (int)$conversationId;
+    $adminId = (int)$adminId;
+    chatEnsureTables($conn);
+
+    $message = trim($message);
+    if ($conversationId <= 0 || $adminId <= 0 || $message === '') return null;
+
+    $conv = chatGetConversationAdmin($conn, $conversationId);
+    if (!$conv) return null;
+
+    $fullMessage = "Equipe Basefy:\n" . $message;
+
+    $st = $conn->prepare(
+        "INSERT INTO chat_messages (conversation_id, sender_id, message) VALUES (?, ?, ?) RETURNING *"
+    );
+    if (!$st) return null;
+    $st->bind_param('iis', $conversationId, $adminId, $fullMessage);
+    $st->execute();
+    $msg = $st->get_result()->fetch_assoc();
+    $st->close();
+
+    if (!$msg) return null;
+
+    $st = $conn->prepare("UPDATE chat_conversations SET last_message_at = CURRENT_TIMESTAMP, buyer_archived = FALSE, vendor_archived = FALSE WHERE id = ?");
+    if ($st) {
+        $st->bind_param('i', $conversationId);
+        $st->execute();
+        $st->close();
+    }
+
+    try {
+        $buyerId = (int)($conv['buyer_id'] ?? 0);
+        $vendorId = (int)($conv['vendor_id'] ?? 0);
+        foreach ([$buyerId, $vendorId] as $recipientId) {
+            if ($recipientId > 0 && $recipientId !== $adminId) {
+                notificationsCreate($conn, $recipientId, 'chat', 'Mensagem da Equipe Basefy', 'A moderação enviou uma mensagem no chat do pedido.', '/dashboard?open_chat=' . $conversationId);
+            }
+        }
+    } catch (\Throwable $e) { error_log('[Chat] Admin notification error: ' . $e->getMessage()); }
+
+    return $msg;
+}
+
 /**
  * Auto-open chat after purchase: creates conversation, sends auto instructions,
  * delivery content, and delivery code — all as vendor messages.

@@ -72,8 +72,10 @@ $_ftLoggedIn = !empty($_SESSION['user_id']) && (int)$_SESSION['user_id'] > 0;
             </div>
         </div>
 
-        <div class="mt-10 pt-6 border-t border-white/[0.06] flex items-center justify-center">
+        <div class="mt-10 pt-6 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 text-center">
             <p class="text-xs text-zinc-600">&copy; <?= date('Y') ?> Basefy. Todos os direitos reservados.</p>
+            <span class="hidden sm:inline text-zinc-700">&middot;</span>
+            <p class="text-xs text-zinc-600">CNPJ 66.287.316/0001-14</p>
         </div>
     </div>
 </footer>
