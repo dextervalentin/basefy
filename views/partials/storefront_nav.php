@@ -386,6 +386,9 @@ $_isPendingVendor = false;
   btn.addEventListener('click', open);
   if (close) close.addEventListener('click', shut);
   overlay.addEventListener('click', shut);
+    drawer.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', shut);
+    });
 
   // Close on resize to desktop
   window.addEventListener('resize', () => {

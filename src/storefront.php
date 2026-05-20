@@ -655,19 +655,8 @@ function sfListCategories($conn, string $tipo = '', bool $featuredOnly = false, 
     return $rs ? ($rs->fetch_all(MYSQLI_ASSOC) ?: []) : [];
 }
 
-function sfListProducts($conn, array $filters = []): array
+function sfProductFilterParts(array $filters, array $cols): array
 {
-    _sfBackfillSlugs($conn);
-    _sfEnsureCategorySlugColumn($conn);
-    _sfEnsureVendorSlugColumn($conn);
-
-    $cols = sfProductColumns($conn);
-    if ($cols['vendor'] === null || $cols['category'] === null) {
-        return [];
-    }
-
-    $imageExpr = $cols['image'] ? ('p.' . $cols['image']) : "''";
-    $featuredExpr = $cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE)') : 'FALSE';
     $where = [];
     $types = '';
     $params = [];
@@ -676,7 +665,6 @@ function sfListProducts($conn, array $filters = []): array
         $where[] = 'p.' . $cols['active'] . ' = 1';
     }
 
-    // Only show approved products on the storefront
     if ($cols['approval_status'] !== null) {
         $where[] = "COALESCE(p." . $cols['approval_status'] . ", 'aprovado') = 'aprovado'";
     }
@@ -688,13 +676,13 @@ function sfListProducts($conn, array $filters = []): array
         $params[] = $productId;
     }
 
-    $q = trim((string)($filters['q'] ?? ''));
-    if ($q !== '') {
+    $queryText = trim((string)($filters['q'] ?? ''));
+    if ($queryText !== '') {
         $where[] = '(p.nome LIKE ? OR p.descricao LIKE ?)';
         $types .= 'ss';
-        $like = '%' . $q . '%';
-        $params[] = $like;
-        $params[] = $like;
+        $likeQuery = '%' . $queryText . '%';
+        $params[] = $likeQuery;
+        $params[] = $likeQuery;
     }
 
     $categoryId = (int)($filters['category_id'] ?? 0);
@@ -712,11 +700,65 @@ function sfListProducts($conn, array $filters = []): array
     }
 
     if (!empty($filters['featured_only'])) {
-        if ($cols['featured'] === null) return [];
-        $where[] = 'p.' . $cols['featured'] . ' = TRUE';
+        if ($cols['featured'] === null) {
+            $where[] = '1 = 0';
+        } else {
+            $where[] = 'p.' . $cols['featured'] . ' = TRUE';
+        }
     }
 
+    return [$where, $types, $params];
+}
+
+function sfCountProducts($conn, array $filters = []): int
+{
+    _sfBackfillSlugs($conn);
+    _sfEnsureCategorySlugColumn($conn);
+    _sfEnsureVendorSlugColumn($conn);
+
+    $cols = sfProductColumns($conn);
+    if ($cols['vendor'] === null || $cols['category'] === null) {
+        return 0;
+    }
+
+    [$where, $types, $params] = sfProductFilterParts($filters, $cols);
+    $sql = 'SELECT COUNT(*) AS total FROM products p';
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) return 0;
+    if ($types !== '') {
+        $bind = array_merge([$types], $params);
+        $refs = [];
+        foreach ($bind as $index => $value) {
+            $refs[$index] = &$bind[$index];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+    }
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+    return (int)($row['total'] ?? 0);
+}
+
+function sfListProducts($conn, array $filters = []): array
+{
+    _sfBackfillSlugs($conn);
+    _sfEnsureCategorySlugColumn($conn);
+    _sfEnsureVendorSlugColumn($conn);
+
+    $cols = sfProductColumns($conn);
+    if ($cols['vendor'] === null || $cols['category'] === null) {
+        return [];
+    }
+
+    $imageExpr = $cols['image'] ? ('p.' . $cols['image']) : "''";
+    $featuredExpr = $cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE)') : 'FALSE';
+    [$where, $types, $params] = sfProductFilterParts($filters, $cols);
     $limit = max(1, min(100, (int)($filters['limit'] ?? 24)));
+    $offset = max(0, (int)($filters['offset'] ?? 0));
     $order = (string)($filters['order'] ?? 'default');
     $salesJoin = '';
     $salesSelect = '';
@@ -757,6 +799,9 @@ function sfListProducts($conn, array $filters = []): array
     }
 
     $sql .= ' ORDER BY ' . $salesOrder . ($cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE) DESC, ') : '') . 'p.id DESC LIMIT ' . $limit;
+    if ($offset > 0) {
+        $sql .= ' OFFSET ' . $offset;
+    }
 
     $st = $conn->prepare($sql);
     if (!$st) {

@@ -77,6 +77,182 @@ function homeListProductsByVendorRounds($conn, array $filters, int $limit, int $
     return $result;
 }
 
+function homeCatalogResolveCategory(array $categories, string $slug): ?array
+{
+    $wanted = mb_strtolower(trim($slug));
+    if ($wanted === '') return null;
+    foreach ($categories as $category) {
+        if (mb_strtolower(trim((string)($category['slug'] ?? ''))) === $wanted) {
+            return $category;
+        }
+    }
+    return null;
+}
+
+function homeCatalogStockMap($conn, array $products): array
+{
+    $autoIds = [];
+    foreach ($products as $product) {
+        if (!empty($product['auto_delivery_enabled'])) {
+            $autoIds[(int)$product['id']] = true;
+        }
+    }
+    if (!$autoIds) return [];
+
+    $ids = array_keys($autoIds);
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $types = str_repeat('i', count($ids));
+    $sql = "SELECT product_id, COUNT(*) AS c FROM product_stock_items WHERE status='disponivel' AND product_id IN ($placeholders) GROUP BY product_id";
+    $stockMap = [];
+    if ($stmt = $conn->prepare($sql)) {
+        $bind = array_merge([$types], $ids);
+        $refs = [];
+        foreach ($bind as $index => $value) { $refs[$index] = &$bind[$index]; }
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+        if ($stmt->execute()) {
+            $result = $stmt->get_result();
+            while ($row = $result->fetch_assoc()) {
+                $stockMap[(int)$row['product_id']] = (int)$row['c'];
+            }
+        }
+        $stmt->close();
+    }
+    return $stockMap;
+}
+
+function homeCatalogStockOf(array $product, array $stockMap): array
+{
+    $autoDelivery = !empty($product['auto_delivery_enabled']);
+    $productId = (int)($product['id'] ?? 0);
+    if ($autoDelivery) {
+        $quantity = $stockMap[$productId] ?? 0;
+    } else {
+        $variantsRaw = $product['variantes'] ?? null;
+        $variants = is_string($variantsRaw) ? (json_decode($variantsRaw, true) ?: []) : (is_array($variantsRaw) ? $variantsRaw : []);
+        $variantStock = 0;
+        foreach ($variants as $variant) {
+            if (is_array($variant)) $variantStock += (int)($variant['quantidade'] ?? 0);
+        }
+        $quantity = $variantStock > 0 ? $variantStock : (int)($product['quantidade'] ?? 0);
+    }
+    return ['qty' => (int)$quantity, 'auto' => $autoDelivery];
+}
+
+function homeRenderCatalogProductCard(array $product, callable $stockResolver): string
+{
+    $stock = $stockResolver($product);
+    $productStock = (int)$stock['qty'];
+    $autoDelivery = (bool)$stock['auto'];
+    $productName = (string)($product['nome'] ?? 'Produto');
+    $vendorName = (string)($product['vendedor_nome'] ?? '');
+    $productUrl = sfProductUrl($product);
+    $productImage = sfImageUrl((string)($product['imagem'] ?? ''));
+    $sortPrice = (float)($product['preco'] ?? 0);
+    $variantsRaw = $product['variantes'] ?? null;
+    $variants = is_string($variantsRaw) ? (json_decode($variantsRaw, true) ?: []) : (is_array($variantsRaw) ? $variantsRaw : []);
+    if ($sortPrice <= 0 && $variants) {
+        $variantPrices = [];
+        foreach ($variants as $variant) {
+            if (is_array($variant) && (float)($variant['preco'] ?? 0) > 0) $variantPrices[] = (float)$variant['preco'];
+        }
+        if ($variantPrices) $sortPrice = min($variantPrices);
+    }
+    $createdSort = strtotime((string)($product['criado_em'] ?? $product['created_at'] ?? '')) ?: (int)($product['id'] ?? 0);
+    $salesSort = (int)($product['vendas_total'] ?? $product['vendas'] ?? $product['sales'] ?? 0);
+    if ($productStock <= 0 && !$autoDelivery) {
+        $stockText = 'Sem estoque';
+        $stockClass = 'text-red-400/80';
+    } elseif ($autoDelivery && $productStock <= 0) {
+        $stockText = 'Digital';
+        $stockClass = 'text-zinc-500';
+    } elseif ($productStock > 0 && $productStock <= 5) {
+        $stockText = 'Últimas ' . $productStock . 'un';
+        $stockClass = 'text-amber-400 font-medium';
+    } else {
+        $stockText = $productStock . ' em estoque';
+        $stockClass = 'text-zinc-500';
+    }
+
+    ob_start();
+    ?>
+    <a href="<?= htmlspecialchars($productUrl, ENT_QUOTES, 'UTF-8') ?>"
+       class="catalog-product group flex items-center gap-2.5 bg-blackx2 border border-white/[0.06] rounded-xl p-2 hover:border-greenx/40 hover:shadow-[0_8px_24px_rgba(136,0,228,0.08)] transition-all duration-200"
+       data-name="<?= htmlspecialchars(mb_strtolower($productName), ENT_QUOTES, 'UTF-8') ?>"
+       data-vendor="<?= htmlspecialchars(mb_strtolower($vendorName), ENT_QUOTES, 'UTF-8') ?>"
+       data-price="<?= htmlspecialchars((string)$sortPrice, ENT_QUOTES, 'UTF-8') ?>"
+       data-created="<?= htmlspecialchars((string)$createdSort, ENT_QUOTES, 'UTF-8') ?>"
+       data-sales="<?= htmlspecialchars((string)$salesSort, ENT_QUOTES, 'UTF-8') ?>"
+       title="<?= htmlspecialchars($productName, ENT_QUOTES, 'UTF-8') ?>">
+        <div class="relative shrink-0 w-12 h-12 rounded-md overflow-hidden bg-blackx">
+            <img src="<?= htmlspecialchars($productImage, ENT_QUOTES, 'UTF-8') ?>" alt=""
+                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
+        </div>
+        <div class="flex-1 min-w-0">
+            <h3 class="text-[12px] sm:text-[13px] font-semibold text-zinc-100 line-clamp-1 leading-tight group-hover:text-greenx transition-colors">
+                <?= htmlspecialchars($productName, ENT_QUOTES, 'UTF-8') ?>
+            </h3>
+            <div class="flex items-baseline gap-1.5 mt-0.5">
+                <span class="text-[12px] sm:text-[13px] font-bold text-white"><?= sfDisplayPrice($product) ?></span>
+            </div>
+            <div class="flex items-center justify-between gap-2 mt-1">
+                <?php if ($vendorName !== ''): ?>
+                <span class="flex items-center gap-1 min-w-0 text-[10px] text-zinc-500">
+                    <i data-lucide="store" class="w-2.5 h-2.5 text-greenx/80 shrink-0"></i>
+                    <span class="truncate"><?= htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') ?></span>
+                </span>
+                <?php else: ?><span></span><?php endif; ?>
+                <span class="flex items-center gap-1 shrink-0 text-[10px] <?= $stockClass ?>">
+                    <i data-lucide="package" class="w-2.5 h-2.5"></i>
+                    <?= htmlspecialchars($stockText, ENT_QUOTES, 'UTF-8') ?>
+                </span>
+            </div>
+        </div>
+    </a>
+    <?php
+    return trim((string)ob_get_clean());
+}
+
+function homeBuildCatalogPayload($conn, array $categories, string $catSlug, string $query, int $page, int $perPage): array
+{
+    $activeCategory = homeCatalogResolveCategory($categories, $catSlug);
+    $filters = [];
+    $label = 'Todos os produtos';
+    $icon = 'layout-grid';
+    if ($query !== '') {
+        $filters['q'] = $query;
+        $label = 'Resultados para "' . $query . '"';
+        $icon = 'search';
+    } elseif ($activeCategory) {
+        $filters['category_id'] = (int)$activeCategory['id'];
+        $label = (string)$activeCategory['nome'];
+    }
+
+    $total = sfCountProducts($conn, $filters);
+    $page = max(1, $page);
+    $offset = ($page - 1) * $perPage;
+    $products = sfListProducts($conn, array_merge($filters, ['limit' => $perPage, 'offset' => $offset]));
+    $stockMap = homeCatalogStockMap($conn, $products);
+    $stockResolver = static fn(array $product): array => homeCatalogStockOf($product, $stockMap);
+    $html = '';
+    foreach ($products as $product) {
+        $html .= homeRenderCatalogProductCard($product, $stockResolver);
+    }
+
+    return [
+        'ok' => true,
+        'cat' => $activeCategory ? (string)$activeCategory['slug'] : '',
+        'label' => $label,
+        'icon' => $icon,
+        'sub' => $total . ' produtos disponíveis',
+        'html' => $html,
+        'page' => $page,
+        'perPage' => $perPage,
+        'shown' => min($total, $page * $perPage),
+        'total' => $total,
+        'hasMore' => ($page * $perPage) < $total,
+    ];
+}
+
 $userId     = (int)($_SESSION['user_id'] ?? 0);
 $userRole   = (string)($_SESSION['user']['role'] ?? 'usuario');
 $isLoggedIn = $userId > 0;
@@ -129,108 +305,28 @@ $homeCategorias = array_slice($categorias, 0, 12);
 // === Catalog (Commit D): sidebar all-categories + horizontal list cards + live search ===
 require_once dirname(__DIR__) . '/src/stock_items.php';
 
-// $premiumVendorId / $premiumVendorName resolved earlier (above $populares)
-$catalogIsPremium = (string)($_GET['premium'] ?? '') === '1';
-
 $catalogCatSlug = trim((string)($_GET['cat'] ?? ''));
-$catalogCatId = 0;
-$catalogActiveCategory = null;
-if ($catalogCatSlug !== '') {
-    foreach ($categorias as $catItem) {
-        if (mb_strtolower(trim((string)($catItem['slug'] ?? ''))) === mb_strtolower($catalogCatSlug)) {
-            $catalogActiveCategory = $catItem;
-            $catalogCatId = (int)($catItem['id'] ?? 0);
-            break;
-        }
-    }
-}
+$catalogQuery = trim((string)($_GET['q'] ?? ''));
+$catalogPage = max(1, (int)($_GET['page'] ?? 1));
+$catalogPerPage = 24;
+$catalogActiveCategory = homeCatalogResolveCategory($categorias, $catalogCatSlug);
 
-// Counts per category — usar sfListProducts garante match exato com sfListados
+// Counts per category use the same storefront filters as the visible list.
 $catalogCounts = [];
-$catalogTotalCount = 0;
+$catalogTotalCount = sfCountProducts($conn);
 foreach ($categorias as $catItem) {
     $_cid = (int)($catItem['id'] ?? 0);
     if ($_cid <= 0) continue;
-    $_n = count(sfListProducts($conn, ['category_id' => $_cid, 'limit' => 100]));
+    $_n = sfCountProducts($conn, ['category_id' => $_cid]);
     if ($_n > 0) $catalogCounts[$_cid] = $_n;
-    $catalogTotalCount += $_n;
 }
 
-// Catalog sections
-$catalogSections = []; // [ ['key'=>..., 'label'=>..., 'icon'=>..., 'sub'=>..., 'products'=>[...], 'category'=>?, 'href'=>?] ]
-if ($q !== '') {
-    $catalogSections[] = [
-        'key' => 'busca', 'label' => 'Resultados para "' . $q . '"', 'icon' => 'search',
-        'sub' => '', 'products' => sfListProducts($conn, ['limit' => 40, 'q' => $q]),
-    ];
-} elseif ($catalogIsPremium && $premiumVendorId > 0) {
-    $catalogSections[] = [
-        'key' => 'premium', 'label' => 'Produtos Premium', 'icon' => 'crown',
-        'sub' => 'Produtos exclusivos',
-        'products' => sfListProducts($conn, ['limit' => 40, 'vendor_id' => $premiumVendorId]),
-    ];
-} elseif ($catalogActiveCategory) {
-    $catalogSections[] = [
-        'key' => 'cat-' . (int)$catalogActiveCategory['id'],
-        'label' => (string)$catalogActiveCategory['nome'],
-        'icon' => 'layout-grid', 'sub' => 'Produtos desta categoria',
-        'products' => sfListProducts($conn, ['limit' => 40, 'category_id' => (int)$catalogActiveCategory['id']]),
-        'category' => $catalogActiveCategory,
-    ];
-} else {
-    // "Todos" — uma única lista com todos os produtos
-    $catalogSections[] = [
-        'key' => 'todos', 'label' => 'Todos os produtos', 'icon' => 'layout-grid',
-        'sub' => $catalogTotalCount . ' produtos disponíveis',
-        'products' => sfListProducts($conn, ['limit' => 100]),
-    ];
+$catalogPayload = homeBuildCatalogPayload($conn, $categorias, $catalogCatSlug, $catalogQuery, $catalogPage, $catalogPerPage);
+if ((string)($_GET['ajax'] ?? '') === 'catalog') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($catalogPayload, JSON_UNESCAPED_UNICODE);
+    exit;
 }
-
-// Batch resolve real stock for auto-delivery products in all sections
-$catalogStockMap = [];
-$_autoIds = [];
-foreach ($catalogSections as $sec) {
-    foreach ($sec['products'] as $pp) {
-        if (!empty($pp['auto_delivery_enabled'])) $_autoIds[(int)$pp['id']] = true;
-    }
-}
-if ($_autoIds) {
-    $_ids = array_keys($_autoIds);
-    $_in = implode(',', array_fill(0, count($_ids), '?'));
-    $_types = str_repeat('i', count($_ids));
-    $_sql = "SELECT product_id, COUNT(*) AS c FROM product_stock_items WHERE status='disponivel' AND product_id IN ($_in) GROUP BY product_id";
-    if ($st = $conn->prepare($_sql)) {
-        $_bind = array_merge([$_types], $_ids);
-        $_refs = [];
-        foreach ($_bind as $k => $v) { $_refs[$k] = &$_bind[$k]; }
-        call_user_func_array([$st, 'bind_param'], $_refs);
-        if ($st->execute()) {
-            $rr = $st->get_result();
-            while ($row = $rr->fetch_assoc()) { $catalogStockMap[(int)$row['product_id']] = (int)$row['c']; }
-        }
-        $st->close();
-    }
-}
-// Helper to compute display stock for a product
-$catalogStockOf = function(array $p) use ($catalogStockMap): array {
-    $auto = !empty($p['auto_delivery_enabled']);
-    $pid  = (int)($p['id'] ?? 0);
-    if ($auto) {
-        $qty = $catalogStockMap[$pid] ?? 0;
-    } else {
-        // Try variantes JSON first (multi-variant products store stock there)
-        $variantes = $p['variantes'] ?? null;
-        $varArr = is_string($variantes) ? (json_decode($variantes, true) ?: []) : (is_array($variantes) ? $variantes : []);
-        $varStock = 0;
-        if ($varArr) {
-            foreach ($varArr as $v) {
-                if (is_array($v)) $varStock += (int)($v['quantidade'] ?? 0);
-            }
-        }
-        $qty = $varStock > 0 ? $varStock : (int)($p['quantidade'] ?? 0);
-    }
-    return ['qty' => (int)$qty, 'auto' => $auto];
-};
 
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 $homeFeaturedCategory = null;
@@ -506,28 +602,20 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
     <!-- =========== CATALOGO — Sidebar todas categorias + horizontal cards + busca live (Commit D) =========== -->
     <section id="catalogo" class="max-w-[1440px] mx-auto px-3 sm:px-6 py-8 sm:py-12">
-        <div class="catalog-shell grid gap-4 sm:gap-5 lg:grid-cols-[200px_minmax(0,1fr)] items-start" data-catalog>
+        <div class="catalog-shell grid gap-4 sm:gap-5 lg:grid-cols-[200px_minmax(0,1fr)] items-start" data-catalog data-active-cat="<?= htmlspecialchars((string)($catalogPayload['cat'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
 
             <!-- ============ SIDEBAR (desktop fixed / mobile = popup overlay) ============ -->
             <aside id="catalogSidebar" class="catalog-sidebar hidden lg:block rounded-2xl border border-white/[0.06] bg-blackx2/70 backdrop-blur-sm p-2.5 self-start lg:sticky lg:top-24">
                 <div class="flex items-center justify-between px-1.5 mb-3">
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-9 h-9 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center shrink-0">
-                            <i data-lucide="layout-grid" class="w-4 h-4 text-greenx"></i>
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-sm font-bold text-white leading-tight">Categorias</p>
-                            <p class="text-[11px] text-zinc-500 leading-tight">Filtre seus ativos</p>
-                        </div>
-                    </div>
+                    <p class="text-sm font-bold text-white leading-tight">Categorias</p>
                     <button type="button" class="lg:hidden text-zinc-500 hover:text-white" onclick="catalogClosePopup()" aria-label="Fechar">
                         <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
                 <ul class="catalog-cat-list flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto pr-0.5">
                     <li>
-                        <a href="<?= BASE_PATH ?>/"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= (!$catalogActiveCategory && !$catalogIsPremium && $q === '') ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                                <a href="<?= BASE_PATH ?>/#catalogo" data-catalog-cat=""
+                                    class="cat-filter-link <?= (!$catalogActiveCategory && $catalogQuery === '') ? 'is-active' : '' ?> flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent">
                             <span class="flex items-center gap-1.5 truncate">
                                 <i data-lucide="package" class="w-3.5 h-3.5 shrink-0"></i>
                                 <span class="truncate">Todos</span>
@@ -535,18 +623,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             <span class="text-[10px] font-bold text-zinc-500 shrink-0"><?= (int)$catalogTotalCount ?></span>
                         </a>
                     </li>
-                    <?php if ($premiumVendorId > 0): ?>
-                    <li>
-                        <a href="<?= BASE_PATH ?>/?premium=1#catalogo"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= $catalogIsPremium ? 'bg-gradient-to-r from-amber-400/20 to-yellow-300/10 text-amber-300 border border-amber-400/40 shadow-[0_0_18px_rgba(251,191,36,0.22)]' : 'text-amber-200/80 hover:bg-amber-400/[0.06] hover:text-amber-300 border border-transparent' ?>">
-                            <span class="flex items-center gap-1.5 truncate">
-                                <i data-lucide="crown" class="w-3.5 h-3.5 shrink-0"></i>
-                                <span class="truncate">Premium</span>
-                            </span>
-                            <i data-lucide="sparkles" class="w-3 h-3 text-amber-400 shrink-0"></i>
-                        </a>
-                    </li>
-                    <?php endif; ?>
                     <?php
                     // Map known category names to lucide icons
                     $catIconMap = [
@@ -577,8 +653,8 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         }
                     ?>
                     <li>
-                        <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars($_cslug, ENT_QUOTES, 'UTF-8') ?>#catalogo"
-                           class="cat-filter-link flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all <?= $_isActive ? 'bg-greenx/15 text-greenx border border-greenx/30 shadow-[0_0_18px_rgba(136,0,228,0.18)]' : 'text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent' ?>">
+                                <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars($_cslug, ENT_QUOTES, 'UTF-8') ?>#catalogo" data-catalog-cat="<?= htmlspecialchars($_cslug, ENT_QUOTES, 'UTF-8') ?>"
+                                    class="cat-filter-link <?= $_isActive ? 'is-active' : '' ?> flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[12px] font-medium transition-all text-zinc-300 hover:bg-white/[0.04] hover:text-white border border-transparent">
                             <span class="flex items-center gap-1.5 min-w-0">
                                 <i data-lucide="<?= $_icon ?>" class="w-3.5 h-3.5 shrink-0"></i>
                                 <span class="truncate"><?= htmlspecialchars($_cname, ENT_QUOTES, 'UTF-8') ?></span>
@@ -595,7 +671,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <!-- Search input (live filter) -->
                 <div class="relative mb-4">
                     <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"></i>
-                    <input type="text" id="catalogSearch" placeholder="Buscar produtos..."
+                          <input type="text" id="catalogSearch" placeholder="Buscar produtos..." value="<?= htmlspecialchars($catalogQuery, ENT_QUOTES, 'UTF-8') ?>"
                            class="w-full bg-blackx2/70 border border-white/[0.06] rounded-xl pl-10 pr-10 py-2.5 sm:py-3 text-[13px] sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-greenx/50 transition-colors">
                     <button type="button" id="catalogSearchClear" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white" aria-label="Limpar">
                         <i data-lucide="x" class="w-4 h-4"></i>
@@ -620,107 +696,36 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
                 <!-- Sections container -->
                 <div id="catalogSections" class="flex flex-col gap-6">
-                    <?php foreach ($catalogSections as $sec):
-                        $secKey = (string)$sec['key'];
-                        $secProducts = $sec['products'] ?? [];
-                        if (!$secProducts) continue;
-                    ?>
-                    <section class="catalog-section" data-section-key="<?= htmlspecialchars($secKey, ENT_QUOTES, 'UTF-8') ?>">
+                    <section class="catalog-section" data-section-key="catalog">
                         <div class="flex items-center gap-2 mb-3">
                             <div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-greenx/10 text-greenx border border-greenx/20">
-                                <i data-lucide="<?= htmlspecialchars((string)($sec['icon'] ?? 'tag'), ENT_QUOTES, 'UTF-8') ?>" class="w-3.5 h-3.5"></i>
-                                <h2 class="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider"><?= htmlspecialchars((string)$sec['label'], ENT_QUOTES, 'UTF-8') ?></h2>
+                                <i id="catalogSectionIcon" data-lucide="<?= htmlspecialchars((string)($catalogPayload['icon'] ?? 'layout-grid'), ENT_QUOTES, 'UTF-8') ?>" class="w-3.5 h-3.5"></i>
+                                <h2 id="catalogSectionTitle" class="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider"><?= htmlspecialchars((string)($catalogPayload['label'] ?? 'Todos os produtos'), ENT_QUOTES, 'UTF-8') ?></h2>
                             </div>
-                            <?php if (!empty($sec['sub'])): ?>
-                            <span class="text-[11px] text-zinc-500 truncate"><?= htmlspecialchars((string)$sec['sub'], ENT_QUOTES, 'UTF-8') ?></span>
-                            <?php endif; ?>
+                            <span id="catalogSectionSub" class="text-[11px] text-zinc-500 truncate"><?= htmlspecialchars((string)($catalogPayload['sub'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span>
                             <div class="flex-1 h-px bg-white/[0.06]"></div>
-                            <?php if (!empty($sec['category'])): ?>
-                            <a href="<?= BASE_PATH ?>/?cat=<?= htmlspecialchars((string)$sec['category']['slug'], ENT_QUOTES, 'UTF-8') ?>#catalogo" class="text-[11px] font-semibold text-greenx hover:underline shrink-0 hidden sm:inline">Ver mais</a>
-                            <?php endif; ?>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" data-products-grid>
-                            <?php foreach ($secProducts as $p):
-                                $st = $catalogStockOf($p);
-                                $pStock = (int)$st['qty'];
-                                $pAuto = (bool)$st['auto'];
-                                $pName = (string)($p['nome'] ?? 'Produto');
-                                $pVendor = (string)($p['vendedor_nome'] ?? '');
-                                $pUrl = sfProductUrl($p);
-                                $pImg = sfImageUrl((string)($p['imagem'] ?? ''));
-                                $pSortPrice = (float)($p['preco'] ?? 0);
-                                $pVarsRaw = $p['variantes'] ?? null;
-                                $pVars = is_string($pVarsRaw) ? (json_decode($pVarsRaw, true) ?: []) : (is_array($pVarsRaw) ? $pVarsRaw : []);
-                                if ($pSortPrice <= 0 && $pVars) {
-                                    $varPrices = [];
-                                    foreach ($pVars as $pv) {
-                                        if (is_array($pv) && (float)($pv['preco'] ?? 0) > 0) $varPrices[] = (float)$pv['preco'];
-                                    }
-                                    if ($varPrices) $pSortPrice = min($varPrices);
-                                }
-                                $pCreatedSort = strtotime((string)($p['criado_em'] ?? $p['created_at'] ?? '')) ?: (int)($p['id'] ?? 0);
-                                $pSalesSort = (int)($p['vendas_total'] ?? $p['vendas'] ?? $p['sales'] ?? 0);
-                                // stock badge — last few / muted
-                                if ($pStock <= 0 && !$pAuto) {
-                                    $stockTxt = 'Sem estoque'; $stockCls = 'text-red-400/80';
-                                } elseif ($pAuto && $pStock <= 0) {
-                                    $stockTxt = 'Digital'; $stockCls = 'text-zinc-500';
-                                } elseif ($pStock > 0 && $pStock <= 5) {
-                                    $stockTxt = 'Últimas ' . $pStock . 'un'; $stockCls = 'text-amber-400 font-medium';
-                                } else {
-                                    $stockTxt = $pStock . ' em estoque'; $stockCls = 'text-zinc-500';
-                                }
-                            ?>
-                            <a href="<?= htmlspecialchars($pUrl, ENT_QUOTES, 'UTF-8') ?>"
-                               class="catalog-product group flex items-center gap-2.5 bg-blackx2 border border-white/[0.06] rounded-xl p-2 hover:border-greenx/40 hover:shadow-[0_8px_24px_rgba(136,0,228,0.08)] transition-all duration-200"
-                               data-name="<?= htmlspecialchars(mb_strtolower($pName), ENT_QUOTES, 'UTF-8') ?>"
-                               data-vendor="<?= htmlspecialchars(mb_strtolower($pVendor), ENT_QUOTES, 'UTF-8') ?>"
-                               data-price="<?= htmlspecialchars((string)$pSortPrice, ENT_QUOTES, 'UTF-8') ?>"
-                               data-created="<?= htmlspecialchars((string)$pCreatedSort, ENT_QUOTES, 'UTF-8') ?>"
-                               data-sales="<?= htmlspecialchars((string)$pSalesSort, ENT_QUOTES, 'UTF-8') ?>"
-                               title="<?= htmlspecialchars($pName, ENT_QUOTES, 'UTF-8') ?>">
-                                <div class="relative shrink-0 w-12 h-12 rounded-md overflow-hidden bg-blackx">
-                                    <img src="<?= htmlspecialchars($pImg, ENT_QUOTES, 'UTF-8') ?>" alt=""
-                                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="text-[12px] sm:text-[13px] font-semibold text-zinc-100 line-clamp-1 leading-tight group-hover:text-greenx transition-colors">
-                                        <?= htmlspecialchars($pName, ENT_QUOTES, 'UTF-8') ?>
-                                    </h3>
-                                    <div class="flex items-baseline gap-1.5 mt-0.5">
-                                        <span class="text-[12px] sm:text-[13px] font-bold text-white"><?= sfDisplayPrice($p) ?></span>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-2 mt-1">
-                                        <?php if ($pVendor !== ''): ?>
-                                        <span class="flex items-center gap-1 min-w-0 text-[10px] text-zinc-500">
-                                            <i data-lucide="store" class="w-2.5 h-2.5 text-greenx/80 shrink-0"></i>
-                                            <span class="truncate"><?= htmlspecialchars($pVendor, ENT_QUOTES, 'UTF-8') ?></span>
-                                        </span>
-                                        <?php else: ?><span></span><?php endif; ?>
-                                        <span class="flex items-center gap-1 shrink-0 text-[10px] <?= $stockCls ?>">
-                                            <i data-lucide="package" class="w-2.5 h-2.5"></i>
-                                            <?= htmlspecialchars($stockTxt, ENT_QUOTES, 'UTF-8') ?>
-                                        </span>
-                                    </div>
-                                </div>
-                            </a>
-                            <?php endforeach; ?>
+                        <div id="catalogProductsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" data-products-grid>
+                            <?= $catalogPayload['html'] ?? '' ?>
+                        </div>
+
+                        <div id="catalogPager" class="<?= !empty($catalogPayload['hasMore']) ? '' : 'hidden' ?> mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-blackx2/70 px-4 py-3">
+                            <span id="catalogPageInfo" class="text-xs text-zinc-500"><?= (int)($catalogPayload['shown'] ?? 0) ?> de <?= (int)($catalogPayload['total'] ?? 0) ?> produtos</span>
+                            <button type="button" id="catalogLoadMore" class="inline-flex items-center justify-center gap-2 rounded-xl bg-greenx hover:bg-greenx2 text-white font-bold px-4 py-2.5 text-xs transition-colors">
+                                Mostrar mais produtos
+                                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                            </button>
                         </div>
                     </section>
-                    <?php endforeach; ?>
 
-                    <!-- Empty state -->
-                    <?php if (!$catalogSections || (count($catalogSections) === 1 && empty($catalogSections[0]['products']))): ?>
-                    <div class="rounded-2xl border border-white/[0.06] bg-blackx2 p-10 sm:p-14 text-center">
+                    <div id="catalogEmptyState" class="<?= (int)($catalogPayload['total'] ?? 0) > 0 ? 'hidden' : '' ?> rounded-2xl border border-white/[0.06] bg-blackx2 p-10 sm:p-14 text-center">
                         <div class="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
                             <i data-lucide="package-open" class="w-6 h-6 text-zinc-600"></i>
                         </div>
                         <h3 class="text-base font-semibold text-zinc-300">Nenhum produto encontrado</h3>
                         <p class="text-sm text-zinc-500 mt-2">Tente outra categoria ou limpe a busca.</p>
-                        <a href="<?= BASE_PATH ?>/" class="inline-flex mt-5 rounded-xl bg-white/[0.06] border border-white/[0.08] px-5 py-2.5 text-sm text-zinc-300 hover:text-white hover:border-greenx/40 transition-all">Ver tudo</a>
                     </div>
-                    <?php endif; ?>
 
                     <!-- No results from live search -->
                     <div id="catalogNoResults" class="hidden rounded-2xl border border-white/[0.06] bg-blackx2 p-8 text-center">
@@ -737,11 +742,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
     <style>
       /* Sidebar popup animation (mobile only) */
+            .cat-filter-link.is-active { background: rgba(var(--t-accent-rgb), .15); color: var(--t-accent); border-color: rgba(var(--t-accent-rgb), .30); box-shadow: 0 0 18px rgba(136,0,228,.18); }
+            .catalog-shell.is-loading #catalogProductsGrid { opacity: .55; }
       @media (max-width: 1023px) {
-                .catalog-sidebar { position: fixed; inset: 0; width: 100%; height: 100vh; height: 100dvh; max-height: none; z-index: 80; border-radius: 0; padding: 1rem; overflow-y: auto; opacity: 0; visibility: hidden; transform: none; transition: opacity .2s ease, visibility .2s ease; box-shadow: none; pointer-events: none; }
-                .catalog-sidebar.is-open { display: block !important; opacity: 1; visibility: visible; pointer-events: auto; }
-                .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 92px); }
-                #catalogSidebarBackdrop.is-open { display: block; z-index: 70; animation: catBackdropIn .25s ease; }
+                                .catalog-sidebar { position: fixed; inset: 0; width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; z-index: 90; border-radius: 0; padding: 1rem; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(100%); transition: transform .24s cubic-bezier(.22,1,.36,1); box-shadow: none; pointer-events: none; }
+                                .catalog-sidebar.is-open { display: block !important; transform: translateX(0); pointer-events: auto; }
+                                .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 76px); }
+                                #catalogSidebarBackdrop.is-open { display: none; }
         @keyframes catBackdropIn { from { opacity: 0; } to { opacity: 1; } }
       }
       .catalog-product.is-hidden { display: none; }
@@ -751,70 +758,145 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
     <script>
     (function(){
       'use strict';
-      var input = document.getElementById('catalogSearch');
-      var clearBtn = document.getElementById('catalogSearchClear');
+            var root = document.querySelector('[data-catalog]');
+            var input = document.getElementById('catalogSearch');
+            var clearBtn = document.getElementById('catalogSearchClear');
             var sortSelect = document.getElementById('catalogMobileSort');
-      var noRes  = document.getElementById('catalogNoResults');
+            var noRes  = document.getElementById('catalogNoResults');
       var sidebar = document.getElementById('catalogSidebar');
       var backdrop = document.getElementById('catalogSidebarBackdrop');
+            var grid = document.getElementById('catalogProductsGrid');
+            var title = document.getElementById('catalogSectionTitle');
+            var subtitle = document.getElementById('catalogSectionSub');
+            var icon = document.getElementById('catalogSectionIcon');
+            var pager = document.getElementById('catalogPager');
+            var pageInfo = document.getElementById('catalogPageInfo');
+            var loadMore = document.getElementById('catalogLoadMore');
+            var emptyState = document.getElementById('catalogEmptyState');
       if (!input) return;
+            var basePath = <?= json_encode(BASE_PATH, JSON_UNESCAPED_SLASHES) ?>;
+            var state = { cat: root ? (root.getAttribute('data-active-cat') || '') : '', page: 1, query: input.value.trim() };
+            var loading = false;
+            var searchTimer = null;
 
             function sortCatalog(){
-                if (!sortSelect) return;
+                if (!sortSelect || !grid) return;
                 var mode = sortSelect.value || 'recentes';
-                document.querySelectorAll('[data-products-grid]').forEach(function(grid){
-                    var cards = Array.prototype.slice.call(grid.querySelectorAll('.catalog-product'));
-                    cards.sort(function(a,b){
-                        var ap = parseFloat(a.getAttribute('data-price') || '0');
-                        var bp = parseFloat(b.getAttribute('data-price') || '0');
-                        var ac = parseFloat(a.getAttribute('data-created') || '0');
-                        var bc = parseFloat(b.getAttribute('data-created') || '0');
-                        var as = parseFloat(a.getAttribute('data-sales') || '0');
-                        var bs = parseFloat(b.getAttribute('data-sales') || '0');
-                        if (mode === 'menor') return ap - bp;
-                        if (mode === 'maior') return bp - ap;
-                        if (mode === 'vendidos') return bs - as;
-                        return bc - ac;
-                    });
-                    cards.forEach(function(card){ grid.appendChild(card); });
+                var cards = Array.prototype.slice.call(grid.querySelectorAll('.catalog-product'));
+                cards.sort(function(first, second){
+                    var firstPrice = parseFloat(first.getAttribute('data-price') || '0');
+                    var secondPrice = parseFloat(second.getAttribute('data-price') || '0');
+                    var firstCreated = parseFloat(first.getAttribute('data-created') || '0');
+                    var secondCreated = parseFloat(second.getAttribute('data-created') || '0');
+                    var firstSales = parseFloat(first.getAttribute('data-sales') || '0');
+                    var secondSales = parseFloat(second.getAttribute('data-sales') || '0');
+                    if (mode === 'menor') return firstPrice - secondPrice;
+                    if (mode === 'maior') return secondPrice - firstPrice;
+                    if (mode === 'vendidos') return secondSales - firstSales;
+                    return secondCreated - firstCreated;
+                });
+                cards.forEach(function(card){ grid.appendChild(card); });
+            }
+
+            function setActiveCategory(cat){
+                document.querySelectorAll('[data-catalog-cat]').forEach(function(link){
+                    link.classList.toggle('is-active', (link.getAttribute('data-catalog-cat') || '') === cat);
                 });
             }
 
-      function applyFilter(){
-        var q = (input.value || '').toLowerCase().trim();
-        clearBtn.classList.toggle('hidden', !q);
-        var sections = document.querySelectorAll('.catalog-section');
-        var totalShown = 0;
-        sections.forEach(function(sec){
-          var cards = sec.querySelectorAll('.catalog-product');
-          var shown = 0;
-          cards.forEach(function(c){
-            var n = c.getAttribute('data-name') || '';
-            var v = c.getAttribute('data-vendor') || '';
-            var match = !q || n.indexOf(q) >= 0 || v.indexOf(q) >= 0;
-            c.classList.toggle('is-hidden', !match);
-            if (match) shown++;
-          });
-          sec.classList.toggle('is-empty', shown === 0);
-          totalShown += shown;
-        });
-        if (noRes) noRes.classList.toggle('hidden', totalShown > 0 || !q);
-      }
+            function catalogUrl(){
+                var params = new URLSearchParams();
+                if (state.cat) params.set('cat', state.cat);
+                if (state.query) params.set('q', state.query);
+                var query = params.toString();
+                return basePath + '/' + (query ? '?' + query : '') + '#catalogo';
+            }
 
-      input.addEventListener('input', applyFilter);
-      clearBtn.addEventListener('click', function(){ input.value = ''; applyFilter(); input.focus(); });
-    if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
+            function updatePager(data){
+                if (pageInfo) pageInfo.textContent = data.shown + ' de ' + data.total + ' produtos';
+                if (pager) pager.classList.toggle('hidden', !data.hasMore);
+                if (loadMore) loadMore.disabled = !data.hasMore;
+            }
 
-      // Mobile sidebar popup (no scroll-lock — page continues to scroll behind it)
+            function applyCatalog(data, append){
+                state.cat = data.cat || '';
+                state.page = parseInt(data.page || '1', 10) || 1;
+                if (title) title.textContent = data.label || 'Todos os produtos';
+                if (subtitle) subtitle.textContent = data.sub || '';
+                if (icon) icon.setAttribute('data-lucide', data.icon || 'layout-grid');
+                if (grid) {
+                    if (append) grid.insertAdjacentHTML('beforeend', data.html || '');
+                    else grid.innerHTML = data.html || '';
+                }
+                if (emptyState) emptyState.classList.toggle('hidden', parseInt(data.total || '0', 10) > 0);
+                if (noRes) noRes.classList.add('hidden');
+                setActiveCategory(state.query ? '__none__' : state.cat);
+                updatePager(data);
+                sortCatalog();
+                if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
+            }
+
+            function fetchCatalog(options){
+                options = options || {};
+                if (loading || !grid) return;
+                var append = !!options.append;
+                if (typeof options.cat === 'string') state.cat = options.cat;
+                if (typeof options.query === 'string') state.query = options.query;
+                state.page = append ? state.page + 1 : 1;
+                clearBtn.classList.toggle('hidden', !state.query);
+                var params = new URLSearchParams();
+                params.set('ajax', 'catalog');
+                params.set('page', String(state.page));
+                if (state.cat) params.set('cat', state.cat);
+                if (state.query) params.set('q', state.query);
+                loading = true;
+                if (root) root.classList.add('is-loading');
+                if (loadMore) loadMore.disabled = true;
+                fetch(basePath + '/?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function(response){ return response.json(); })
+                    .then(function(data){
+                        if (!data || !data.ok) throw new Error('catalog');
+                        applyCatalog(data, append);
+                        if (options.updateUrl && window.history && window.history.replaceState) window.history.replaceState(null, '', catalogUrl());
+                    })
+                    .catch(function(){ if (noRes) noRes.classList.remove('hidden'); })
+                    .finally(function(){
+                        loading = false;
+                        if (root) root.classList.remove('is-loading');
+                        if (loadMore) loadMore.disabled = false;
+                    });
+            }
+
+            document.querySelectorAll('[data-catalog-cat]').forEach(function(link){
+                link.addEventListener('click', function(event){
+                    event.preventDefault();
+                    input.value = '';
+                    fetchCatalog({ cat: link.getAttribute('data-catalog-cat') || '', query: '', updateUrl: true });
+                    window.catalogClosePopup();
+                });
+            });
+            input.addEventListener('input', function(){
+                window.clearTimeout(searchTimer);
+                searchTimer = window.setTimeout(function(){ fetchCatalog({ query: input.value.trim(), updateUrl: true }); }, 260);
+            });
+            clearBtn.addEventListener('click', function(){ input.value = ''; fetchCatalog({ query: '', updateUrl: true }); input.focus(); });
+            if (loadMore) loadMore.addEventListener('click', function(){ fetchCatalog({ append: true, updateUrl: false }); });
+            if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
+
+            // Mobile category drawer, full-screen on phones.
       window.catalogOpenPopup = function(){
         if (!sidebar) return;
-        sidebar.classList.add('is-open');
-        if (backdrop){ backdrop.classList.remove('hidden'); backdrop.classList.add('is-open'); }
+                sidebar.classList.remove('hidden');
+                if (backdrop){ backdrop.classList.add('hidden'); backdrop.classList.remove('is-open'); }
+                document.body.style.overflow = 'hidden';
+                window.requestAnimationFrame(function(){ sidebar.classList.add('is-open'); });
       };
       window.catalogClosePopup = function(){
         if (!sidebar) return;
         sidebar.classList.remove('is-open');
-        if (backdrop){ backdrop.classList.remove('is-open'); setTimeout(function(){ backdrop.classList.add('hidden'); }, 240); }
+                document.body.style.overflow = '';
+                if (backdrop){ backdrop.classList.remove('is-open'); backdrop.classList.add('hidden'); }
+                window.setTimeout(function(){ if (!sidebar.classList.contains('is-open')) sidebar.classList.add('hidden'); }, 260);
       };
       document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
     })();
@@ -843,7 +925,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
             <div class="relative min-w-0 flex-1">
                 <h3 class="text-lg sm:text-xl font-bold text-white leading-tight">Comunidade <span class="text-emerald-300">Basefy</span></h3>
-                <p class="text-[13px] sm:text-sm text-zinc-400 mt-1 leading-relaxed max-w-3xl">Entre para o grupo oficial da Basefy e conecte-se com pessoas<br>do mercado de tráfego, performance e ativos digitais.</p>
+                <p class="text-[13px] sm:text-sm text-zinc-400 mt-1 leading-relaxed max-w-3xl">Entre para o grupo oficial da Basefy e conecte-se com pessoas<br class="hidden lg:block">do mercado de tráfego, performance e ativos digitais.</p>
             </div>
             <span class="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-white font-bold px-5 py-2.5 text-[13px] shadow-lg shadow-emerald-500/30 transition-all">
                 Acessar grupo <i data-lucide="arrow-right" class="w-4 h-4"></i>
@@ -973,7 +1055,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 </div>
                 <h2 class="text-2xl sm:text-3xl font-bold">Produtos Premium</h2>
             </div>
-            <a href="<?= BASE_PATH ?>/?premium=1#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-300 hover:underline font-semibold">Ver todos <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
+            <a href="<?= BASE_PATH ?>/#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-300 hover:underline font-semibold">Ver catálogo <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
         <div class="premium-slider" data-premium-slider>
           <div class="premium-track" data-premium-track>
