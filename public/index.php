@@ -71,6 +71,77 @@ function homeFindVendorByKeywords($conn, array $keywords): array
     return ['id' => 0, 'name' => 'LevelUp'];
 }
 
+function homeLevelUpOfficialBestSellerRules(): array
+{
+    return [
+        ['title' => 'US Perfil Envelhecido de 2023~2025 / 2FA + Cookies / Para Aquecimento / Sem Garantia', 'tokens' => ['us', 'perfil', 'envelhecido', '2023', '2025', '2fa', 'cookies', 'aquecimento', 'sem', 'garantia']],
+        ['title' => 'Email Outlook/Hotmail/ 2020~2025/ 2FA + Email verificação', 'tokens' => ['email', 'outlook', 'hotmail', '2020', '2025', '2fa', 'email', 'verificacao']],
+        ['title' => 'Perfil Mix antigo / Sem Fanpages / Com 0~5.000 Amigos / 2FA+Cookies / Não paga imposto meta 13% / Sem Garantia', 'tokens' => ['perfil', 'mix', 'antigo', 'sem', 'fanpages', '5000', 'amigos', '2fa', 'cookies', 'imposto', 'meta', 'sem', 'garantia']],
+        ['title' => 'BM0+3 Contas de Anuncio / Fica ilimitada / Acesso via link de convite', 'tokens' => ['bm0', '3', 'contas', 'anuncio', 'fica', 'ilimitada', 'acesso', 'link', 'convite']],
+        ['title' => 'Perfil Tiktok MIX/ Criado em 2025/ Email Outlook/ Ads disponível', 'tokens' => ['perfil', 'tiktok', 'mix', 'criado', '2025', 'email', 'outlook', 'ads', 'disponivel']],
+        ['title' => 'US Perfil Envelhecido de 2012 / 300~2K Seguidores / Aquecimento em Publicações / 2FA - Cookies - Proxy 90 Dias', 'tokens' => ['us', 'perfil', 'envelhecido', '2012', '300', '2k', 'seguidores', 'aquecimento', 'publicacoes', '2fa', 'cookies', 'proxy', '90', 'dias']],
+        ['title' => 'BR Proxy Fixa / Https / Duração até 10 Dias / 24h garantia', 'tokens' => ['br', 'proxy', 'fixa', 'https', 'duracao', '10', 'dias', '24h', 'garantia']],
+    ];
+}
+
+function homeProductSearchKey(array $product): string
+{
+    return sfGenerateSlug(trim((string)($product['slug'] ?? '') . ' ' . (string)($product['nome'] ?? '')));
+}
+
+function homeProductMatchesRule(array $product, array $rule): bool
+{
+    $key = homeProductSearchKey($product);
+    if ($key === '') return false;
+
+    $ruleSlug = sfGenerateSlug((string)($rule['title'] ?? ''));
+    if ($ruleSlug !== '' && str_contains('-' . $key . '-', '-' . $ruleSlug . '-')) {
+        return true;
+    }
+
+    foreach (($rule['tokens'] ?? []) as $token) {
+        if (!str_contains($key, (string)$token)) return false;
+    }
+    return true;
+}
+
+function homeListLevelUpBestSellers($conn, int $vendorId, int $limit = 10): array
+{
+    if ($vendorId <= 0) return [];
+
+    $vendorProducts = sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId]);
+    if (!$vendorProducts) return [];
+
+    $selected = [];
+    $seen = [];
+    foreach (homeLevelUpOfficialBestSellerRules() as $rule) {
+        foreach ($vendorProducts as $product) {
+            $id = (int)($product['id'] ?? 0);
+            if ($id <= 0 || isset($seen[$id]) || !homeProductMatchesRule($product, $rule)) continue;
+            $selected[] = $product;
+            $seen[$id] = true;
+            break;
+        }
+        if (count($selected) >= $limit) return $selected;
+    }
+
+    $fallbackPools = [
+        sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId, 'order' => 'best_sellers']),
+        $vendorProducts,
+    ];
+    foreach ($fallbackPools as $pool) {
+        foreach ($pool as $product) {
+            $id = (int)($product['id'] ?? 0);
+            if ($id <= 0 || isset($seen[$id])) continue;
+            $selected[] = $product;
+            $seen[$id] = true;
+            if (count($selected) >= $limit) return $selected;
+        }
+    }
+
+    return $selected;
+}
+
 function homeListProductsByVendorRounds($conn, array $filters, int $limit, int $maxPerVendor = 2): array
 {
     $buckets = [];
@@ -323,10 +394,7 @@ $spotlightVendor = homeFindVendorByKeywords($conn, ['levelup', 'level up']);
 $spotlightVendorId = (int)$spotlightVendor['id'];
 $spotlightVendorName = (string)$spotlightVendor['name'];
 if ($spotlightVendorId > 0) {
-    $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $spotlightVendorId, 'order' => 'best_sellers']);
-    if (!$populares) {
-        $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $spotlightVendorId]);
-    }
+    $populares = homeListLevelUpBestSellers($conn, $spotlightVendorId, 10);
 }
 $spotlightSubtitle = $spotlightVendorId > 0
     ? 'Mais vendidos da ' . $spotlightVendorName

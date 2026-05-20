@@ -767,7 +767,7 @@ function sfListProducts($conn, array $filters = []): array
         $orderItemCols = sfTableColumns($conn, 'order_items');
         if (in_array('product_id', $orderItemCols, true)) {
             $moderationWhere = in_array('moderation_status', $orderItemCols, true)
-                ? "WHERE COALESCE(moderation_status, 'aprovada') <> 'rejeitado'"
+                ? "WHERE COALESCE(moderation_status, 'aprovada') = 'aprovada'"
                 : '';
             $subtotalExpr = in_array('subtotal', $orderItemCols, true) ? 'COALESCE(SUM(subtotal), 0)' : '0';
             $salesJoin = "
