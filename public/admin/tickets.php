@@ -24,13 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = trim((string)($_POST['mensagem'] ?? ''));
         $adminId = (int)($_SESSION['user_id'] ?? 0);
         if (strlen($msg) >= 3) {
-            ticketAddMessage($conn, $ticketId, $adminId, $msg, true);
+          [$sent, $replyMsg] = ticketAddMessage($conn, $ticketId, $adminId, $msg, true);
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
-                echo json_encode(['ok' => true, 'msg' => 'Resposta enviada com sucesso.']);
+            echo json_encode(['ok' => $sent, 'msg' => $sent ? 'Resposta enviada com sucesso.' : $replyMsg], JSON_UNESCAPED_UNICODE);
                 exit;
             }
-            $ok = 'Resposta enviada.';
+          if ($sent) $ok = 'Resposta enviada.'; else $erro = $replyMsg;
         } else {
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
                 header('Content-Type: application/json');
@@ -47,6 +47,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
             header('Content-Type: application/json');
             echo json_encode(['ok' => $success, 'msg' => $msg]);
+            exit;
+        }
+        if ($success) $ok = $msg; else $erro = $msg;
+    }
+
+    if ($acao === 'dispute_decision' && $ticketId > 0) {
+        $decision = (string)($_POST['decision'] ?? '');
+        $note = (string)($_POST['mensagem'] ?? '');
+        $adminId = (int)($_SESSION['user_id'] ?? 0);
+        [$success, $msg] = ticketResolveDispute($conn, $ticketId, $adminId, $decision, $note);
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => $success, 'msg' => $msg, 'status' => $decision], JSON_UNESCAPED_UNICODE);
             exit;
         }
         if ($success) $ok = $msg; else $erro = $msg;
@@ -79,6 +92,8 @@ $lista = ticketsList($conn, $f, $pagina, $pp);
 
 $statusCounts = ticketsCountByStatus($conn);
 $cats = ticketCategories();
+$statusOptions = ticketStatusOptions();
+$manualStatusOptions = ticketManualStatusOptions();
 
 $pageTitle  = 'Suporte';
 $activeMenu = 'suporte';
@@ -94,7 +109,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 <div class="">
   <?php include __DIR__ . '/../../views/partials/admin_suporte_tabs.php'; ?>
   <!-- Stats cards -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
     <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">
       <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Total</p>
       <p class="text-2xl font-bold mt-1"><?= array_sum($statusCounts) ?></p>
@@ -110,6 +125,18 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">
       <p class="text-[10px] uppercase tracking-wider text-greenx font-semibold">Respondidos</p>
       <p class="text-2xl font-bold mt-1 text-greenx"><?= (int)($statusCounts['respondido'] ?? 0) ?></p>
+    </div>
+    <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">
+      <p class="text-[10px] uppercase tracking-wider text-greenx font-semibold">Resolvidos</p>
+      <p class="text-2xl font-bold mt-1 text-greenx"><?= (int)($statusCounts['resolvido'] ?? 0) ?></p>
+    </div>
+    <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">
+      <p class="text-[10px] uppercase tracking-wider text-red-300 font-semibold">Não resolvidos</p>
+      <p class="text-2xl font-bold mt-1 text-red-300"><?= (int)($statusCounts['nao_resolvido'] ?? 0) ?></p>
+    </div>
+    <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 text-center">
+      <p class="text-[10px] uppercase tracking-wider text-blue-300 font-semibold">Reembolsos</p>
+      <p class="text-2xl font-bold mt-1 text-blue-300"><?= (int)($statusCounts['reembolsado'] ?? 0) ?></p>
     </div>
   </div>
 
@@ -128,10 +155,9 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
           <label class="block text-xs text-zinc-500 mb-1">Status</label>
           <select name="status" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 outline-none focus:border-greenx">
             <option value="">Todos</option>
-            <option value="aberto" <?= $f['status'] === 'aberto' ? 'selected' : '' ?>>Aberto</option>
-            <option value="em_andamento" <?= $f['status'] === 'em_andamento' ? 'selected' : '' ?>>Em Andamento</option>
-            <option value="respondido" <?= $f['status'] === 'respondido' ? 'selected' : '' ?>>Respondido</option>
-            <option value="fechado" <?= $f['status'] === 'fechado' ? 'selected' : '' ?>>Fechado</option>
+            <?php foreach ($statusOptions as $statusKey => $statusLabel): ?>
+            <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $f['status'] === $statusKey ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
+            <?php endforeach; ?>
           </select>
         </div>
         <div class="md:w-48">
@@ -203,10 +229,12 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 </button>
                 <select class="js-tk-status-select rounded-lg bg-blackx border border-blackx3 text-xs px-2 py-1.5 outline-none focus:border-greenx cursor-pointer"
                         data-id="<?= (int)$row['id'] ?>" data-current="<?= htmlspecialchars((string)$row['status']) ?>">
-                  <option value="aberto" <?= $row['status'] === 'aberto' ? 'selected' : '' ?>>Aberto</option>
-                  <option value="em_andamento" <?= $row['status'] === 'em_andamento' ? 'selected' : '' ?>>Em Andamento</option>
-                  <option value="respondido" <?= $row['status'] === 'respondido' ? 'selected' : '' ?>>Respondido</option>
-                  <option value="fechado" <?= $row['status'] === 'fechado' ? 'selected' : '' ?>>Fechado</option>
+                  <?php if (!isset($manualStatusOptions[(string)$row['status']])): ?>
+                  <option value="<?= htmlspecialchars((string)$row['status'], ENT_QUOTES, 'UTF-8') ?>" selected disabled><?= htmlspecialchars(ticketStatusLabel((string)$row['status']), ENT_QUOTES, 'UTF-8') ?></option>
+                  <?php endif; ?>
+                  <?php foreach ($manualStatusOptions as $statusKey => $statusLabel): ?>
+                  <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $row['status'] === $statusKey ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                  <?php endforeach; ?>
                 </select>
               </div>
             </td>
@@ -243,6 +271,9 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
   function fmtDate(s){ if(!s)return'-'; try{var d=new Date(s.replace(' ','T'));return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return s;} }
   function statusBadge(s){
     s=(s||'').toLowerCase();
+    if(s==='reembolsado')return'bg-blue-500/15 border border-blue-400/40 text-blue-300';
+    if(s==='resolvido')return'bg-greenx/15 border border-greenx/40 text-greenx';
+    if(s==='nao_resolvido')return'bg-red-500/15 border border-red-400/40 text-red-300';
     if(s==='respondido')return'bg-greenx/15 border border-greenx/40 text-greenx';
     if(s==='em_andamento')return'bg-greenx/15 border border-greenx/40 text-purple-300';
     if(s==='fechado')return'bg-zinc-500/15 border border-zinc-400/40 text-zinc-300';
@@ -252,9 +283,13 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     if(s==='aberto')return'Aberto';
     if(s==='em_andamento')return'Em Andamento';
     if(s==='respondido')return'Respondido';
+    if(s==='resolvido')return'Resolvido';
+    if(s==='nao_resolvido')return'Não resolvido';
+    if(s==='reembolsado')return'Reembolsado';
     if(s==='fechado')return'Fechado';
     return s;
   }
+  function isFinalStatus(s){ return ['resolvido','nao_resolvido','reembolsado','fechado'].indexOf((s||'').toLowerCase()) !== -1; }
   function toast(m,ok){
     var box=document.getElementById('admin-toast');
     if(!box){box=document.createElement('div');box.id='admin-toast';box.className='fixed top-8 right-4 z-[9999] px-4 py-2 rounded-lg border text-sm shadow-lg transition-opacity duration-200 opacity-0';document.body.appendChild(box);}
@@ -313,8 +348,21 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             '<p class="text-sm whitespace-pre-wrap">'+escH(m.mensagem)+'</p></div>';
         });
       }
+      if(tk.categoria==='pedido_disputa' && tk.order_id && !isFinalStatus(tk.status)){
+        html+='<div class="mt-4 p-3 rounded-xl border border-purple-400/20 bg-purple-500/10">'+
+        '<p class="text-xs font-semibold text-purple-200 mb-2">Decisão da disputa</p>'+
+        '<div class="grid sm:grid-cols-3 gap-2 mb-2">'+
+        '<label class="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-blackx/60 p-2 text-xs cursor-pointer"><input type="radio" name="dlgDecision" value="resolvido"> Resolvida</label>'+
+        '<label class="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-blackx/60 p-2 text-xs cursor-pointer"><input type="radio" name="dlgDecision" value="nao_resolvido"> Não resolvida</label>'+
+        '<label class="flex items-center gap-2 rounded-lg border border-blue-400/25 bg-blue-500/10 p-2 text-xs cursor-pointer"><input type="radio" name="dlgDecision" value="reembolsado"> Reembolsar</label>'+
+        '</div>'+
+        '<textarea id="dlgDecisionMsg" rows="3" class="w-full bg-blackx border border-blackx3 rounded-xl p-3 text-sm outline-none focus:border-greenx resize-y" placeholder="Explique a decisão para o comprador e para o histórico administrativo..."></textarea>'+
+        '<div class="flex justify-end mt-2">'+
+        '<button id="dlgDecisionBtn" data-id="'+tk.id+'" class="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white font-semibold px-4 py-2 text-xs hover:bg-purple-500 transition">'+
+        '<i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Registrar decisão</button></div></div>';
+      }
       // Reply form
-      if(tk.status!=='fechado'){
+      if(!isFinalStatus(tk.status)){
         html+='<div class="mt-4 pt-3 border-t border-blackx3">'+
         '<label class="text-xs text-zinc-500 mb-1 block">Responder como Admin</label>'+
         '<textarea id="dlgReplyMsg" rows="3" class="w-full bg-blackx border border-blackx3 rounded-xl p-3 text-sm outline-none focus:border-greenx resize-y" placeholder="Digite sua resposta..."></textarea>'+
@@ -338,6 +386,28 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
           var j2=await r2.json();
           if(j2.ok){toast('Resposta enviada!',true);dlg.close();location.reload();}
           else{toast(j2.msg||'Erro',false);}
+        });
+      }
+      var dbtn=body.querySelector('#dlgDecisionBtn');
+      if(dbtn){
+        dbtn.addEventListener('click',async function(){
+          var checked=body.querySelector('input[name="dlgDecision"]:checked');
+          var txt=body.querySelector('#dlgDecisionMsg').value.trim();
+          if(!checked){toast('Selecione uma decisão.',false);return;}
+          if(txt.length<5){toast('Informe uma observação maior.',false);return;}
+          if(checked.value==='reembolsado' && !confirm('Confirmar reembolso do pedido #' + tk.order_id + '? O valor volta para a carteira do comprador.')) return;
+          dbtn.disabled=true;
+          try{
+            var fd=new FormData();
+            fd.append('acao','dispute_decision');
+            fd.append('id',dbtn.dataset.id);
+            fd.append('decision',checked.value);
+            fd.append('mensagem',txt);
+            var r3=await fetch('tickets',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}});
+            var j3=await r3.json();
+            if(j3.ok){toast(j3.msg||'Decisão registrada.',true);dlg.close();location.reload();}
+            else{toast(j3.msg||'Erro ao registrar decisão.',false);dbtn.disabled=false;}
+          }catch(err){toast('Erro ao registrar decisão.',false);dbtn.disabled=false;}
         });
       }
     }catch(err){body.innerHTML='<p class="text-red-400">Falha na requisição.</p>';}

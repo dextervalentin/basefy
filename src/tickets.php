@@ -127,6 +127,39 @@ function ticketDisputeReasonLabel(string $key): string
     return $reasons[$key] ?? '';
 }
 
+function ticketStatusOptions(): array
+{
+    return [
+        'aberto' => 'Aberto',
+        'em_andamento' => 'Em Andamento',
+        'respondido' => 'Respondido',
+        'resolvido' => 'Resolvido',
+        'nao_resolvido' => 'Não resolvido',
+        'reembolsado' => 'Reembolsado',
+        'fechado' => 'Fechado',
+    ];
+}
+
+function ticketManualStatusOptions(): array
+{
+    return [
+        'aberto' => 'Aberto',
+        'em_andamento' => 'Em Andamento',
+        'respondido' => 'Respondido',
+        'fechado' => 'Fechado',
+    ];
+}
+
+function ticketFinalStatuses(): array
+{
+    return ['resolvido', 'nao_resolvido', 'reembolsado', 'fechado'];
+}
+
+function ticketIsFinalStatus(string $status): bool
+{
+    return in_array(strtolower(trim($status)), ticketFinalStatuses(), true);
+}
+
 /**
  * Create a new ticket
  */
@@ -181,7 +214,7 @@ function ticketsList($conn, array $filters = [], int $page = 1, int $pp = 10): a
     $q      = trim((string)($filters['q'] ?? ''));
     $cat    = (string)($filters['categoria'] ?? '');
 
-    if (in_array($status, ['aberto', 'em_andamento', 'respondido', 'fechado'], true)) {
+    if (isset(ticketStatusOptions()[$status])) {
         $where .= ' AND t.status = ?';
         $types .= 's';
         $params[] = $status;
@@ -231,8 +264,11 @@ function ticketsList($conn, array $filters = [], int $page = 1, int $pp = 10): a
                     WHEN 'aberto' THEN 1
                     WHEN 'em_andamento' THEN 2
                     WHEN 'respondido' THEN 3
-                    WHEN 'fechado' THEN 4
-                    ELSE 5
+                    WHEN 'resolvido' THEN 4
+                    WHEN 'nao_resolvido' THEN 5
+                    WHEN 'reembolsado' THEN 6
+                    WHEN 'fechado' THEN 7
+                    ELSE 8
                 END,
                 t.criado_em DESC
             LIMIT ? OFFSET ?";
@@ -303,6 +339,14 @@ function ticketAddMessage($conn, int $ticketId, int $userId, string $mensagem, b
     $mensagem = trim($mensagem);
     if ($mensagem === '') return [false, 'Mensagem vazia.'];
 
+    $stStatus = $conn->prepare("SELECT status FROM support_tickets WHERE id = ? LIMIT 1");
+    $stStatus->bind_param('i', $ticketId);
+    $stStatus->execute();
+    $ticketRow = $stStatus->get_result()->fetch_assoc();
+    $stStatus->close();
+    if (!$ticketRow) return [false, 'Ticket não encontrado.'];
+    if (ticketIsFinalStatus((string)$ticketRow['status'])) return [false, 'Este ticket já foi encerrado.'];
+
     $admin = $isAdmin ? 1 : 0;
     $stmt = $conn->prepare(
         "INSERT INTO support_ticket_messages (ticket_id, user_id, is_admin, mensagem) VALUES (?, ?, ?, ?)"
@@ -343,14 +387,184 @@ function ticketAddMessage($conn, int $ticketId, int $userId, string $mensagem, b
  */
 function ticketUpdateStatus($conn, int $id, string $newStatus): array
 {
-    $allowed = ['aberto', 'em_andamento', 'respondido', 'fechado'];
-    if (!in_array($newStatus, $allowed, true)) return [false, 'Status inválido.'];
+    if (!isset(ticketManualStatusOptions()[$newStatus])) return [false, 'Status inválido.'];
+
+    $stCurrent = $conn->prepare("SELECT status FROM support_tickets WHERE id = ? LIMIT 1");
+    $stCurrent->bind_param('i', $id);
+    $stCurrent->execute();
+    $current = $stCurrent->get_result()->fetch_assoc();
+    $stCurrent->close();
+    if (!$current) return [false, 'Ticket não encontrado.'];
+    if (ticketIsFinalStatus((string)$current['status'])) return [false, 'Este ticket já foi encerrado.'];
+
     $stmt = $conn->prepare("UPDATE support_tickets SET status = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?");
     $stmt->bind_param('si', $newStatus, $id);
     $stmt->execute();
     if ($stmt->affected_rows < 1) return [false, 'Ticket não encontrado.'];
     $stmt->close();
     return [true, 'Status atualizado.'];
+}
+
+function ticketResolveDispute($conn, int $ticketId, int $adminId, string $decision, string $note): array
+{
+    ticketsEnsureTable($conn);
+    $ticketId = (int)$ticketId;
+    $adminId = (int)$adminId;
+    $decision = strtolower(trim($decision));
+    $note = trim($note);
+
+    $labels = [
+        'resolvido' => 'Disputa resolvida',
+        'nao_resolvido' => 'Disputa não resolvida',
+        'reembolsado' => 'Reembolso aprovado',
+    ];
+
+    if ($ticketId <= 0 || $adminId <= 0 || !isset($labels[$decision])) return [false, 'Parâmetros inválidos.'];
+    if (mb_strlen($note) < 5) return [false, 'Informe uma observação com pelo menos 5 caracteres.'];
+
+    $refundAmount = 0.0;
+    $buyerId = 0;
+    $orderId = 0;
+    $vendorIds = [];
+
+    $conn->begin_transaction();
+    try {
+        $st = $conn->prepare("SELECT * FROM support_tickets WHERE id = ? FOR UPDATE");
+        $st->bind_param('i', $ticketId);
+        $st->execute();
+        $ticket = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if (!$ticket) { $conn->rollback(); return [false, 'Ticket não encontrado.']; }
+        if ((string)$ticket['categoria'] !== 'pedido_disputa' || (int)($ticket['order_id'] ?? 0) <= 0) {
+            $conn->rollback();
+            return [false, 'Esta ação é exclusiva para tickets de pedido/disputa.'];
+        }
+        if (ticketIsFinalStatus((string)$ticket['status'])) {
+            $conn->rollback();
+            return [false, 'Esta disputa já foi encerrada.'];
+        }
+
+        $buyerId = (int)$ticket['user_id'];
+        $orderId = (int)$ticket['order_id'];
+
+        if ($decision === 'reembolsado') {
+            [$okRefund, $refundMsg, $refundAmount, $vendorIds] = ticketRefundDisputeOrderInTransaction($conn, $ticket, $adminId, $note);
+            if (!$okRefund) {
+                $conn->rollback();
+                return [false, $refundMsg];
+            }
+        }
+
+        $decisionMessage = $labels[$decision];
+        if ($refundAmount > 0) {
+            $decisionMessage .= ' — R$ ' . number_format($refundAmount, 2, ',', '.');
+        }
+        $decisionMessage .= "\n\nObservação:\n" . $note;
+
+        $adminFlag = 1;
+        $ins = $conn->prepare("INSERT INTO support_ticket_messages (ticket_id, user_id, is_admin, mensagem) VALUES (?, ?, ?, ?)");
+        $ins->bind_param('iiis', $ticketId, $adminId, $adminFlag, $decisionMessage);
+        $ins->execute();
+        $ins->close();
+
+        $up = $conn->prepare("UPDATE support_tickets SET status = ?, admin_id = ?, admin_resposta = ?, respondido_em = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?");
+        $up->bind_param('sisi', $decision, $adminId, $decisionMessage, $ticketId);
+        $up->execute();
+        $up->close();
+
+        $conn->commit();
+    } catch (Throwable $e) {
+        $conn->rollback();
+        return [false, 'Erro ao decidir disputa: ' . $e->getMessage()];
+    }
+
+    try {
+        notificationsCreate($conn, $buyerId, 'ticket', $labels[$decision], 'A equipe atualizou a disputa do pedido #' . $orderId . '.', '/ticket_detalhe?id=' . $ticketId);
+        if ($decision === 'reembolsado') {
+            notificationsCreate($conn, $buyerId, 'venda', 'Reembolso aprovado', 'R$ ' . number_format($refundAmount, 2, ',', '.') . ' do pedido #' . $orderId . ' foi devolvido à sua carteira.', '/wallet');
+            foreach (array_unique($vendorIds) as $vendorId) {
+                if ((int)$vendorId > 0) {
+                    notificationsCreate($conn, (int)$vendorId, 'venda', 'Pedido reembolsado', 'O pedido #' . $orderId . ' foi reembolsado após análise da disputa.', '/vendedor/vendas_analise');
+                }
+            }
+        }
+    } catch (\Throwable $e) { error_log('[Tickets] Dispute decision notification error: ' . $e->getMessage()); }
+
+    return [true, $labels[$decision] . ' com sucesso.'];
+}
+
+function ticketRefundDisputeOrderInTransaction($conn, array $ticket, int $adminId, string $note): array
+{
+    $ticketId = (int)$ticket['id'];
+    $orderId = (int)$ticket['order_id'];
+    $buyerId = (int)$ticket['user_id'];
+
+    $stOrder = $conn->prepare("SELECT id FROM orders WHERE id = ? AND user_id = ? FOR UPDATE");
+    $stOrder->bind_param('ii', $orderId, $buyerId);
+    $stOrder->execute();
+    $order = $stOrder->get_result()->fetch_assoc();
+    $stOrder->close();
+    if (!$order) return [false, 'Pedido não encontrado para este ticket.', 0.0, []];
+
+    $stReleased = $conn->prepare("SELECT COUNT(*) AS c FROM order_items WHERE order_id = ? AND (released_at IS NOT NULL OR moderation_status = 'aprovada')");
+    $stReleased->bind_param('i', $orderId);
+    $stReleased->execute();
+    $released = (int)($stReleased->get_result()->fetch_assoc()['c'] ?? 0);
+    $stReleased->close();
+    if ($released > 0) return [false, 'Este pedido já possui valor liberado ao vendedor e não pode ser reembolsado automaticamente.', 0.0, []];
+
+    $stDup = $conn->prepare("SELECT COUNT(*) AS c FROM wallet_transactions WHERE user_id = ? AND origem = 'dispute_refund' AND referencia_tipo = 'order' AND referencia_id = ?");
+    $stDup->bind_param('ii', $buyerId, $orderId);
+    $stDup->execute();
+    $alreadyRefunded = (int)($stDup->get_result()->fetch_assoc()['c'] ?? 0);
+    $stDup->close();
+    if ($alreadyRefunded > 0) return [false, 'Este pedido já possui reembolso de disputa registrado.', 0.0, []];
+
+    $stItems = $conn->prepare("SELECT id, vendedor_id, quantidade, preco_unit, subtotal FROM order_items WHERE order_id = ? AND moderation_status = 'pendente' FOR UPDATE");
+    $stItems->bind_param('i', $orderId);
+    $stItems->execute();
+    $items = $stItems->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+    $stItems->close();
+    if (!$items) return [false, 'Não há itens pendentes para reembolsar neste pedido.', 0.0, []];
+
+    $refundAmount = 0.0;
+    $vendorIds = [];
+    foreach ($items as $item) {
+        $gross = (float)($item['subtotal'] ?? 0);
+        if ($gross <= 0) $gross = (int)$item['quantidade'] * (float)$item['preco_unit'];
+        $refundAmount += $gross;
+        if ((int)($item['vendedor_id'] ?? 0) > 0) $vendorIds[] = (int)$item['vendedor_id'];
+    }
+    $refundAmount = round($refundAmount, 2);
+    if ($refundAmount <= 0) return [false, 'Valor de reembolso inválido.', 0.0, []];
+
+    $upBuyer = $conn->prepare("UPDATE users SET wallet_saldo = wallet_saldo + ? WHERE id = ?");
+    $upBuyer->bind_param('di', $refundAmount, $buyerId);
+    $upBuyer->execute();
+    $upBuyer->close();
+
+    $tx = $conn->prepare("INSERT INTO wallet_transactions (user_id, tipo, origem, referencia_tipo, referencia_id, valor, descricao) VALUES (?, 'credito', 'dispute_refund', 'order', ?, ?, ?)");
+    $desc = 'Reembolso da disputa #' . $ticketId . ' do pedido #' . $orderId;
+    $tx->bind_param('iids', $buyerId, $orderId, $refundAmount, $desc);
+    $tx->execute();
+    $tx->close();
+
+    $reason = 'Reembolso por disputa #' . $ticketId . ': ' . mb_substr($note, 0, 180);
+    $upItem = $conn->prepare("UPDATE order_items SET moderation_status = 'recusada', moderation_motivo = ?, moderation_at = NOW(), moderation_by = ?, auto_release_at = NULL WHERE id = ?");
+    foreach ($items as $item) {
+        $itemId = (int)$item['id'];
+        $upItem->bind_param('sii', $reason, $adminId, $itemId);
+        $upItem->execute();
+    }
+    $upItem->close();
+
+    $upOrder = $conn->prepare("UPDATE orders SET status = 'cancelado' WHERE id = ?");
+    $upOrder->bind_param('i', $orderId);
+    $upOrder->execute();
+    $upOrder->close();
+
+    return [true, 'Reembolso aplicado.', $refundAmount, $vendorIds];
 }
 
 /**
@@ -380,6 +594,9 @@ function ticketsCountByStatus($conn, int $userId = 0): array
 function ticketStatusBadge(string $s): string
 {
     $s = strtolower(trim($s));
+    if ($s === 'reembolsado') return 'bg-blue-500/15 border border-blue-400/40 text-blue-300';
+    if ($s === 'resolvido') return 'bg-greenx/15 border border-greenx/40 text-greenx';
+    if ($s === 'nao_resolvido') return 'bg-red-500/15 border border-red-400/40 text-red-300';
     if ($s === 'respondido') return 'bg-greenx/15 border border-greenx/40 text-greenx';
     if ($s === 'em_andamento') return 'bg-greenx/15 border border-greenx/40 text-greenx';
     if ($s === 'fechado') return 'bg-zinc-500/15 border border-zinc-400/40 text-zinc-300';
@@ -392,11 +609,6 @@ function ticketStatusBadge(string $s): string
 function ticketStatusLabel(string $s): string
 {
     $s = strtolower(trim($s));
-    $map = [
-        'aberto' => 'Aberto',
-        'em_andamento' => 'Em Andamento',
-        'respondido' => 'Respondido',
-        'fechado' => 'Fechado',
-    ];
+    $map = ticketStatusOptions();
     return $map[$s] ?? ucfirst($s);
 }

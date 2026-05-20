@@ -78,7 +78,9 @@ $findOrderDisputeId = static function ($conn, int $orderId, int $userId, bool $o
 };
 
 $existingOpenDisputeId = $findOrderDisputeId($conn, $orderId, $userId, true);
-$hasAnyDisputeBeforePost = $findOrderDisputeId($conn, $orderId, $userId, false) > 0;
+$latestDisputeId = $findOrderDisputeId($conn, $orderId, $userId, false);
+$hasAnyDisputeBeforePost = $latestDisputeId > 0;
+$visibleDisputeId = $existingOpenDisputeId > 0 ? $existingOpenDisputeId : $latestDisputeId;
 $orderStatusLower = strtolower(trim((string)$order['status']));
 $canOpenDispute = in_array($orderStatusLower, ['pago', 'paid', 'enviado', 'entregue', 'concluido'], true);
 $disputeUnavailableReason = $canOpenDispute ? '' : 'Aguarde a confirmação do pagamento para abrir um ticket deste pedido.';
@@ -107,8 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
   $reasonLabel = ticketDisputeReasonLabel($reasonKey);
   $details = trim((string)($_POST['detalhes'] ?? ''));
 
-  if ($existingOpenDisputeId > 0) {
-    $err = 'Já existe um ticket aberto para este pedido.';
+  if ($hasAnyDisputeBeforePost) {
+    $err = 'Já existe um ticket de disputa para este pedido.';
   } elseif (!$canOpenDispute) {
     $err = $disputeUnavailableReason;
   } elseif ($reasonLabel === '') {
@@ -137,6 +139,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
         $conn->query("UPDATE order_items SET auto_release_at = auto_release_at + INTERVAL '3 days' WHERE order_id = " . (int)$orderId . " AND released_at IS NULL AND auto_release_at IS NOT NULL");
       }
       $existingOpenDisputeId = $newTicketId;
+      $latestDisputeId = $newTicketId;
+      $visibleDisputeId = $newTicketId;
       $msg = 'Ticket #' . $newTicketId . ' aberto com sucesso. O prazo do pedido foi estendido em +3 dias para análise.';
     } else {
       $err = (string)($result['error'] ?? 'Erro ao abrir ticket.');
@@ -570,9 +574,9 @@ $avatarInitial = static function (string $name): string {
       <div class="pd-card pd-card-help" x-data="{open:false, step:'policy', motivo:''}">
         <h3 class="pd-card-title"><i data-lucide="life-buoy" class="w-4 h-4"></i> Precisa de ajuda?</h3>
         <p class="pd-help-text">Nossa equipe monitora todas as transações para garantir sua segurança. Reporte qualquer problema imediatamente.</p>
-        <?php if ($existingOpenDisputeId > 0): ?>
-        <a href="<?= BASE_PATH ?>/ticket_detalhe?id=<?= (int)$existingOpenDisputeId ?>" class="pd-btn-primary">
-          <i data-lucide="ticket-check" class="w-4 h-4"></i> Ver ticket aberto
+        <?php if ($visibleDisputeId > 0): ?>
+        <a href="<?= BASE_PATH ?>/ticket_detalhe?id=<?= (int)$visibleDisputeId ?>" class="pd-btn-primary">
+          <i data-lucide="ticket-check" class="w-4 h-4"></i> Ver ticket da disputa
         </a>
         <?php elseif ($canOpenDispute): ?>
         <button type="button" class="pd-btn-danger" @click="open=true;step='policy'">

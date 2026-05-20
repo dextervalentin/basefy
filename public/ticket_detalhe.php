@@ -33,13 +33,17 @@ if ($isLoggedIn && $ticketId) {
         $messages = ticketGetMessages($conn, $ticketId);
 
         // Handle reply
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)$ticket['status'] !== 'fechado') {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && !ticketIsFinalStatus((string)$ticket['status'])) {
             $reply = trim((string)($_POST['mensagem'] ?? ''));
             if (strlen($reply) < 3) {
                 $msgError = 'A mensagem deve ter ao menos 3 caracteres.';
             } else {
-                ticketAddMessage($conn, $ticketId, $userId, $reply, false);
-                $msgOk = true;
+                [$replyOk, $replyMsg] = ticketAddMessage($conn, $ticketId, $userId, $reply, false);
+                if ($replyOk) {
+                    $msgOk = true;
+                } else {
+                    $msgError = $replyMsg;
+                }
                 $messages = ticketGetMessages($conn, $ticketId);
                 $ticket   = ticketGetById($conn, $ticketId);
             }
@@ -178,7 +182,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         <?php endif; ?>
 
         <!-- Reply form -->
-        <?php if ((string)$ticket['status'] !== 'fechado'): ?>
+        <?php if (!ticketIsFinalStatus((string)$ticket['status'])): ?>
         <?php if ($msgOk): ?>
         <div class="bg-greenx/10 border border-greenx/30 rounded-xl p-3 mb-4 text-sm text-greenx flex items-center gap-2">
             <i data-lucide="check-circle" class="w-4 h-4 shrink-0"></i> Mensagem enviada com sucesso!
@@ -204,7 +208,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         </form>
         <?php else: ?>
         <div class="bg-zinc-500/10 border border-zinc-400/20 rounded-xl p-4 text-center text-sm text-zinc-400">
-            <i data-lucide="lock" class="w-4 h-4 inline -mt-0.5"></i> Este ticket foi fechado e não aceita novas respostas.
+            <i data-lucide="lock" class="w-4 h-4 inline -mt-0.5"></i> Este ticket foi encerrado e não aceita novas respostas.
         </div>
         <?php endif; ?>
     </section>

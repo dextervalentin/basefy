@@ -328,12 +328,9 @@ if ($spotlightVendorId > 0) {
         $populares = sfListProducts($conn, ['limit' => 10, 'vendor_id' => $spotlightVendorId]);
     }
 }
-if (!$populares) {
-    $populares = sfListProducts($conn, ['limit' => 10, 'order' => 'best_sellers']);
-}
 $spotlightSubtitle = $spotlightVendorId > 0
     ? 'Mais vendidos da ' . $spotlightVendorName
-    : 'Produtos mais vendidos da plataforma';
+    : 'Produtos da LevelUp';
 $categorias = array_values(array_filter(
     sfListCategories($conn),
     fn($cat) => strtolower(trim((string)($cat['tipo'] ?? ''))) !== 'blog'

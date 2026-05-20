@@ -41,6 +41,7 @@ $pp = in_array(($_pp = (int)($_GET['pp'] ?? 10)), [5, 10, 20]) ? $_pp : 10;
 $lista = ticketsList($conn, $f, $pagina, $pp);
 
 $cats = ticketCategories();
+$statusOptions = ticketStatusOptions();
 
 $pageTitle  = 'Comunicação';
 $activeMenu = 'comunicacao';
@@ -72,10 +73,9 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
           <label class="block text-xs text-zinc-500 mb-1">Status</label>
           <select name="status" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 outline-none focus:border-greenx">
             <option value="">Todos</option>
-            <option value="aberto" <?= $f['status'] === 'aberto' ? 'selected' : '' ?>>Aberto</option>
-            <option value="em_andamento" <?= $f['status'] === 'em_andamento' ? 'selected' : '' ?>>Em Andamento</option>
-            <option value="respondido" <?= $f['status'] === 'respondido' ? 'selected' : '' ?>>Respondido</option>
-            <option value="fechado" <?= $f['status'] === 'fechado' ? 'selected' : '' ?>>Fechado</option>
+            <?php foreach ($statusOptions as $statusKey => $statusLabel): ?>
+            <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>" <?= $f['status'] === $statusKey ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
+            <?php endforeach; ?>
           </select>
         </div>
         <div class="flex items-center gap-2">
@@ -167,6 +167,9 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
   function fmtDate(s){ if(!s)return'-'; try{var d=new Date(s.replace(' ','T'));return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return s;} }
   function statusBadge(s){
     s=(s||'').toLowerCase();
+    if(s==='reembolsado')return'bg-blue-500/15 border border-blue-400/40 text-blue-300';
+    if(s==='resolvido')return'bg-greenx/15 border border-greenx/40 text-greenx';
+    if(s==='nao_resolvido')return'bg-red-500/15 border border-red-400/40 text-red-300';
     if(s==='respondido')return'bg-greenx/15 border border-greenx/40 text-greenx';
     if(s==='em_andamento')return'bg-greenx/15 border border-greenx/40 text-purple-300';
     if(s==='fechado')return'bg-zinc-500/15 border border-zinc-400/40 text-zinc-300';
@@ -176,6 +179,9 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
     if(s==='aberto')return'Aberto';
     if(s==='em_andamento')return'Em Andamento';
     if(s==='respondido')return'Respondido';
+    if(s==='resolvido')return'Resolvido';
+    if(s==='nao_resolvido')return'Não resolvido';
+    if(s==='reembolsado')return'Reembolsado';
     if(s==='fechado')return'Fechado';
     return s;
   }
