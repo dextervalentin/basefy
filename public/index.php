@@ -771,13 +771,16 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         .catalog-sidebar.is-open { display: block !important; transform: translateX(0); pointer-events: auto; }
         .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 76px); }
                 .catalog-loading-overlay {
-                    position: fixed; inset: 0; z-index: 1000002; border-radius: 0;
-                    background: transparent; backdrop-filter: none; pointer-events: none !important;
+                    position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 92px); bottom: auto;
+                    z-index: 1000002; height: 0; border-radius: 0;
+                    align-items: flex-start; background: transparent; backdrop-filter: none; pointer-events: none !important;
                 }
                 .catalog-loading-pill {
-                    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                    position: relative; left: auto; top: auto; transform: none;
                     white-space: nowrap; max-width: calc(100vw - 2rem);
+                    animation: catalogLoadingDrop .22s cubic-bezier(.22,1,.36,1);
                 }
+                @keyframes catalogLoadingDrop { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       }
       .catalog-product.is-hidden { display: none; }
       .catalog-section.is-empty { display: none; }
