@@ -770,6 +770,14 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         }
         .catalog-sidebar.is-open { display: block !important; transform: translateX(0); pointer-events: auto; }
         .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 76px); }
+                .catalog-loading-overlay {
+                    position: fixed; inset: 0; z-index: 1000002; border-radius: 0;
+                    background: transparent; backdrop-filter: none; pointer-events: none !important;
+                }
+                .catalog-loading-pill {
+                    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                    white-space: nowrap; max-width: calc(100vw - 2rem);
+                }
       }
       .catalog-product.is-hidden { display: none; }
       .catalog-section.is-empty { display: none; }

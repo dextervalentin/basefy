@@ -181,6 +181,21 @@ if ($_themeConn !== null) {
     if (!href || href.startsWith('#') || href.startsWith('javascript') || href.startsWith('mailto') || a.target === '_blank') return;
     if (a.hasAttribute('data-no-transition')) return;
 
+    try {
+      var url = new URL(href, window.location.href);
+      if (url.origin === window.location.origin && url.pathname === window.location.pathname && url.hash) {
+        var target = document.querySelector(url.hash);
+        if (target) {
+          e.preventDefault();
+          var overlayLocal = document.getElementById('page-exit-overlay');
+          if (overlayLocal) overlayLocal.classList.remove('fading');
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (window.history && window.history.replaceState) window.history.replaceState(null, '', url.pathname + url.hash);
+          return;
+        }
+      }
+    } catch (_) {}
+
     e.preventDefault();
     var overlay = document.getElementById('page-exit-overlay');
     if (overlay) {
