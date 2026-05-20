@@ -736,20 +736,25 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </div>
         </div>
 
-        <!-- Backdrop for mobile popup -->
-        <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden" onclick="catalogClosePopup()"></div>
+        <!-- Mobile category drawer + backdrop (same pattern as top nav) -->
+        <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden transition-opacity duration-300" style="opacity:0" onclick="catalogClosePopup()"></div>
     </section>
 
     <style>
-      /* Sidebar popup animation (mobile only) */
-            .cat-filter-link.is-active { background: rgba(var(--t-accent-rgb), .15); color: var(--t-accent); border-color: rgba(var(--t-accent-rgb), .30); box-shadow: 0 0 18px rgba(136,0,228,.18); }
-            .catalog-shell.is-loading #catalogProductsGrid { opacity: .55; }
+      .cat-filter-link.is-active { background: rgba(168, 85, 247, .18); color: #d8b4fe; border-color: rgba(168, 85, 247, .35); box-shadow: 0 0 18px rgba(136,0,228,.18); }
+      .catalog-shell.is-loading #catalogProductsGrid { opacity: .55; transition: opacity .2s ease; }
       @media (max-width: 1023px) {
-                                .catalog-sidebar { position: fixed; inset: 0; width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; z-index: 90; border-radius: 0; padding: 1rem; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(100%); transition: transform .24s cubic-bezier(.22,1,.36,1); box-shadow: none; pointer-events: none; }
-                                .catalog-sidebar.is-open { display: block !important; transform: translateX(0); pointer-events: auto; }
-                                .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 76px); }
-                                #catalogSidebarBackdrop.is-open { display: none; }
-        @keyframes catBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+        .catalog-sidebar {
+          position: fixed; top: 0; right: 0; bottom: 0;
+          width: 320px; max-width: 88vw; height: 100vh; height: 100dvh; max-height: none;
+          z-index: 61; border-radius: 0; padding: 1rem; overflow-y: auto;
+          background: #0b0414; border-left: 1px solid rgba(255,255,255,.06);
+          box-shadow: -16px 0 40px rgba(0,0,0,.55);
+          transform: translateX(100%); transition: transform .3s ease-out;
+          opacity: 1; visibility: visible; pointer-events: none;
+        }
+        .catalog-sidebar.is-open { display: block !important; transform: translateX(0); pointer-events: auto; }
+        .catalog-sidebar .catalog-cat-list { max-height: calc(100dvh - 76px); }
       }
       .catalog-product.is-hidden { display: none; }
       .catalog-section.is-empty { display: none; }
@@ -867,14 +872,17 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     });
             }
 
-            document.querySelectorAll('[data-catalog-cat]').forEach(function(link){
-                link.addEventListener('click', function(event){
-                    event.preventDefault();
-                    input.value = '';
-                    fetchCatalog({ cat: link.getAttribute('data-catalog-cat') || '', query: '', updateUrl: true });
-                    window.catalogClosePopup();
-                });
-            });
+            document.addEventListener('click', function(event){
+                var link = event.target.closest && event.target.closest('[data-catalog-cat]');
+                if (!link) return;
+                event.preventDefault();
+                event.stopPropagation();
+                input.value = '';
+                fetchCatalog({ cat: link.getAttribute('data-catalog-cat') || '', query: '', updateUrl: true });
+                window.catalogClosePopup();
+                var anchor = document.getElementById('catalogo');
+                if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, true);
             input.addEventListener('input', function(){
                 window.clearTimeout(searchTimer);
                 searchTimer = window.setTimeout(function(){ fetchCatalog({ query: input.value.trim(), updateUrl: true }); }, 260);
@@ -883,22 +891,24 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             if (loadMore) loadMore.addEventListener('click', function(){ fetchCatalog({ append: true, updateUrl: false }); });
             if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
 
-            // Mobile category drawer, full-screen on phones.
-      window.catalogOpenPopup = function(){
-        if (!sidebar) return;
+            // Mobile category drawer — same pattern as top nav drawer (right-side slide-in + backdrop).
+            window.catalogOpenPopup = function(){
+                if (!sidebar) return;
                 sidebar.classList.remove('hidden');
-                if (backdrop){ backdrop.classList.add('hidden'); backdrop.classList.remove('is-open'); }
+                if (backdrop){ backdrop.classList.remove('hidden'); }
                 document.body.style.overflow = 'hidden';
-                window.requestAnimationFrame(function(){ sidebar.classList.add('is-open'); });
-      };
-      window.catalogClosePopup = function(){
-        if (!sidebar) return;
-        sidebar.classList.remove('is-open');
+                window.requestAnimationFrame(function(){
+                    sidebar.classList.add('is-open');
+                    if (backdrop) backdrop.style.opacity = '1';
+                });
+            };
+            window.catalogClosePopup = function(){
+                if (!sidebar) return;
+                sidebar.classList.remove('is-open');
                 document.body.style.overflow = '';
-                if (backdrop){ backdrop.classList.remove('is-open'); backdrop.classList.add('hidden'); }
-                window.setTimeout(function(){ if (!sidebar.classList.contains('is-open')) sidebar.classList.add('hidden'); }, 260);
-      };
-      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
+                if (backdrop){ backdrop.style.opacity = '0'; window.setTimeout(function(){ backdrop.classList.add('hidden'); }, 300); }
+            };
+            document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
     })();
     </script>
 
@@ -1110,13 +1120,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <div class="premium-dots" data-premium-dots aria-label="Navegação dos produtos premium"></div>
         </div>
                 <style>
-                    .premium-track { display:flex; gap:1rem; overflow-x:auto; scroll-snap-type:x mandatory; scroll-behavior:smooth; cursor:grab; user-select:none; padding:.15rem .05rem .9rem; scrollbar-width:none; touch-action:pan-y; }
-                    .premium-track::-webkit-scrollbar { display:none; }
-                    .premium-track.is-dragging { cursor:grabbing; scroll-behavior:auto; }
-                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; scroll-snap-align:start; scroll-snap-stop:always; }
-                    .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:.75rem; }
-                    .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; transition:width .2s ease, background .2s ease; }
-                    .premium-dot.is-active { width:1.35rem; background:#f59e0b; }
+                    .premium-slider { position:relative; overflow:hidden; padding:.15rem .05rem .25rem; }
+                    .premium-track { display:flex; gap:1rem; will-change:transform; transform:translate3d(0,0,0); transition:transform .55s cubic-bezier(.22,1,.36,1); touch-action:pan-y; cursor:grab; user-select:none; }
+                    .premium-track.is-dragging { transition:none; cursor:grabbing; }
+                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; }
+                    .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:1rem; }
+                    .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; cursor:pointer; transition:width .25s ease, background .25s ease; }
+                    .premium-dot.is-active { width:1.5rem; background:#f59e0b; }
                     @media (max-width:1023px){ .premium-card { flex-basis:calc((100% - 2rem) / 3); } }
                     @media (max-width:639px){ .premium-track{ gap:.75rem; } .premium-card { flex-basis:calc((100% - .75rem) / 2); } }
                 </style>
@@ -1129,55 +1139,99 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     var cards = Array.prototype.slice.call(track.querySelectorAll('.premium-card'));
                     if (!track || !dots || !cards.length) return;
 
-                    function pageCount(){ return Math.max(1, cards.length); }
-                    function cardStep(){
+                    var index = 0;
+                    var dragOffset = 0;
+
+                    function visibleCount(){
+                        var width = root.getBoundingClientRect().width;
+                        if (width >= 1024) return 5;
+                        if (width >= 640) return 3;
+                        return 2;
+                    }
+                    function maxIndex(){ return Math.max(0, cards.length - visibleCount()); }
+                    function step(){
                         var gap = parseFloat(getComputedStyle(track).gap || '0') || 0;
-                        return ((cards[0] && cards[0].getBoundingClientRect().width) || 1) + gap;
+                        return (cards[0] ? cards[0].getBoundingClientRect().width : 0) + gap;
+                    }
+                    function applyTransform(extra){
+                        var offset = -(index * step()) + (extra || 0);
+                        track.style.transform = 'translate3d(' + offset + 'px, 0, 0)';
+                    }
+                    function goTo(target, animated){
+                        index = Math.max(0, Math.min(maxIndex(), Math.round(target)));
+                        if (animated === false) track.style.transition = 'none';
+                        applyTransform(0);
+                        if (animated === false) {
+                            // Force reflow to commit the no-transition state before re-enabling easing.
+                            void track.offsetWidth;
+                            track.style.transition = '';
+                        }
+                        updateDots();
                     }
                     function updateDots(){
-                        var page = Math.round(track.scrollLeft / Math.max(1, cardStep()));
-                        dots.querySelectorAll('.premium-dot').forEach(function(dot, idx){ dot.classList.toggle('is-active', idx === page); });
+                        dots.querySelectorAll('.premium-dot').forEach(function(dot, idx){ dot.classList.toggle('is-active', idx === index); });
                     }
                     function buildDots(){
                         dots.innerHTML = '';
-                        var total = pageCount();
+                        var total = maxIndex() + 1;
                         dots.style.display = total > 1 ? 'flex' : 'none';
                         for (var i = 0; i < total; i++) {
                             (function(page){
                                 var dot = document.createElement('button');
                                 dot.type = 'button';
-                                dot.className = 'premium-dot';
-                                dot.setAttribute('aria-label', 'Ir para produto ' + (page + 1));
-                                dot.addEventListener('click', function(){
-                                    var target = cards[Math.min(cards.length - 1, page)];
-                                    if (target) track.scrollTo({ left: target.offsetLeft - track.offsetLeft, behavior:'smooth' });
-                                });
+                                dot.className = 'premium-dot' + (page === index ? ' is-active' : '');
+                                dot.setAttribute('aria-label', 'Ir para slide ' + (page + 1));
+                                dot.addEventListener('click', function(){ goTo(page, true); });
                                 dots.appendChild(dot);
                             })(i);
                         }
-                        updateDots();
                     }
 
-                    var dragging = false, startX = 0, startScroll = 0, moved = false;
+                    var dragging = false, startX = 0, startY = 0, lockedAxis = null, moved = false;
                     track.addEventListener('pointerdown', function(e){
-                        if (e.button !== 0) return;
-                        dragging = true; moved = false; startX = e.clientX; startScroll = track.scrollLeft;
+                        if (e.pointerType === 'mouse' && e.button !== 0) return;
+                        dragging = true; moved = false; lockedAxis = null;
+                        startX = e.clientX; startY = e.clientY; dragOffset = 0;
                         track.classList.add('is-dragging');
-                        track.setPointerCapture(e.pointerId);
+                        if (e.pointerType !== 'touch') track.setPointerCapture(e.pointerId);
                     });
                     track.addEventListener('pointermove', function(e){
                         if (!dragging) return;
                         var dx = e.clientX - startX;
-                        if (Math.abs(dx) > 4) moved = true;
-                        track.scrollLeft = startScroll - dx;
+                        var dy = e.clientY - startY;
+                        if (!lockedAxis) {
+                            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) lockedAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+                        }
+                        if (lockedAxis !== 'x') return;
+                        if (e.cancelable) e.preventDefault();
+                        moved = true;
+                        dragOffset = dx;
+                        applyTransform(dx);
                     });
-                    function stopDrag(){ dragging = false; track.classList.remove('is-dragging'); }
-                    track.addEventListener('pointerup', stopDrag);
-                    track.addEventListener('pointercancel', stopDrag);
+                    function endDrag(e){
+                        if (!dragging) return;
+                        dragging = false;
+                        track.classList.remove('is-dragging');
+                        var threshold = step() * 0.18;
+                        if (lockedAxis === 'x' && Math.abs(dragOffset) > threshold) {
+                            goTo(index + (dragOffset < 0 ? 1 : -1), true);
+                        } else {
+                            goTo(index, true);
+                        }
+                        dragOffset = 0;
+                    }
+                    track.addEventListener('pointerup', endDrag);
+                    track.addEventListener('pointercancel', endDrag);
                     track.addEventListener('click', function(e){ if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
-                    track.addEventListener('scroll', function(){ window.requestAnimationFrame(updateDots); }, { passive:true });
-                    window.addEventListener('resize', buildDots);
+
+                    var resizeTimer = null;
+                    window.addEventListener('resize', function(){
+                        window.clearTimeout(resizeTimer);
+                        resizeTimer = window.setTimeout(function(){ buildDots(); goTo(Math.min(index, maxIndex()), false); }, 120);
+                    });
+
                     buildDots();
+                    goTo(0, false);
                 })();
                 </script>
     </section>

@@ -387,7 +387,21 @@ $_isPendingVendor = false;
   if (close) close.addEventListener('click', shut);
   overlay.addEventListener('click', shut);
     drawer.querySelectorAll('a').forEach((link) => {
-        link.addEventListener('click', shut);
+        link.addEventListener('click', (event) => {
+            // If link points to #catalogo and that section exists on the current page, scroll smoothly.
+            try {
+                const href = link.getAttribute('href') || '';
+                if (href.indexOf('#catalogo') !== -1) {
+                    const target = document.getElementById('catalogo');
+                    if (target) {
+                        event.preventDefault();
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        if (history.replaceState) history.replaceState(null, '', window.location.pathname + '#catalogo');
+                    }
+                }
+            } catch (_) { /* fall through to default navigation */ }
+            shut();
+        });
     });
 
   // Close on resize to desktop
