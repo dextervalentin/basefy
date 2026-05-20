@@ -706,8 +706,16 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             <div class="flex-1 h-px bg-white/[0.06]"></div>
                         </div>
 
-                        <div id="catalogProductsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" data-products-grid>
-                            <?= $catalogPayload['html'] ?? '' ?>
+                        <div class="catalog-grid-frame relative">
+                            <div id="catalogProductsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" data-products-grid>
+                                <?= $catalogPayload['html'] ?? '' ?>
+                            </div>
+                            <div class="catalog-loading-overlay" aria-hidden="true">
+                                <div class="catalog-loading-pill">
+                                    <span class="catalog-loading-spinner"></span>
+                                    <span>Atualizando produtos</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div id="catalogPager" class="<?= !empty($catalogPayload['hasMore']) ? '' : 'hidden' ?> mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-blackx2/70 px-4 py-3">
@@ -737,17 +745,24 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
         </div>
 
         <!-- Mobile category drawer + backdrop (same pattern as top nav) -->
-        <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden transition-opacity duration-300" style="opacity:0" onclick="catalogClosePopup()"></div>
+                <div id="catalogSidebarBackdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm lg:hidden transition-opacity duration-300" style="opacity:0" onclick="catalogClosePopup()"></div>
     </section>
 
     <style>
       .cat-filter-link.is-active { background: rgba(168, 85, 247, .18); color: #d8b4fe; border-color: rgba(168, 85, 247, .35); box-shadow: 0 0 18px rgba(136,0,228,.18); }
-      .catalog-shell.is-loading #catalogProductsGrid { opacity: .55; transition: opacity .2s ease; }
+            .catalog-grid-frame { min-height: 220px; }
+            .catalog-shell.is-loading #catalogProductsGrid { opacity: .34; transform: scale(.995); transition: opacity .18s ease, transform .18s ease; }
+            .catalog-loading-overlay { position: absolute; inset: -.25rem; z-index: 5; display: flex; align-items: center; justify-content: center; border-radius: 1rem; background: rgba(4, 1, 10, .50); backdrop-filter: blur(5px); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .18s ease, visibility .18s ease; }
+            .catalog-shell.is-loading .catalog-loading-overlay { opacity: 1; visibility: visible; pointer-events: auto; }
+            .catalog-loading-pill { display: inline-flex; align-items: center; gap: .65rem; border: 1px solid rgba(168, 85, 247, .35); background: rgba(12, 4, 24, .92); color: #f5f3ff; border-radius: 999px; padding: .7rem .95rem; font-size: .75rem; font-weight: 800; box-shadow: 0 18px 45px rgba(0, 0, 0, .42); }
+            .catalog-loading-spinner { width: 1rem; height: 1rem; border-radius: 999px; border: 2px solid rgba(255,255,255,.22); border-top-color: #a855f7; animation: catalogSpin .7s linear infinite; }
+            #catalogSidebarBackdrop { z-index: 1000000; }
+            @keyframes catalogSpin { to { transform: rotate(360deg); } }
       @media (max-width: 1023px) {
         .catalog-sidebar {
-          position: fixed; top: 0; right: 0; bottom: 0;
+                    position: fixed !important; top: 0 !important; right: 0; bottom: 0 !important;
           width: 320px; max-width: 88vw; height: 100vh; height: 100dvh; max-height: none;
-          z-index: 61; border-radius: 0; padding: 1rem; overflow-y: auto;
+                    z-index: 1000001; border-radius: 0; padding: 1rem; overflow-y: auto;
           background: #0b0414; border-left: 1px solid rgba(255,255,255,.06);
           box-shadow: -16px 0 40px rgba(0,0,0,.55);
           transform: translateX(100%); transition: transform .3s ease-out;
@@ -783,6 +798,17 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             var state = { cat: root ? (root.getAttribute('data-active-cat') || '') : '', page: 1, query: input.value.trim() };
             var loading = false;
             var searchTimer = null;
+            var closeTimer = null;
+
+            function lockPageScroll(){
+                document.body.style.overflow = 'hidden';
+                document.documentElement.style.overflow = 'hidden';
+            }
+
+            function unlockPageScroll(){
+                document.body.style.overflow = '';
+                document.documentElement.style.overflow = '';
+            }
 
             function sortCatalog(){
                 if (!sortSelect || !grid) return;
@@ -891,12 +917,12 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             if (loadMore) loadMore.addEventListener('click', function(){ fetchCatalog({ append: true, updateUrl: false }); });
             if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
 
-            // Mobile category drawer — same pattern as top nav drawer (right-side slide-in + backdrop).
             window.catalogOpenPopup = function(){
                 if (!sidebar) return;
+                window.clearTimeout(closeTimer);
                 sidebar.classList.remove('hidden');
                 if (backdrop){ backdrop.classList.remove('hidden'); }
-                document.body.style.overflow = 'hidden';
+                lockPageScroll();
                 window.requestAnimationFrame(function(){
                     sidebar.classList.add('is-open');
                     if (backdrop) backdrop.style.opacity = '1';
@@ -904,9 +930,14 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             };
             window.catalogClosePopup = function(){
                 if (!sidebar) return;
+                window.clearTimeout(closeTimer);
                 sidebar.classList.remove('is-open');
-                document.body.style.overflow = '';
-                if (backdrop){ backdrop.style.opacity = '0'; window.setTimeout(function(){ backdrop.classList.add('hidden'); }, 300); }
+                unlockPageScroll();
+                if (backdrop){ backdrop.style.opacity = '0'; }
+                closeTimer = window.setTimeout(function(){
+                    if (backdrop) backdrop.classList.add('hidden');
+                    if (!sidebar.classList.contains('is-open') && window.innerWidth < 1024) sidebar.classList.add('hidden');
+                }, 300);
             };
             document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.catalogClosePopup(); });
     })();
@@ -1123,7 +1154,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     .premium-slider { position:relative; overflow:hidden; padding:.15rem .05rem .25rem; }
                     .premium-track { display:flex; gap:1rem; will-change:transform; transform:translate3d(0,0,0); transition:transform .55s cubic-bezier(.22,1,.36,1); touch-action:pan-y; cursor:grab; user-select:none; }
                     .premium-track.is-dragging { transition:none; cursor:grabbing; }
-                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; }
+                    .premium-card { flex:0 0 calc((100% - 4rem) / 5); min-width:0; touch-action:pan-y; }
+                    .premium-card * { touch-action:pan-y; }
+                    .premium-card img, .premium-card a { -webkit-user-drag:none; user-drag:none; }
                     .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:1rem; }
                     .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; cursor:pointer; transition:width .25s ease, background .25s ease; }
                     .premium-dot.is-active { width:1.5rem; background:#f59e0b; }
@@ -1138,6 +1171,8 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     var dots = root.querySelector('[data-premium-dots]');
                     var cards = Array.prototype.slice.call(track.querySelectorAll('.premium-card'));
                     if (!track || !dots || !cards.length) return;
+                    track.addEventListener('dragstart', function(e){ e.preventDefault(); });
+                    track.querySelectorAll('img, a').forEach(function(el){ el.setAttribute('draggable', 'false'); });
 
                     var index = 0;
                     var dragOffset = 0;
@@ -1193,7 +1228,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         dragging = true; moved = false; lockedAxis = null;
                         startX = e.clientX; startY = e.clientY; dragOffset = 0;
                         track.classList.add('is-dragging');
-                        if (e.pointerType !== 'touch') track.setPointerCapture(e.pointerId);
+                        try { track.setPointerCapture(e.pointerId); } catch (_) {}
                     });
                     track.addEventListener('pointermove', function(e){
                         if (!dragging) return;

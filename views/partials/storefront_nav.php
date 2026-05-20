@@ -366,8 +366,10 @@ $_isPendingVendor = false;
   const drawer  = document.getElementById('sfMobileDrawer');
   const overlay = document.getElementById('sfMobileOverlay');
   if (!btn || !drawer || !overlay) return;
+    let overlayTimer = null;
 
   const open = () => {
+        clearTimeout(overlayTimer);
     overlay.classList.remove('hidden');
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
@@ -376,33 +378,35 @@ $_isPendingVendor = false;
     document.body.style.overflow = 'hidden';
   };
 
-  const shut = () => {
+    const shut = (immediate = false) => {
+        clearTimeout(overlayTimer);
     overlay.style.opacity = '0';
     drawer.classList.add('translate-x-full');
     document.body.style.overflow = '';
-    setTimeout(() => overlay.classList.add('hidden'), 300);
+        if (immediate) overlay.classList.add('hidden');
+        else overlayTimer = setTimeout(() => overlay.classList.add('hidden'), 300);
   };
 
-  btn.addEventListener('click', open);
-  if (close) close.addEventListener('click', shut);
-  overlay.addEventListener('click', shut);
-    drawer.querySelectorAll('a').forEach((link) => {
-        link.addEventListener('click', (event) => {
-            // If link points to #catalogo and that section exists on the current page, scroll smoothly.
-            try {
-                const href = link.getAttribute('href') || '';
-                if (href.indexOf('#catalogo') !== -1) {
-                    const target = document.getElementById('catalogo');
-                    if (target) {
-                        event.preventDefault();
-                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        if (history.replaceState) history.replaceState(null, '', window.location.pathname + '#catalogo');
-                    }
-                }
-            } catch (_) { /* fall through to default navigation */ }
-            shut();
-        });
-    });
+    btn.addEventListener('click', open);
+    if (close) close.addEventListener('click', () => shut());
+    overlay.addEventListener('click', () => shut());
+    drawer.addEventListener('click', (event) => {
+        const link = event.target.closest('a');
+        if (!link) return;
+        const href = link.getAttribute('href') || '';
+        if (href.indexOf('#catalogo') !== -1) {
+            const target = document.getElementById('catalogo');
+            if (target) {
+                event.preventDefault();
+                event.stopPropagation();
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (history.replaceState) history.replaceState(null, '', window.location.pathname + '#catalogo');
+                shut(true);
+                return;
+            }
+        }
+        shut();
+    }, true);
 
   // Close on resize to desktop
   window.addEventListener('resize', () => {
