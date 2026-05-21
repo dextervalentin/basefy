@@ -74,13 +74,13 @@ function homeFindVendorByKeywords($conn, array $keywords): array
 function homeLevelUpOfficialBestSellerRules(): array
 {
     return [
-        ['title' => 'US Perfil Envelhecido de 2023~2025 / 2FA + Cookies / Para Aquecimento / Sem Garantia', 'tokens' => ['us', 'perfil', 'envelhecido', '2023', '2025', '2fa', 'cookies', 'aquecimento', 'sem', 'garantia']],
-        ['title' => 'Email Outlook/Hotmail/ 2020~2025/ 2FA + Email verificação', 'tokens' => ['email', 'outlook', 'hotmail', '2020', '2025', '2fa', 'email', 'verificacao']],
-        ['title' => 'Perfil Mix antigo / Sem Fanpages / Com 0~5.000 Amigos / 2FA+Cookies / Não paga imposto meta 13% / Sem Garantia', 'tokens' => ['perfil', 'mix', 'antigo', 'sem', 'fanpages', '5000', 'amigos', '2fa', 'cookies', 'imposto', 'meta', 'sem', 'garantia']],
-        ['title' => 'BM0+3 Contas de Anuncio / Fica ilimitada / Acesso via link de convite', 'tokens' => ['bm0', '3', 'contas', 'anuncio', 'fica', 'ilimitada', 'acesso', 'link', 'convite']],
-        ['title' => 'Perfil Tiktok MIX/ Criado em 2025/ Email Outlook/ Ads disponível', 'tokens' => ['perfil', 'tiktok', 'mix', 'criado', '2025', 'email', 'outlook', 'ads', 'disponivel']],
-        ['title' => 'US Perfil Envelhecido de 2012 / 300~2K Seguidores / Aquecimento em Publicações / 2FA - Cookies - Proxy 90 Dias', 'tokens' => ['us', 'perfil', 'envelhecido', '2012', '300', '2k', 'seguidores', 'aquecimento', 'publicacoes', '2fa', 'cookies', 'proxy', '90', 'dias']],
-        ['title' => 'BR Proxy Fixa / Https / Duração até 10 Dias / 24h garantia', 'tokens' => ['br', 'proxy', 'fixa', 'https', 'duracao', '10', 'dias', '24h', 'garantia']],
+        ['title' => 'US Perfil Envelhecido de 2023~2025 / 2FA + Cookies / Para Aquecimento / Sem Garantia', 'query' => 'US Perfil Envelhecido de 2023~2025', 'tokens' => ['us', 'perfil', 'envelhecido', '2023', '2025', '2fa', 'cookies', 'aquecimento', 'sem', 'garantia']],
+        ['title' => 'Email Outlook/Hotmail/ 2020~2025/ 2FA + Email verificação', 'query' => 'Email Outlook/Hotmail', 'tokens' => ['email', 'outlook', 'hotmail', '2020', '2025', '2fa', 'email', 'verificacao']],
+        ['title' => 'Perfil Mix antigo / Sem Fanpages / Com 0~5.000 Amigos / 2FA+Cookies / Não paga imposto meta 13% / Sem Garantia', 'query' => 'Perfil Mix antigo / Sem Fanpages', 'tokens' => ['perfil', 'mix', 'antigo', 'sem', 'fanpages', '5000', 'amigos', '2fa', 'cookies', 'imposto', 'meta', 'sem', 'garantia']],
+        ['title' => 'BM0+3 Contas de Anuncio / Fica ilimitada / Acesso via link de convite', 'query' => 'BM0+3 Contas de Anuncio', 'tokens' => ['bm0', '3', 'contas', 'anuncio', 'fica', 'ilimitada', 'acesso', 'link', 'convite']],
+        ['title' => 'Perfil Tiktok MIX/ Criado em 2025/ Email Outlook/ Ads disponível', 'query' => 'Perfil Tiktok MIX', 'tokens' => ['perfil', 'tiktok', 'mix', 'criado', '2025', 'email', 'outlook', 'ads', 'disponivel']],
+        ['title' => 'US Perfil Envelhecido de 2012 / 300~2K Seguidores / Aquecimento em Publicações / 2FA - Cookies - Proxy 90 Dias', 'query' => 'US Perfil Envelhecido de 2012', 'tokens' => ['us', 'perfil', 'envelhecido', '2012', '300', '2k', 'seguidores', 'aquecimento', 'publicacoes', '2fa', 'cookies', 'proxy', '90', 'dias']],
+        ['title' => 'BR Proxy Fixa / Https / Duração até 10 Dias / 24h garantia', 'query' => 'BR Proxy Fixa / Https', 'tokens' => ['br', 'proxy', 'fixa', 'https', 'duracao', '10', 'dias', '24h', 'garantia']],
     ];
 }
 
@@ -105,25 +105,43 @@ function homeProductMatchesRule(array $product, array $rule): bool
     return true;
 }
 
+function homeSearchLevelUpRuleProducts($conn, array $rule, int $vendorId = 0): array
+{
+    $query = trim((string)($rule['query'] ?? $rule['title'] ?? ''));
+    if ($query === '') return [];
+
+    $filters = ['limit' => 20, 'q' => $query];
+    if ($vendorId > 0) $filters['vendor_id'] = $vendorId;
+    return sfListProducts($conn, $filters);
+}
+
 function homeListLevelUpBestSellers($conn, int $vendorId, int $limit = 10): array
 {
-    if ($vendorId <= 0) return [];
-
-    $vendorProducts = sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId]);
-    if (!$vendorProducts) return [];
+    $vendorProducts = $vendorId > 0 ? sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId]) : [];
 
     $selected = [];
     $seen = [];
     foreach (homeLevelUpOfficialBestSellerRules() as $rule) {
-        foreach ($vendorProducts as $product) {
-            $id = (int)($product['id'] ?? 0);
-            if ($id <= 0 || isset($seen[$id]) || !homeProductMatchesRule($product, $rule)) continue;
-            $selected[] = $product;
-            $seen[$id] = true;
-            break;
+        $pools = [$vendorProducts, homeSearchLevelUpRuleProducts($conn, $rule, $vendorId)];
+        if ($vendorId > 0) $pools[] = homeSearchLevelUpRuleProducts($conn, $rule, 0);
+
+        foreach ($pools as $pool) {
+            foreach ($pool as $product) {
+                $id = (int)($product['id'] ?? 0);
+                if ($id <= 0 || isset($seen[$id]) || !homeProductMatchesRule($product, $rule)) continue;
+                $selected[] = $product;
+                $seen[$id] = true;
+                if ($vendorId <= 0) {
+                    $vendorId = (int)($product['vendedor_id'] ?? 0);
+                    $vendorProducts = $vendorId > 0 ? sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId]) : [];
+                }
+                break 2;
+            }
         }
         if (count($selected) >= $limit) return $selected;
     }
+
+    if ($vendorId <= 0 || !$vendorProducts) return $selected;
 
     $fallbackPools = [
         sfListProducts($conn, ['limit' => 100, 'vendor_id' => $vendorId, 'order' => 'best_sellers']),
