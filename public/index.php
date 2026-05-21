@@ -411,9 +411,7 @@ $populares  = [];
 $spotlightVendor = homeFindVendorByKeywords($conn, ['levelup', 'level up']);
 $spotlightVendorId = (int)$spotlightVendor['id'];
 $spotlightVendorName = (string)$spotlightVendor['name'];
-if ($spotlightVendorId > 0) {
-    $populares = homeListLevelUpBestSellers($conn, $spotlightVendorId, 10);
-}
+$populares = homeListLevelUpBestSellers($conn, $spotlightVendorId, 10);
 $spotlightSubtitle = $spotlightVendorId > 0
     ? 'Mais vendidos da ' . $spotlightVendorName
     : 'Produtos da LevelUp';
