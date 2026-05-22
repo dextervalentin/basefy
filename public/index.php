@@ -1246,6 +1246,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             <a href="<?= BASE_PATH ?>/#catalogo" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-greenx hover:underline font-semibold">Ver catálogo <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></a>
         </div>
         <div class="premium-slider" data-premium-slider>
+                    <button type="button" class="premium-arrow premium-arrow-prev" data-premium-prev aria-label="Produtos anteriores" title="Produtos anteriores">
+                        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                    </button>
           <div class="premium-track" data-premium-track>
             <?php foreach ($populares as $i => $p): ?>
                     <article class="premium-card product-card group bg-blackx2 border border-white/[0.06] rounded-2xl overflow-hidden flex flex-col hover:border-greenx/30 hover:shadow-2xl hover:shadow-greenx/[0.06] hover:-translate-y-1 transition-all duration-400 animate-fade-in-up stagger-<?= min($i + 1, 6) ?> snap-start">
@@ -1295,6 +1298,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             </article>
             <?php endforeach; ?>
                     </div>
+                    <button type="button" class="premium-arrow premium-arrow-next" data-premium-next aria-label="Próximos produtos" title="Próximos produtos">
+                      <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                    </button>
                     <div class="premium-dots" data-premium-dots aria-label="Navegação dos produtos em destaque"></div>
         </div>
                 <style>
@@ -1307,8 +1313,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     .premium-dots { display:flex; justify-content:center; align-items:center; gap:.45rem; margin-top:1rem; }
                     .premium-dot { width:.5rem; height:.5rem; border-radius:999px; background:rgba(255,255,255,.16); border:0; padding:0; cursor:pointer; transition:width .25s ease, background .25s ease; }
                     .premium-dot.is-active { width:1.5rem; background:var(--t-accent,#8800E4); }
+                    .premium-arrow { position:absolute; top:42%; z-index:4; width:2.5rem; height:2.5rem; border-radius:999px; display:flex; align-items:center; justify-content:center; color:#f4f4f5; background:rgba(15,10,25,.78); border:1px solid rgba(255,255,255,.12); box-shadow:0 10px 30px rgba(0,0,0,.28); backdrop-filter:blur(10px); transition:opacity .2s ease, transform .2s ease, border-color .2s ease; }
+                    .premium-arrow:hover { border-color:rgba(136,0,228,.55); transform:translateY(-1px); }
+                    .premium-arrow:disabled { opacity:.25; cursor:not-allowed; transform:none; }
+                    .premium-arrow-prev { left:.35rem; }
+                    .premium-arrow-next { right:.35rem; }
                     @media (max-width:1023px){ .premium-card { flex-basis:calc((100% - 2rem) / 3); } }
-                    @media (max-width:639px){ .premium-track{ gap:.75rem; } .premium-card { flex-basis:calc((100% - .75rem) / 2); } }
+                    @media (max-width:639px){ .premium-track{ gap:.75rem; } .premium-card { flex-basis:calc((100% - .75rem) / 2); } .premium-arrow{width:2.25rem;height:2.25rem;top:38%;} }
                 </style>
                 <script>
                 (function(){
@@ -1316,6 +1327,8 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     if (!root) return;
                     var track = root.querySelector('[data-premium-track]');
                     var dots = root.querySelector('[data-premium-dots]');
+                    var prev = root.querySelector('[data-premium-prev]');
+                    var next = root.querySelector('[data-premium-next]');
                     var cards = Array.prototype.slice.call(track.querySelectorAll('.premium-card'));
                     if (!track || !dots || !cards.length) return;
                     track.addEventListener('dragstart', function(e){ e.preventDefault(); });
@@ -1352,6 +1365,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     }
                     function updateDots(){
                         dots.querySelectorAll('.premium-dot').forEach(function(dot, idx){ dot.classList.toggle('is-active', idx === index); });
+                        var last = maxIndex();
+                        if (prev) prev.disabled = last <= 0 || index <= 0;
+                        if (next) next.disabled = last <= 0 || index >= last;
                     }
                     function buildDots(){
                         dots.innerHTML = '';
@@ -1368,6 +1384,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             })(i);
                         }
                     }
+
+                    if (prev) prev.addEventListener('click', function(){ goTo(index - 1, true); });
+                    if (next) next.addEventListener('click', function(){ goTo(index + 1, true); });
 
                     var dragging = false, startX = 0, startY = 0, lockedAxis = null, moved = false;
                     track.addEventListener('pointerdown', function(e){

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/vendor_portal.php';
+require_once __DIR__ . '/../../src/wallet_portal.php';
 
 exigirVendedor();
 $conn = (new Database())->connect();
@@ -143,6 +144,7 @@ foreach ($saques as $sw) {
     if (in_array($stSaq, ['pago', 'paid', 'aprovado', 'approved'], true)) $totalAprovados += $valSaq;
     if (in_array($stSaq, ['pendente', 'pending'], true)) $totalPendentes += $valSaq;
 }
+$resumoFinanceiro = walletResumoFinanceiroUsuario($conn, $uid);
 
 $saques = array_slice($saques, ($pagina - 1) * $pp, $pp);
 
@@ -163,7 +165,43 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
       </a>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-blackx border border-greenx/30">
+        <div class="w-10 h-10 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="wallet" class="w-4 h-4 text-greenx"></i>
+        </div>
+        <div>
+          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Disponível</p>
+          <p class="font-bold text-sm text-greenx">R$ <?= number_format((float)$resumoFinanceiro['saldo_disponivel'], 2, ',', '.') ?></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-blackx border border-blackx3">
+        <div class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-400/30 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="lock-keyhole" class="w-4 h-4 text-purple-300"></i>
+        </div>
+        <div>
+          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Retido</p>
+          <p class="font-bold text-sm text-purple-200">R$ <?= number_format((float)$resumoFinanceiro['valor_retido'], 2, ',', '.') ?></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-blackx border border-blackx3">
+        <div class="w-10 h-10 rounded-xl bg-red-500/15 border border-red-400/30 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="receipt" class="w-4 h-4 text-red-300"></i>
+        </div>
+        <div>
+          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Taxa plataforma</p>
+          <p class="font-bold text-sm text-red-200">R$ <?= number_format((float)$resumoFinanceiro['taxa_plataforma'], 2, ',', '.') ?></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 p-3 rounded-xl bg-blackx border border-blackx3">
+        <div class="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-400/30 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-blue-300"></i>
+        </div>
+        <div>
+          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Líquido liberado</p>
+          <p class="font-bold text-sm text-blue-200">R$ <?= number_format((float)$resumoFinanceiro['vendas_liquido_liberado'], 2, ',', '.') ?></p>
+        </div>
+      </div>
       <div class="flex items-center gap-3 p-3 rounded-xl bg-blackx border border-blackx3">
         <div class="w-10 h-10 rounded-xl bg-greenx/15 border border-greenx/30 flex items-center justify-center flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -187,10 +225,13 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </div>
         <div>
-          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Pendentes</p>
-          <p class="font-bold text-sm text-orange-300">R$ <?= number_format($totalPendentes, 2, ',', '.') ?></p>
+          <p class="text-[11px] text-zinc-500 uppercase tracking-wide">Ainda não pago</p>
+          <p class="font-bold text-sm text-orange-300">R$ <?= number_format((float)$resumoFinanceiro['saques_pendentes'], 2, ',', '.') ?></p>
         </div>
       </div>
+    </div>
+    <div class="mt-3 rounded-xl border border-blackx3 bg-blackx/50 px-4 py-3 text-xs text-zinc-400 leading-relaxed">
+      <strong class="text-zinc-200">Leitura rápida:</strong> disponível é o que pode ser sacado agora; retido são vendas ainda em escrow; taxa plataforma é o total descontado nas vendas já liberadas; líquido liberado é o valor que entrou na sua carteira depois das taxas.
     </div>
   </div>
 

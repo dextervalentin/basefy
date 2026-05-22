@@ -31,6 +31,79 @@ function walletSaldo($conn, int $userId): float
     return (float)($row['wallet_saldo'] ?? 0);
 }
 
+function walletPortalTableColumns($conn, string $table): array
+{
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return [];
+    $cols = [];
+    try {
+        $rs = $conn->query('SHOW COLUMNS FROM ' . $table);
+        if ($rs) {
+            while ($row = $rs->fetch_assoc()) {
+                $field = strtolower((string)($row['Field'] ?? ''));
+                if ($field !== '') $cols[] = $field;
+            }
+        }
+    } catch (Throwable $e) {}
+    return $cols;
+}
+
+function walletResumoFinanceiroUsuario($conn, int $userId): array
+{
+    $resumo = [
+        'saldo_disponivel' => walletSaldo($conn, $userId),
+        'vendas_bruto_liberado' => 0.0,
+        'vendas_liquido_liberado' => 0.0,
+        'taxa_plataforma' => 0.0,
+        'valor_retido' => 0.0,
+        'saques_pendentes' => 0.0,
+        'saques_pagos' => 0.0,
+    ];
+
+    $wdCols = walletPortalTableColumns($conn, 'wallet_withdrawals');
+    if (in_array('user_id', $wdCols, true) && in_array('valor', $wdCols, true) && in_array('status', $wdCols, true)) {
+        try {
+            $st = $conn->prepare("SELECT
+                COALESCE(SUM(CASE WHEN status IN ('pendente','processando') THEN valor ELSE 0 END), 0) AS pendentes,
+                COALESCE(SUM(CASE WHEN status IN ('pago','aprovado') THEN valor ELSE 0 END), 0) AS pagos
+                FROM wallet_withdrawals WHERE user_id = ?");
+            if ($st) {
+                $st->bind_param('i', $userId);
+                $st->execute();
+                $row = $st->get_result()->fetch_assoc() ?: [];
+                $resumo['saques_pendentes'] = (float)($row['pendentes'] ?? 0);
+                $resumo['saques_pagos'] = (float)($row['pagos'] ?? 0);
+            }
+        } catch (Throwable $e) {}
+    }
+
+    $oiCols = walletPortalTableColumns($conn, 'order_items');
+    if (in_array('vendedor_id', $oiCols, true) && in_array('moderation_status', $oiCols, true)) {
+        $grossExpr = in_array('subtotal', $oiCols, true) ? 'COALESCE(subtotal, 0)' : 'COALESCE(quantidade, 0) * COALESCE(preco_unit, 0)';
+        $feeExpr = in_array('escrow_fee_amount', $oiCols, true) ? 'COALESCE(escrow_fee_amount, 0)' : '0';
+        $netExpr = in_array('escrow_net_amount', $oiCols, true) ? 'COALESCE(escrow_net_amount, ' . $grossExpr . ' - ' . $feeExpr . ')' : '(' . $grossExpr . ' - ' . $feeExpr . ')';
+        try {
+            $sql = "SELECT
+                COALESCE(SUM(CASE WHEN moderation_status = 'pendente' THEN {$grossExpr} ELSE 0 END), 0) AS retido,
+                COALESCE(SUM(CASE WHEN moderation_status = 'aprovada' THEN {$grossExpr} ELSE 0 END), 0) AS bruto_liberado,
+                COALESCE(SUM(CASE WHEN moderation_status = 'aprovada' THEN {$feeExpr} ELSE 0 END), 0) AS taxa_plataforma,
+                COALESCE(SUM(CASE WHEN moderation_status = 'aprovada' THEN {$netExpr} ELSE 0 END), 0) AS liquido_liberado
+                FROM order_items WHERE vendedor_id = ?";
+            $st = $conn->prepare($sql);
+            if ($st) {
+                $st->bind_param('i', $userId);
+                $st->execute();
+                $row = $st->get_result()->fetch_assoc() ?: [];
+                $resumo['valor_retido'] = (float)($row['retido'] ?? 0);
+                $resumo['vendas_bruto_liberado'] = (float)($row['bruto_liberado'] ?? 0);
+                $resumo['taxa_plataforma'] = (float)($row['taxa_plataforma'] ?? 0);
+                $resumo['vendas_liquido_liberado'] = (float)($row['liquido_liberado'] ?? 0);
+            }
+        } catch (Throwable $e) {}
+    }
+
+    return $resumo;
+}
+
 function walletCriarRecargaPix($conn, int $userId, float $valor): array
 {
     if ($userId <= 0 || $valor <= 0) {

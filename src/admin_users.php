@@ -102,11 +102,66 @@ function listarTodosUsuarios($conn, string $busca = '', int $pagina = 1, int $po
 
 function obterUsuarioPorIdRole($conn, int $id, string $role): ?array
 {
-    $stmt = $conn->prepare('SELECT * FROM users WHERE id = ? AND role = ? LIMIT 1');
-    $stmt->bind_param('is', $id, $role);
-    $stmt->execute();
+    $roles = rolesEquivalentes($role);
+    $ph = implode(',', array_fill(0, count($roles), '?'));
+    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ? AND role IN ($ph) LIMIT 1");
+    $stmt->execute(array_merge([$id], $roles));
     $row = $stmt->get_result()->fetch_assoc();
     return $row ?: null;
+}
+
+function adminUsersTableExists($conn, string $table): bool
+{
+    if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) return false;
+    $rs = $conn->query("SHOW TABLES LIKE '" . $table . "'");
+    return (bool)($rs && $rs->fetch_assoc());
+}
+
+function obterUsuarioDetalhesPainel($conn, int $id): array
+{
+    $usuario = obterUsuarioPorId($conn, $id);
+    if (!$usuario) {
+        return ['usuario' => [], 'seller_profile' => null, 'verifications' => [], 'documents' => []];
+    }
+
+    unset($usuario['senha']);
+    $sellerProfile = null;
+    $verifications = [];
+    $documents = [];
+
+    if (adminUsersTableExists($conn, 'seller_profiles')) {
+        $st = $conn->prepare('SELECT * FROM seller_profiles WHERE user_id = ? LIMIT 1');
+        if ($st) {
+            $st->bind_param('i', $id);
+            $st->execute();
+            $sellerProfile = $st->get_result()->fetch_assoc() ?: null;
+        }
+    }
+
+    if (adminUsersTableExists($conn, 'user_verifications')) {
+        $st = $conn->prepare('SELECT tipo, status, dados, observacao, criado_em, atualizado FROM user_verifications WHERE user_id = ? ORDER BY tipo ASC');
+        if ($st) {
+            $st->bind_param('i', $id);
+            $st->execute();
+            $verifications = $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        }
+    }
+
+    if (adminUsersTableExists($conn, 'user_verification_docs')) {
+        $st = $conn->prepare('SELECT tipo_doc, status, arquivo, observacao, criado_em FROM user_verification_docs WHERE user_id = ? ORDER BY id DESC');
+        if ($st) {
+            $st->bind_param('i', $id);
+            $st->execute();
+            $documents = $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        }
+    }
+
+    return [
+        'usuario' => $usuario,
+        'seller_profile' => $sellerProfile,
+        'verifications' => $verifications,
+        'documents' => $documents,
+    ];
 }
 
 function emailJaExiste($conn, string $email, ?int $ignorarId = null): bool

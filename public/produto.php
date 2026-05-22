@@ -402,11 +402,6 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <div>
                     <h1 class="text-2xl sm:text-3xl font-black leading-tight tracking-tight">
                         <?= htmlspecialchars((string)$produto['nome'], ENT_QUOTES, 'UTF-8') ?>
-                        <?php if (($produto['tipo'] ?? 'produto') !== 'produto'): ?>
-                        <span class="inline-flex ml-2 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase align-middle <?= ($produto['tipo'] ?? '') === 'dinamico' ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30' ?>">
-                            <?= htmlspecialchars(ucfirst((string)($produto['tipo'] ?? '')), ENT_QUOTES, 'UTF-8') ?>
-                        </span>
-                        <?php endif; ?>
                     </h1>
                     <?php if ($reviewAgg['total'] > 0): ?>
                     <div class="flex items-center gap-2 mt-2">
@@ -427,8 +422,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     $_dispQtd  = ($_tipoProd === 'dinamico' && $_varArr !== null)
                         ? array_sum(array_column($_varArr, 'quantidade'))
                         : (int)($produto['quantidade'] ?? 0);
+                    $_deliveryMode = !empty($produto['auto_delivery_enabled']) ? 'Automática' : 'Manual';
                 ?>
-                <div class="flex items-center gap-6">
+                <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
                     <div class="text-center">
                         <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Disponível</p>
                         <p class="text-xl font-bold mt-0.5"><?= $_dispQtd ?></p>
@@ -436,7 +432,12 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <div class="w-px h-10 bg-white/[0.08]"></div>
                     <div class="text-center">
                         <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Tipo</p>
-                        <p class="text-xl font-bold mt-0.5 capitalize"><?= htmlspecialchars((string)($produto['tipo'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="text-lg sm:text-xl font-bold mt-0.5 capitalize"><?= htmlspecialchars((string)($produto['tipo'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
+                    <div class="w-px h-10 bg-white/[0.08]"></div>
+                    <div class="text-center">
+                        <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Entrega</p>
+                        <p class="text-lg sm:text-xl font-bold mt-0.5"><?= htmlspecialchars($_deliveryMode, ENT_QUOTES, 'UTF-8') ?></p>
                     </div>
                 </div>
 
@@ -526,9 +527,11 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     if (!empty($produto['auto_delivery_enabled'])) {
                         $deliveryText = 'Automática após confirmação do pagamento';
                     } elseif (!empty($produto['data_entrega'])) {
-                        $deliveryText = 'Até ' . date('d/m/Y', strtotime((string)$produto['data_entrega']));
+                        $deliveryText = 'Manual até ' . date('d/m/Y', strtotime((string)$produto['data_entrega']));
                     } elseif (!empty($produto['prazo_entrega_dias'])) {
-                        $deliveryText = 'Até ' . (int)$produto['prazo_entrega_dias'] . ' dia(s) após confirmação do pagamento';
+                        $deliveryText = 'Manual em até ' . (int)$produto['prazo_entrega_dias'] . ' dia(s) após confirmação do pagamento';
+                    } else {
+                        $deliveryText = 'Manual combinada pelo chat após confirmação do pagamento';
                     }
                     ?>
                     <div class="border border-white/[0.06] rounded-xl overflow-hidden">
@@ -546,12 +549,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                                     <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium">Estoque</td>
                                     <td class="px-4 py-3"><?= $_dispQtd ?> unidade(s)</td>
                                 </tr>
-                                <?php if ($deliveryText !== ''): ?>
                                 <tr>
-                                    <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium">Prazo de Entrega</td>
+                                    <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium">Entrega</td>
                                     <td class="px-4 py-3"><?= htmlspecialchars($deliveryText, ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
-                                <?php endif; ?>
                                 <tr>
                                     <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium">Pagamento</td>
                                     <td class="px-4 py-3 flex items-center gap-2">
