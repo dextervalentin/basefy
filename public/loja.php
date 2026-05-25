@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
 $storeName     = trim((string)($vendor['nome_loja'] ?? '')) ?: (string)$vendor['nome'];
 $vendorBio     = trim((string)($vendor['bio'] ?? ''));
 $vendorAvatar  = sfAvatarUrl($vendor['avatar'] ?? null);
+$vendorKycVerified = !empty($vendor['kyc_verificado']);
 $vendorSince   = '';
 if (!empty($vendor['criado_em'])) {
     try {
@@ -109,20 +110,23 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                              alt="<?= htmlspecialchars($storeName, ENT_QUOTES, 'UTF-8') ?>"
                              class="w-full h-full object-cover">
                     </div>
-                    <!-- Verified badge -->
+                    <?php if ($vendorKycVerified): ?>
                     <div class="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-gradient-to-br from-greenx to-greenxd flex items-center justify-center shadow-lg shadow-greenx/30 border-2 border-blackx">
                         <i data-lucide="check" class="w-4 h-4 text-white"></i>
                     </div>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Info -->
                 <div class="text-center sm:text-left flex-1 min-w-0">
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                         <h1 class="text-2xl sm:text-3xl font-black tracking-tight"><?= htmlspecialchars($storeName, ENT_QUOTES, 'UTF-8') ?></h1>
+                        <?php if ($vendorKycVerified): ?>
                         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-greenx/10 border border-greenx/20 text-greenx text-xs font-medium w-fit mx-auto sm:mx-0">
                             <i data-lucide="badge-check" class="w-3 h-3"></i>
                             Vendedor verificado
                         </span>
+                        <?php endif; ?>
 
                     </div>
 

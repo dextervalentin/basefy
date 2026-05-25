@@ -99,6 +99,8 @@ $relacionados = array_slice($relacionados, 0, 5);
 
 $vendorId    = (int)($produto['vendedor_id'] ?? 0);
 $vendorName  = (string)($produto['vendedor_nome'] ?? 'Marketplace');
+$vendorVerification = sfUserVerificationStatuses($conn, $vendorId);
+$vendorKycVerified = sfUserKycVerified($conn, $vendorId);
 
 // Vendor profile data (avatar)
 $vendorAvatar = '';
@@ -106,6 +108,7 @@ try {
     $vendorProfile = sfGetVendorProfile($conn, $vendorId);
     if ($vendorProfile) {
         $vendorAvatar = sfAvatarUrl($vendorProfile['avatar'] ?? null);
+        $vendorKycVerified = !empty($vendorProfile['kyc_verificado']);
     }
 } catch (\Throwable $e) {}
 if ($vendorAvatar === '') {
@@ -424,6 +427,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         : (int)($produto['quantidade'] ?? 0);
                     $_dispLabel = $_tipoProd === 'servico' ? 'Serviço' : 'Disponível';
                     $_dispValue = $_tipoProd === 'servico' ? '-' : (string)$_dispQtd;
+                    $_tipoProdLabel = $_tipoProd === 'servico' ? 'Serviço' : ($_tipoProd === 'dinamico' ? 'Dinâmico' : 'Produto');
                     $_deliveryMode = !empty($produto['auto_delivery_enabled']) ? 'Automática' : 'Manual';
                 ?>
                 <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
@@ -434,7 +438,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <div class="w-px h-10 bg-white/[0.08]"></div>
                     <div class="text-center">
                         <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Tipo</p>
-                        <p class="text-lg sm:text-xl font-bold mt-0.5 capitalize"><?= htmlspecialchars((string)($produto['tipo'] ?? 'Produto'), ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="text-lg sm:text-xl font-bold mt-0.5"><?= htmlspecialchars($_tipoProdLabel, ENT_QUOTES, 'UTF-8') ?></p>
                     </div>
                     <div class="w-px h-10 bg-white/[0.08]"></div>
                     <div class="text-center">
@@ -541,7 +545,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                             <tbody class="divide-y divide-white/[0.06]">
                                 <tr>
                                     <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium w-1/3">Tipo do Anúncio</td>
-                                    <td class="px-4 py-3"><?= htmlspecialchars(ucfirst((string)($produto['tipo'] ?? 'Produto')), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td class="px-4 py-3"><?= htmlspecialchars($_tipoProdLabel, ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                                 <tr>
                                     <td class="px-4 py-3 bg-white/[0.02] text-zinc-400 font-medium">Categoria</td>
@@ -973,18 +977,19 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <div class="bg-blackx2 border border-white/[0.06] rounded-2xl p-5">
                     <h3 class="text-sm font-bold text-center mb-4">Verificações</h3>
                     <div class="space-y-2.5">
+                        <?php
+                            $verificationRows = [
+                                'KYC' => $vendorKycVerified,
+                                'Dados' => sfVerificationStatusApproved((string)($vendorVerification['dados'] ?? '')),
+                                'Documentos' => sfVerificationStatusApproved((string)($vendorVerification['documentos'] ?? '')),
+                            ];
+                        ?>
+                        <?php foreach ($verificationRows as $verificationLabel => $verificationOk): ?>
                         <div class="flex items-center justify-between">
-                            <span class="text-xs text-zinc-400">E-mail:</span>
-                            <span class="text-xs font-bold text-greenx">Verificado</span>
+                            <span class="text-xs text-zinc-400"><?= htmlspecialchars($verificationLabel, ENT_QUOTES, 'UTF-8') ?>:</span>
+                            <span class="text-xs font-bold <?= $verificationOk ? 'text-greenx' : 'text-zinc-500' ?>"><?= $verificationOk ? 'Verificado' : 'Pendente' ?></span>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-zinc-400">Pagamento:</span>
-                            <span class="text-xs font-bold text-greenx">Verificado</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs text-zinc-400">Plataforma:</span>
-                            <span class="text-xs font-bold text-greenx">Verificado</span>
-                        </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
 
@@ -1046,8 +1051,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         </a>
                         <div class="flex-1"></div>
                         <?php if (!empty($p['vendedor_nome'])): ?>
+                        <?php $relatedVendorVerified = sfUserKycVerified($conn, (int)($p['vendedor_id'] ?? 0)); ?>
                         <div class="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 mt-1.5">
-                            <i data-lucide="shield-check" class="w-3 h-3 text-greenx shrink-0"></i>
+                            <i data-lucide="<?= $relatedVendorVerified ? 'shield-check' : 'store' ?>" class="w-3 h-3 <?= $relatedVendorVerified ? 'text-greenx' : 'text-zinc-500' ?> shrink-0"></i>
                             <span class="truncate"><?= htmlspecialchars((string)$p['vendedor_nome'], ENT_QUOTES, 'UTF-8') ?></span>
                         </div>
                         <?php endif; ?>

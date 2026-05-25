@@ -48,7 +48,7 @@ function listarUsuariosPorRole($conn, string $role, string $busca = '', int $pag
     $stmtCount->execute($paramsCount);
     $total = (int)($stmtCount->get_result()->fetch_assoc()['total'] ?? 0);
 
-    $sqlList = "SELECT id, nome, email, role, ativo, is_vendedor, status_vendedor, criado_em
+    $sqlList = "SELECT id, nome, email, role, ativo, is_vendedor, status_vendedor, wallet_saldo, criado_em
                 FROM users
                 WHERE role IN ($ph) AND (nome LIKE ? OR email LIKE ?)
                 ORDER BY id DESC
@@ -85,7 +85,7 @@ function listarTodosUsuarios($conn, string $busca = '', int $pagina = 1, int $po
     $stCount->execute(array_merge($adminRoles, [$like, $like]));
     $total = (int)($stCount->get_result()->fetch_assoc()['total'] ?? 0);
 
-    $sqlList = "SELECT id, nome, email, role, ativo, is_vendedor, status_vendedor, criado_em
+    $sqlList = "SELECT id, nome, email, role, ativo, is_vendedor, status_vendedor, wallet_saldo, criado_em
                 FROM users WHERE role NOT IN ($ph) AND (nome LIKE ? OR email LIKE ?)
                 ORDER BY id DESC LIMIT ?, ?";
     $stList = $conn->prepare($sqlList);

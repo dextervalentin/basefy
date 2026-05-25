@@ -664,7 +664,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <div class="hero-trust-strip mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-zinc-400">
                         <span class="inline-flex items-center gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Escrow ativo</span>
                         <span class="inline-flex items-center gap-1.5"><i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i> PIX instantâneo</span>
-                        <span class="inline-flex items-center gap-1.5"><i data-lucide="badge-check" class="w-3.5 h-3.5 text-violet-400"></i> Vendedores verificados</span>
+                        <span class="inline-flex items-center gap-1.5"><i data-lucide="badge-check" class="w-3.5 h-3.5 text-violet-400"></i> KYC obrigatório</span>
                     </div>
                 </div>
 
@@ -685,7 +685,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             $trustItems = [
                 ['icon' => 'shield-check',   'label' => 'Dados criptografados',   'tone' => 'emerald'],
                 ['icon' => 'undo-2',         'label' => 'Reembolso garantido',    'tone' => 'sky'],
-                ['icon' => 'badge-check',    'label' => 'Vendedores verificados', 'tone' => 'violet'],
+                ['icon' => 'badge-check',    'label' => 'KYC obrigatório',        'tone' => 'violet'],
                 ['icon' => 'zap',            'label' => 'Entrega imediata',       'tone' => 'amber'],
                 ['icon' => 'lock',           'label' => 'Escrow seguro',          'tone' => 'emerald'],
                 ['icon' => 'wallet',         'label' => 'PIX instantâneo',        'tone' => 'fuchsia'],
@@ -1155,7 +1155,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <img src="<?= htmlspecialchars(sfAvatarUrl((string)($vendor['avatar'] ?? '')), ENT_QUOTES, 'UTF-8') ?>" alt="" class="h-12 w-12 rounded-2xl border border-white/[0.08] object-cover bg-blackx" loading="lazy">
                     <div class="min-w-0">
                         <h3 class="truncate text-sm font-bold text-white group-hover:text-greenx transition-colors"><?= htmlspecialchars($vendorName, ENT_QUOTES, 'UTF-8') ?></h3>
-                        <p class="mt-1 text-xs text-zinc-500">Vendedor verificado</p>
+                        <p class="mt-1 text-xs text-zinc-500"><?= sfUserKycVerified($conn, (int)($vendor['id'] ?? 0)) ? 'Vendedor verificado' : 'Vendedor' ?></p>
                     </div>
                 </div>
                 <div class="relative mt-5 grid grid-cols-2 gap-2 text-center">

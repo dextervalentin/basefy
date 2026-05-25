@@ -596,6 +596,50 @@ function sfTableColumns($conn, string $table): array
     return $columns;
 }
 
+function sfVerificationStatusApproved(string $status): bool
+{
+    return in_array(strtolower(trim($status)), ['verificado', 'aprovado'], true);
+}
+
+function sfUserVerificationStatuses($conn, int $userId): array
+{
+    static $cache = [];
+    $defaults = ['dados' => 'pendente', 'email' => 'pendente', 'documentos' => 'pendente'];
+    if ($userId <= 0) return $defaults;
+    if (isset($cache[$userId])) return $cache[$userId];
+
+    $statuses = $defaults;
+    try {
+        $st = $conn->prepare("SELECT tipo, status FROM user_verifications WHERE user_id = ? AND tipo IN ('dados', 'email', 'documentos')");
+        if (!$st) return $cache[$userId] = $statuses;
+        $st->bind_param('i', $userId);
+        $st->execute();
+        $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $st->close();
+        foreach ($rows as $row) {
+            $type = strtolower((string)($row['tipo'] ?? ''));
+            if (array_key_exists($type, $statuses)) {
+                $statuses[$type] = strtolower((string)($row['status'] ?? 'pendente'));
+            }
+        }
+    } catch (\Throwable) {
+        return $cache[$userId] = $statuses;
+    }
+
+    return $cache[$userId] = $statuses;
+}
+
+function sfUserKycVerified($conn, int $userId): bool
+{
+    $statuses = sfUserVerificationStatuses($conn, $userId);
+    foreach (['dados', 'email', 'documentos'] as $requiredType) {
+        if (!sfVerificationStatusApproved((string)($statuses[$requiredType] ?? ''))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function sfProductColumns($conn): array
 {
     $cols = sfTableColumns($conn, 'products');
@@ -1298,6 +1342,7 @@ function sfGetVendorProfile($conn, int $vendorId): ?array
         }
     }
 
+    $row['kyc_verificado'] = sfUserKycVerified($conn, $vendorId);
     return $row;
 }
 

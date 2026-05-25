@@ -23,7 +23,9 @@ $lista  = listarSolicitacoesProduto($conn, $filtros, $pagina, $pp);
 
 $pageTitle   = 'Solicitações de Produto';
 $activeMenu  = 'catalogo';
-$adminCatalogTab = 'solicitacoes_produto';
+$adminCatalogTab = $filtros['status'] === 'aprovado'
+  ? 'produtos_aprovados'
+  : ($filtros['status'] === 'pendente' ? 'produtos_editados' : 'solicitacoes_produto');
 $subnavItems = [['label' => 'Pendentes', 'href' => 'solicitacoes_produto', 'active' => true]];
 
 include __DIR__ . '/../../views/partials/header.php';

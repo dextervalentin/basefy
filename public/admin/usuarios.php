@@ -65,6 +65,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <th class="text-left py-3 pr-3">ID</th>
             <th class="text-left py-3 pr-3">Nome</th>
             <th class="text-left py-3 pr-3">E-mail</th>
+            <th class="text-left py-3 pr-3">Saldo</th>
             <th class="text-left py-3 pr-3">Conta</th>
             <th class="text-left py-3">Ações</th>
           </tr>
@@ -77,6 +78,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               <td class="py-3 pr-3"><?= (int)$row['id'] ?></td>
               <td class="py-3 pr-3"><?= htmlspecialchars($row['nome']) ?></td>
               <td class="py-3 pr-3"><?= htmlspecialchars($row['email']) ?></td>
+              <td class="py-3 pr-3 font-semibold text-zinc-200">R$ <?= number_format((float)($row['wallet_saldo'] ?? 0), 2, ',', '.') ?></td>
               <td class="py-3 pr-3">
                 <span id="<?= $statusId ?>" class="px-2.5 py-1 rounded-full text-xs font-medium <?= $isAtivo ? 'bg-greenx/15 border border-greenx/40 text-greenx' : 'bg-red-500/15 border border-red-400/40 text-red-300' ?>">
                   <?= $isAtivo ? 'Ativo' : 'Inativo' ?>
@@ -101,7 +103,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             </tr>
           <?php endforeach; ?>
           <?php if (!$lista['itens']): ?>
-            <tr><td colspan="5" class="py-6 text-zinc-500">Nenhum usuário encontrado.</td></tr>
+            <tr><td colspan="6" class="py-6 text-zinc-500">Nenhum usuário encontrado.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
