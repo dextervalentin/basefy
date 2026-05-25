@@ -154,6 +154,16 @@ try {
 $cartCount   = sfCartCount();
 $currentPage = '';
 $pageTitle   = (string)$produto['nome'] . ' — Basefy';
+$pageDescription = trim(strip_tags((string)($produto['descricao'] ?? '')));
+if ($pageDescription === '') {
+    $pageDescription = 'Veja este produto na Basefy com pagamento via PIX, carteira integrada e proteção escrow.';
+}
+if (mb_strlen($pageDescription) > 180) {
+    $pageDescription = mb_substr($pageDescription, 0, 177) . '...';
+}
+$pageImage = trim((string)($produto['imagem'] ?? '')) !== '' ? sfImageUrl((string)$produto['imagem']) : (BASE_PATH . '/assets/img/02.png');
+$pageUrl = sfProductUrl($produto);
+$pageType = 'product';
 include __DIR__ . '/../views/partials/header.php';
 include __DIR__ . '/../views/partials/storefront_nav.php';
 ?>
@@ -519,7 +529,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <i data-lucide="heart" class="w-4 h-4"></i>
                         <span class="fav-label">Favoritar</span>
                     </button>
-                    <button type="button" onclick="navigator.share?navigator.share({title:'<?= htmlspecialchars(addslashes($produto['nome']), ENT_QUOTES) ?>',url:location.href}):navigator.clipboard.writeText(location.href).then(()=>alert('Link copiado!'))" class="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400 hover:text-white hover:border-white/[0.15] transition-all">
+                    <button type="button" onclick="navigator.share?navigator.share({title:<?= htmlspecialchars(json_encode((string)$produto['nome'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') ?>,text:<?= htmlspecialchars(json_encode($pageDescription, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') ?>,url:location.href}):navigator.clipboard.writeText(location.href).then(()=>alert('Link copiado!'))" class="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-400 hover:text-white hover:border-white/[0.15] transition-all">
                         <i data-lucide="share-2" class="w-4 h-4"></i>
                         <span>Compartilhar</span>
                     </button>

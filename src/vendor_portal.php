@@ -156,7 +156,8 @@ function obterMeuProduto($c, int $uid, int $id): ?array {
 function salvarMeuProduto($c, int $uid, int $id, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $autoDeliveryEnabled = false, ?string $autoDeliveryItems = null): array {
     $col = vpColunaVendedorProdutos($c);
     if (!$col) return [false, 'Schema de products inválido.'];
-    if ($categoriaId <= 0 || trim($nome) === '') return [false, 'Dados inválidos.'];
+    if ($categoriaId <= 0) return [false, 'Selecione uma categoria para o produto.'];
+    if (trim($nome) === '') return [false, 'Informe o nome do produto.'];
     if (!in_array($tipo, ['produto', 'servico', 'dinamico'], true)) $tipo = 'produto';
     if ($id <= 0 && (!is_string($imagem) || trim($imagem) === '')) {
         return [false, 'Adicione pelo menos uma imagem do produto.'];

@@ -151,15 +151,24 @@ function buscarUsuarioPorEmail($conn, string $email): ?array
     return $row ?: null;
 }
 
-function cadastrarContaPublica($conn, string $nome, string $email, string $senha, string $tipo = 'comprador'): array
+function cadastrarContaPublica($conn, string $nome, string $email, string $senha, string $tipo = 'comprador', string $telefone = '', bool $telefoneObrigatorio = false): array
 {
     $nome = trim($nome);
     $email = trim($email);
+    $telefone = preg_replace('/\D+/', '', trim($telefone)) ?? '';
     // Unified accounts — everyone registers as 'comprador' (mapped to 'usuario')
     $tipo = 'comprador';
 
     if ($email === '' || $senha === '') {
         return [false, 'Preencha e-mail e senha.'];
+    }
+
+    if ($telefoneObrigatorio && $telefone === '') {
+        return [false, 'Informe seu WhatsApp para concluir o cadastro.'];
+    }
+
+    if ($telefone !== '' && (strlen($telefone) < 10 || strlen($telefone) > 13)) {
+        return [false, 'Informe um WhatsApp válido com DDD.'];
     }
 
     // Name is optional — use email prefix if not provided
@@ -184,6 +193,8 @@ function cadastrarContaPublica($conn, string $nome, string $email, string $senha
     $isVendedor = $tipo === 'vendedor' ? 1 : 0;
     $statusVendedor = $tipo === 'vendedor' ? 'nao_solicitado' : 'nao_solicitado';
 
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS telefone VARCHAR(40)"); } catch (\Throwable $e) {}
+
     // Generate unique slug from name
     require_once __DIR__ . '/storefront.php';
     _sfEnsureVendorSlugColumn($conn);
@@ -201,10 +212,10 @@ function cadastrarContaPublica($conn, string $nome, string $email, string $senha
     }
 
     $stmt = $conn->prepare(
-        'INSERT INTO users (nome, email, senha, avatar, role, is_vendedor, status_vendedor, slug)
-         VALUES (?, ?, ?, NULL, ?, ?, ?, ?)'
+        'INSERT INTO users (nome, email, senha, avatar, role, is_vendedor, status_vendedor, slug, telefone)
+         VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)'
     );
-    $stmt->execute([$nome, $email, $hash, $tipo, $isVendedor, $statusVendedor, $slug]);
+    $stmt->execute([$nome, $email, $hash, $tipo, $isVendedor, $statusVendedor, $slug, $telefone]);
 
     return [true, 'Conta criada com sucesso.'];
 }

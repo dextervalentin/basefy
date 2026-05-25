@@ -16,6 +16,12 @@ try { sellerLevelsEnsure($conn); } catch (\Throwable $e) {}
 $feeCfg  = sellerLevelsConfig($conn);
 $feeMode = $feeCfg['enabled'] ? 'levels' : 'global';
 
+try {
+    $conn->query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS buyer_fee NUMERIC(12,2) NOT NULL DEFAULT 0.00");
+    $conn->query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS escrow_fee_amount NUMERIC(12,2) DEFAULT NULL");
+    $conn->query("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS escrow_net_amount NUMERIC(12,2) DEFAULT NULL");
+} catch (Throwable $e) {}
+
 function scalarIntSafe($conn, string $sql, int $default = 0): int {
     try {
         $q = $conn->query($sql);
@@ -29,6 +35,25 @@ function scalarIntSafe($conn, string $sql, int $default = 0): int {
     } catch (Throwable $e) {
         return $default;
     }
+}
+
+function scalarMoneySafe($conn, string $sql, float $default = 0.0): float {
+    try {
+        $q = $conn->query($sql);
+        if (!$q) return $default;
+        $row = $q->fetch_assoc() ?: [];
+        if (array_key_exists('valor', $row)) {
+            return (float)$row['valor'];
+        }
+        $first = array_values($row)[0] ?? $default;
+        return (float)$first;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function moneyBR(float $value): string {
+    return 'R$ ' . number_format($value, 2, ',', '.');
 }
 
 function firstExistingColumn($conn, string $table, array $candidates): ?string {
@@ -54,6 +79,19 @@ function firstExistingColumn($conn, string $table, array $candidates): ?string {
 
 $totUsers      = scalarIntSafe($conn, "SELECT COUNT(*) AS qtd FROM users");
 $totVendedores = scalarIntSafe($conn, "SELECT COUNT(*) AS qtd FROM users WHERE role='vendedor'");
+
+$paidOrdersSql = "LOWER(status) IN ('pago','entregue','concluido','enviado')";
+$paidPaymentsSql = "order_id IS NOT NULL AND LOWER(status) IN ('paid','pago','approved','aprovado','captured','confirmed','completed','succeeded','success')";
+
+$financeBruto = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(NULLIF(gross_total, 0), total) + COALESCE(buyer_fee, 0)), 0) AS valor FROM orders WHERE $paidOrdersSql");
+$financeBuyerFee = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(buyer_fee, 0)), 0) AS valor FROM orders WHERE $paidOrdersSql");
+$financeEscrowFee = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(escrow_fee_amount, 0)), 0) AS valor FROM order_items WHERE LOWER(COALESCE(moderation_status, '')) IN ('aprovada','approved')");
+$financeTaxasRetidas = $financeBuyerFee + $financeEscrowFee;
+$financePixBruto = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(amount_centavos, 0)), 0) / 100.0 AS valor FROM payment_transactions WHERE $paidPaymentsSql");
+$financePixFees = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(fees_centavos, 0)), 0) / 100.0 AS valor FROM payment_transactions WHERE $paidPaymentsSql");
+$financePixLiquido = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(net_centavos, amount_centavos - COALESCE(fees_centavos, 0), 0)), 0) / 100.0 AS valor FROM payment_transactions WHERE $paidPaymentsSql");
+$financeRepasseVendedores = scalarMoneySafe($conn, "SELECT COALESCE(SUM(COALESCE(escrow_net_amount, 0)), 0) AS valor FROM order_items WHERE LOWER(COALESCE(moderation_status, '')) IN ('aprovada','approved')");
+$financeLiquidoPlataforma = $financeTaxasRetidas - $financePixFees;
 
 $orderDateCol = firstExistingColumn($conn, 'order_items', ['criado_em', 'created_at', 'data_criacao']);
 if ($orderDateCol) {
@@ -143,6 +181,51 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         </div>
         <div class="hidden md:flex gap-2">
             <a href="vendas" class="rounded-xl border border-blackx3 px-3 py-2 text-sm hover:border-greenx transition">Revisar vendas</a>
+        </div>
+    </div>
+
+    <div class="bg-blackx2 border border-blackx3 rounded-2xl p-4 md:p-5">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-4">
+            <div>
+                <p class="text-[11px] uppercase tracking-wider text-greenx font-semibold">Financeiro da plataforma</p>
+                <h2 class="text-lg font-semibold mt-0.5">Bruto, taxas, custos PIX e líquido</h2>
+            </div>
+            <p class="text-xs text-zinc-500">Considera pedidos pagos/entregues e transações PIX confirmadas.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div class="rounded-xl border border-white/[0.06] bg-blackx p-4">
+                <div class="flex items-center justify-between gap-2 text-zinc-400 text-sm">
+                    <span>Bruto final processado</span>
+                    <i data-lucide="banknote" class="w-4 h-4 text-zinc-500"></i>
+                </div>
+                <div class="text-2xl font-semibold mt-2"><?= moneyBR($financeBruto) ?></div>
+                <p class="text-[11px] text-zinc-500 mt-1">Produtos + taxa do comprador</p>
+            </div>
+            <div class="rounded-xl border border-white/[0.06] bg-blackx p-4">
+                <div class="flex items-center justify-between gap-2 text-zinc-400 text-sm">
+                    <span>Taxas totais retidas</span>
+                    <i data-lucide="receipt-text" class="w-4 h-4 text-zinc-500"></i>
+                </div>
+                <div class="text-2xl font-semibold mt-2 text-greenx"><?= moneyBR($financeTaxasRetidas) ?></div>
+                <p class="text-[11px] text-zinc-500 mt-1">Comprador <?= moneyBR($financeBuyerFee) ?> + escrow <?= moneyBR($financeEscrowFee) ?></p>
+            </div>
+            <div class="rounded-xl border border-white/[0.06] bg-blackx p-4">
+                <div class="flex items-center justify-between gap-2 text-zinc-400 text-sm">
+                    <span>Custos API PIX</span>
+                    <i data-lucide="zap" class="w-4 h-4 text-zinc-500"></i>
+                </div>
+                <div class="text-2xl font-semibold mt-2 text-red-300">-<?= moneyBR($financePixFees) ?></div>
+                <p class="text-[11px] text-zinc-500 mt-1">PIX bruto <?= moneyBR($financePixBruto) ?> · líquido gateway <?= moneyBR($financePixLiquido) ?></p>
+            </div>
+            <div class="rounded-xl border border-white/[0.06] bg-blackx p-4">
+                <div class="flex items-center justify-between gap-2 text-zinc-400 text-sm">
+                    <span>Faturamento líquido</span>
+                    <i data-lucide="trending-up" class="w-4 h-4 text-zinc-500"></i>
+                </div>
+                <div class="text-2xl font-semibold mt-2 <?= $financeLiquidoPlataforma >= 0 ? 'text-greenx' : 'text-red-300' ?>"><?= moneyBR($financeLiquidoPlataforma) ?></div>
+                <p class="text-[11px] text-zinc-500 mt-1">Retidas - custos PIX · repasse vendedores <?= moneyBR($financeRepasseVendedores) ?></p>
+            </div>
         </div>
     </div>
 

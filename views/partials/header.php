@@ -38,6 +38,28 @@ $_activeThemeKey = 'basefy';
 $_themeColors = $_activeTheme['colors'];
 $_themeMode   = 'dark';
 
+$_headerTitle = (string)($pageTitle ?? APP_NAME);
+$_headerDescription = trim((string)($pageDescription ?? $metaDescription ?? 'Marketplace digital com pagamento via PIX e carteira integrada.'));
+if ($_headerDescription === '') {
+  $_headerDescription = 'Marketplace digital com pagamento via PIX e carteira integrada.';
+}
+$_headerImage = trim((string)($pageImage ?? $metaImage ?? (BASE_PATH . '/assets/img/02.png')));
+$_headerUrl = trim((string)($pageUrl ?? $canonicalUrl ?? ''));
+$_headerType = trim((string)($pageType ?? 'website')) ?: 'website';
+
+if (!function_exists('_basefyHeaderAbsoluteUrl')) {
+  function _basefyHeaderAbsoluteUrl(string $url): string
+  {
+    $url = trim($url);
+    if ($url === '') return rtrim(APP_URL, '/') . '/';
+    if (preg_match('#^https?://#i', $url)) return $url;
+    if (str_starts_with($url, '//')) return 'https:' . $url;
+    return rtrim(APP_URL, '/') . '/' . ltrim($url, '/');
+  }
+}
+$_headerAbsImage = _basefyHeaderAbsoluteUrl($_headerImage);
+$_headerAbsUrl = $_headerUrl !== '' ? _basefyHeaderAbsoluteUrl($_headerUrl) : _basefyHeaderAbsoluteUrl((string)($_SERVER['REQUEST_URI'] ?? '/'));
+
 if ($_themeConn !== null) {
     try {
         $_twColors = themeTailwindColors($_themeConn);
@@ -53,8 +75,23 @@ if ($_themeConn !== null) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title><?= htmlspecialchars($pageTitle ?? APP_NAME) ?></title>
-  <meta name="description" content="Marketplace digital com pagamento via PIX e carteira integrada.">
+  <title><?= htmlspecialchars($_headerTitle, ENT_QUOTES, 'UTF-8') ?></title>
+  <meta name="description" content="<?= htmlspecialchars($_headerDescription, ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="canonical" href="<?= htmlspecialchars($_headerAbsUrl, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="<?= htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:type" content="<?= htmlspecialchars($_headerType, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:title" content="<?= htmlspecialchars($_headerTitle, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:description" content="<?= htmlspecialchars($_headerDescription, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:url" content="<?= htmlspecialchars($_headerAbsUrl, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:image" content="<?= htmlspecialchars($_headerAbsImage, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:image:secure_url" content="<?= htmlspecialchars($_headerAbsImage, ENT_QUOTES, 'UTF-8') ?>">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<?= htmlspecialchars($_headerTitle, ENT_QUOTES, 'UTF-8') ?>">
+  <meta name="twitter:description" content="<?= htmlspecialchars($_headerDescription, ENT_QUOTES, 'UTF-8') ?>">
+  <meta name="twitter:image" content="<?= htmlspecialchars($_headerAbsImage, ENT_QUOTES, 'UTF-8') ?>">
   <link rel="icon" type="image/png" href="<?= BASE_PATH ?>/assets/img/02.png">
   <link rel="apple-touch-icon" href="<?= BASE_PATH ?>/assets/img/02.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -180,21 +217,6 @@ if ($_themeConn !== null) {
     var href = a.getAttribute('href');
     if (!href || href.startsWith('#') || href.startsWith('javascript') || href.startsWith('mailto') || a.target === '_blank') return;
     if (a.hasAttribute('data-no-transition')) return;
-
-    try {
-      var url = new URL(href, window.location.href);
-      if (url.origin === window.location.origin && url.pathname === window.location.pathname && url.hash) {
-        var target = document.querySelector(url.hash);
-        if (target) {
-          e.preventDefault();
-          var overlayLocal = document.getElementById('page-exit-overlay');
-          if (overlayLocal) overlayLocal.classList.remove('fading');
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          if (window.history && window.history.replaceState) window.history.replaceState(null, '', url.pathname + url.hash);
-          return;
-        }
-      }
-    } catch (_) {}
 
     e.preventDefault();
     var overlay = document.getElementById('page-exit-overlay');

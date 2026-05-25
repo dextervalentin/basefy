@@ -169,6 +169,9 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
     .light-mode .ql-editor.ql-blank::before{color:#a1a1aa}
     .light-mode .ql-snow .ql-stroke{stroke:#52525b}.light-mode .ql-snow .ql-fill{fill:#52525b}.light-mode .ql-snow .ql-picker{color:#52525b}
     .light-mode .ql-snow .ql-picker-options{background:#fff;border-color:#d4d4d8}
+    #produto-form.was-submitted select:invalid,
+    #produto-form.was-submitted input:invalid{border-color:#ef4444!important;background:rgba(239,68,68,.08)!important}
+    #produto-form.was-submitted select:invalid + .required-hint{display:flex!important}
 </style>
 
 <div x-data="produtoForm()">
@@ -256,13 +259,14 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
             <div class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div :class="tipo === 'dinamico' ? 'md:col-span-2' : ''">
-                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Categoria</label>
+                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Categoria <span class="text-red-400">*</span></label>
                         <select name="categoria_id" required class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors">
                             <option value="">Selecione a categoria</option>
                             <?php foreach ($categorias as $c): ?>
                             <option value="<?= (int)$c['id'] ?>" <?= (int)($produto['categoria_id'] ?? 0)===(int)$c['id']?'selected':'' ?>><?= htmlspecialchars((string)$c['nome']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <p class="required-hint hidden mt-1 items-center gap-1 text-xs text-red-300"><i data-lucide="alert-circle" class="w-3 h-3"></i> Selecione uma categoria antes de salvar.</p>
                     </div>
                     <div x-show="tipo !== 'dinamico'" x-transition>
                         <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Valor (R$)</label>
@@ -499,7 +503,12 @@ const quill = new Quill('#quill-editor', {
     placeholder: 'Descreva o produto ou serviço em detalhes...',
     modules: { toolbar: [[{'header':[1,2,3,false]}],['bold','italic','underline','strike'],[{'color':[]},{'background':[]}],[{'align':[]}],[{'list':'ordered'},{'list':'bullet'}],['link','image'],['blockquote','code-block'],['clean']] }
 });
-document.getElementById('produto-form').addEventListener('submit', function(e){
+const produtoFormEl = document.getElementById('produto-form');
+produtoFormEl.addEventListener('invalid', function(){
+    produtoFormEl.classList.add('was-submitted');
+}, true);
+produtoFormEl.addEventListener('submit', function(e){
+    produtoFormEl.classList.add('was-submitted');
     document.getElementById('descricao-hidden').value = quill.root.innerHTML;
     // For dynamic products, force price to 0 (variants have their own prices)
     var tipoEl = document.querySelector('input[name="tipo"]:checked');

@@ -167,6 +167,9 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
     .light-mode .ql-editor.ql-blank::before{color:#a1a1aa}
     .light-mode .ql-snow .ql-stroke{stroke:#52525b}.light-mode .ql-snow .ql-fill{fill:#52525b}.light-mode .ql-snow .ql-picker{color:#52525b}
     .light-mode .ql-snow .ql-picker-options{background:#fff;border-color:#d4d4d8}
+    #produto-form.was-submitted select:invalid,
+    #produto-form.was-submitted input:invalid{border-color:#ef4444!important;background:rgba(239,68,68,.08)!important}
+    #produto-form.was-submitted select:invalid + .required-hint{display:flex!important}
 </style>
 
 <div class="max-w-4xl mx-auto" x-data="produtoForm()">
@@ -241,22 +244,24 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
             <div class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Vendedor</label>
+                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Vendedor <span class="text-red-400">*</span></label>
                         <select name="vendedor_id" required class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors">
                             <option value="">Selecione</option>
                             <?php foreach ($vendedores as $v): ?>
                             <option value="<?= (int)$v['id'] ?>" <?= (int)($produto['vendedor_id'] ?? 0)===(int)$v['id']?'selected':'' ?>><?= htmlspecialchars($v['nome']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <p class="required-hint hidden mt-1 items-center gap-1 text-xs text-red-300"><i data-lucide="alert-circle" class="w-3 h-3"></i> Selecione um vendedor antes de salvar.</p>
                     </div>
                     <div>
-                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Categoria</label>
+                        <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Categoria <span class="text-red-400">*</span></label>
                         <select name="categoria_id" required class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors">
                             <option value="">Selecione</option>
                             <?php foreach ($categorias as $c): ?>
                             <option value="<?= (int)$c['id'] ?>" <?= (int)($produto['categoria_id'] ?? 0)===(int)$c['id']?'selected':'' ?>><?= htmlspecialchars($c['nome']) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <p class="required-hint hidden mt-1 items-center gap-1 text-xs text-red-300"><i data-lucide="alert-circle" class="w-3 h-3"></i> Selecione uma categoria antes de salvar.</p>
                     </div>
                 </div>
                 <div>
@@ -432,7 +437,12 @@ const quill = new Quill('#quill-editor', {
     placeholder: 'Descreva o produto ou serviço em detalhes...',
     modules: { toolbar: [[{'header':[1,2,3,false]}],['bold','italic','underline','strike'],[{'color':[]},{'background':[]}],[{'align':[]}],[{'list':'ordered'},{'list':'bullet'}],['link','image'],['blockquote','code-block'],['clean']] }
 });
-document.getElementById('produto-form').addEventListener('submit', function(){
+const produtoFormEl = document.getElementById('produto-form');
+produtoFormEl.addEventListener('invalid', function(){
+    produtoFormEl.classList.add('was-submitted');
+}, true);
+produtoFormEl.addEventListener('submit', function(){
+    produtoFormEl.classList.add('was-submitted');
     document.getElementById('descricao-hidden').value = quill.root.innerHTML;
     // For dynamic products, force price to 0 (variants have their own prices)
     var tipoEl = document.querySelector('input[name="tipo"]:checked');

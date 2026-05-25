@@ -13,6 +13,8 @@ exigirLogin();
 $conn = (new Database())->connect();
 $uid = (int)($_SESSION['user_id'] ?? 0);
 
+try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS telefone VARCHAR(40)"); } catch (\Throwable $e) {}
+
 function pickCol(array $cols, array $candidates): ?string {
     foreach ($candidates as $c) {
         if (in_array(strtolower($c), $cols, true)) return $c;
@@ -246,6 +248,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
   $_verif_total = count($_verif_fields);
   $_verif_pct   = (int) round(($_verif_done / $_verif_total) * 100);
   $_isGoogleUser = !empty($_SESSION['is_google']) || !empty($_SESSION['user']['is_google']);
+  $_telefonePendente = trim((string)($user['telefone'] ?? '')) === '';
 ?>
 
 <div class="space-y-6">
@@ -261,6 +264,16 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
     <div class="rounded-2xl border border-red-500/30 bg-red-600/[0.08] px-5 py-3.5 text-sm text-red-300 flex items-center gap-3">
       <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
       <span><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($_telefonePendente): ?>
+    <div class="rounded-2xl border border-red-500/35 bg-red-500/[0.08] px-5 py-4 text-sm text-red-200 flex items-start gap-3">
+      <i data-lucide="message-circle" class="w-5 h-5 flex-shrink-0 text-red-300 mt-0.5"></i>
+      <div>
+        <p class="font-semibold text-red-100">Complete seu cadastro com WhatsApp</p>
+        <p class="text-red-200/80 mt-1">O número com DDD é obrigatório para avisos de compra, venda, suporte e segurança da conta.</p>
+      </div>
     </div>
   <?php endif; ?>
 
@@ -285,9 +298,11 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
         <div class="flex flex-wrap gap-2">
           <?php foreach ($_verif_fields as $_vk => $_vf): ?>
           <span class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium
-            <?= $_vf['filled']
+            <?= $_vk === 'telefone' && !$_vf['filled']
+              ? 'bg-red-500/[0.08] border border-red-500/30 text-red-300'
+              : ($_vf['filled']
               ? 'bg-white/[0.06] border border-white/[0.10] text-zinc-300'
-              : 'bg-white/[0.02] border border-white/[0.05] text-zinc-600' ?>">
+              : 'bg-white/[0.02] border border-white/[0.05] text-zinc-600') ?>">
             <?php if ($_vf['filled']): ?>
             <i data-lucide="check" class="w-3 h-3 text-greenx"></i>
             <?php else: ?>
@@ -389,10 +404,13 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
               <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1.5">Telefone</label>
               <div class="relative">
                 <i data-lucide="phone" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none"></i>
-                <input name="telefone" id="inputTelefone" value="<?= htmlspecialchars((string)($user['telefone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="(00) 00000-0000" maxlength="15"
+                  <input name="telefone" id="inputTelefone" value="<?= htmlspecialchars((string)($user['telefone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="(00) 00000-0000" maxlength="15" <?= !$_dadosVerificado ? 'required' : '' ?>
                        <?= $_dadosVerificado ? 'readonly disabled' : '' ?>
-                       class="w-full bg-blackx border border-blackx3 rounded-xl pl-10 pr-3 py-3 text-sm outline-none transition <?= $_dadosVerificado ? 'opacity-60 cursor-not-allowed' : 'focus:border-greenx/60 focus:ring-1 focus:ring-greenx/20' ?>">
+                       class="w-full bg-blackx border rounded-xl pl-10 pr-3 py-3 text-sm outline-none transition <?= $_dadosVerificado ? 'border-blackx3 opacity-60 cursor-not-allowed' : ($_telefonePendente ? 'border-red-500/60 bg-red-500/[0.06] focus:border-red-400/80 focus:ring-1 focus:ring-red-500/20' : 'border-blackx3 focus:border-greenx/60 focus:ring-1 focus:ring-greenx/20') ?>">
               </div>
+                <?php if ($_telefonePendente && !$_dadosVerificado): ?>
+                <p class="text-[10px] text-red-300 mt-1 flex items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i> WhatsApp obrigatório para completar o cadastro</p>
+                <?php endif; ?>
               <?php if ($_dadosVerificado): ?>
               <p class="text-[10px] text-greenx mt-1 flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Verificado — não pode ser alterado</p>
               <?php endif; ?>

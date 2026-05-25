@@ -321,6 +321,29 @@ function chatSendSystemMessage($conn, int $conversationId, int $senderId, string
     return $msg;
 }
 
+function chatFormatDeliveryContentLevelUp(string $content): string
+{
+    $content = trim(str_replace(["\r\n", "\r"], "\n", $content));
+    if ($content === '') return '';
+
+    if (substr_count($content, "\n") < 2) {
+        $content = preg_replace('/\s+(LOGIN\s*:)/iu', "\n$1", $content) ?? $content;
+        $content = preg_replace('/\s+(SENHA\s*:)/iu', "\n$1", $content) ?? $content;
+        $content = preg_replace('/\s+(2FA\s*:)/iu', "\n$1", $content) ?? $content;
+        $content = preg_replace('/\s+(C[ÓO]DIGOS?\s+DE\s+RECUPERA[ÇC][ÃA]O\s*:)/iu', "\n$1", $content) ?? $content;
+        $content = preg_replace('/\s+(PROXY\s*:)/iu', "\n$1", $content) ?? $content;
+        $content = preg_replace('/\s+(\[\s*\{)/u', "\n$1", $content) ?? $content;
+    }
+
+    if (!preg_match('/cookies?\s*:/iu', $content)) {
+        $content = preg_replace('/\n(\[\s*\{)/u', "\nCOOKIES:\n$1", $content, 1) ?? $content;
+    }
+
+    $content = preg_replace('/[ \t]*\n[ \t]*/', "\n", $content) ?? $content;
+    $content = preg_replace('/\n{3,}/', "\n\n", $content) ?? $content;
+    return trim($content);
+}
+
 function chatSendAdminMessage($conn, int $conversationId, int $adminId, string $message): ?array
 {
     $conversationId = (int)$conversationId;
@@ -492,7 +515,9 @@ function chatAutoOpenAfterPurchase($conn, int $orderId): void
             if ($deliveryContent === '') continue;
 
             $pName = $vi['product_name'] ?? 'Produto';
-            $deliveryMsg = "📦 Produto entregue: {$pName}\n\n"
+            $deliveryContent = chatFormatDeliveryContentLevelUp($deliveryContent);
+            $deliveryMsg = "📦 Produto entregue: {$pName}\n"
+                . "Formato padrão Level Up\n\n"
                 . "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 . $deliveryContent . "\n"
                 . "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"

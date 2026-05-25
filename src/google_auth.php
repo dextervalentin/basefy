@@ -289,7 +289,7 @@ function googleRegister($conn, array $googleUser, string $role = 'comprador'): a
 
     // New user → register with a random password
     $randomPassword = bin2hex(random_bytes(16));
-    [$ok, $msg] = cadastrarContaPublica($conn, $name, $email, $randomPassword, $tipo);
+    [$ok, $msg] = cadastrarContaPublica($conn, $name, $email, $randomPassword, $tipo, '', false);
 
     if (!$ok) {
         return [false, $msg];
@@ -360,6 +360,7 @@ function googleRegister($conn, array $googleUser, string $role = 'comprador'): a
         $uid = (int)$newUser['id'];
         if ($uid > 0) {
             notificationsCreate($conn, $uid, 'sistema', 'Bem-vindo(a) ao ' . APP_NAME . '!', 'Sua conta foi criada com sucesso. Verifique seu e-mail para ativar sua conta.', '/minha-conta', ['skip_email' => true]);
+            notificationsCreate($conn, $uid, 'sistema', 'Complete seu cadastro', 'Informe seu WhatsApp em Minha Conta para receber avisos importantes de compra, venda e segurança.', '/minha-conta', ['skip_email' => true]);
         }
     } catch (\Throwable $e) {
         error_log('[GoogleAuth] welcome notification error: ' . $e->getMessage());

@@ -122,7 +122,9 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
 
 function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $destaque = false, bool $productFeeOverrideEnabled = false, ?float $productFeePercent = null): array
 {
-    if ($vendedorId <= 0 || $categoriaId <= 0 || trim($nome) === '') return [false, 'Dados inválidos.'];
+    if ($vendedorId <= 0) return [false, 'Selecione um vendedor para o produto.'];
+    if ($categoriaId <= 0) return [false, 'Selecione uma categoria para o produto.'];
+    if (trim($nome) === '') return [false, 'Informe o nome do produto.'];
     if (!in_array($tipo, ['produto', 'servico', 'dinamico'], true)) $tipo = 'produto';
 
     // Imagem obrigatória: no create exige; no edit aceita manter a atual (passar $imagem=null vindo do form quando não enviou nova).
