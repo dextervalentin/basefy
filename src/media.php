@@ -85,10 +85,12 @@ function mediaInsertRow(string $entityType, int $entityId, string $b64, string $
             return null;
         }
 
-        // Get the last inserted ID
-        $res = $conn->query("SELECT MAX(id) AS last_id FROM media_files WHERE entity_type = '" . addslashes($entityType) . "' AND entity_id = " . (int)$entityId);
-        $row = $res ? $res->fetch_assoc() : null;
-        $id = (int)($row['last_id'] ?? 0);
+        $id = (int)($conn->insert_id ?? 0);
+        if ($id <= 0) {
+            $res = $conn->query("SELECT MAX(id) AS last_id FROM media_files WHERE entity_type = '" . addslashes($entityType) . "' AND entity_id = " . (int)$entityId);
+            $row = $res ? $res->fetch_assoc() : null;
+            $id = (int)($row['last_id'] ?? 0);
+        }
 
         return $id > 0 ? $id : null;
     } catch (\Throwable $e) {

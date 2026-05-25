@@ -10,15 +10,39 @@ exigirAdmin();
 $db   = new Database();
 $conn = $db->connect();
 
-function verAdminMediaUrl(?string $raw): ?string
+function verAdminMediaUrl(?string $raw, int $userId = 0): ?string
 {
-  $raw = trim((string)$raw);
+  $raw = trim(str_replace('\\', '/', (string)$raw));
   if ($raw === '') return null;
   if (str_starts_with($raw, 'media:')) {
-    return BASE_PATH . '/api/media?id=' . urlencode(substr($raw, 6));
+    $mediaId = (int)substr($raw, 6);
+    if ($mediaId <= 0) return null;
+
+    $meta = mediaGetMeta($mediaId);
+    if (!$meta) return null;
+
+    $entityType = strtolower((string)($meta['entity_type'] ?? ''));
+    $entityId = (int)($meta['entity_id'] ?? 0);
+    $originalName = strtolower(trim((string)($meta['original_name'] ?? '')));
+    if ($entityType !== 'verification' || ($userId > 0 && $entityId !== $userId)) {
+      return null;
+    }
+    if (in_array($originalName, ['bra.png', 'brasil.png', 'brazil.png'], true)) {
+      return null;
+    }
+
+    return BASE_PATH . '/api/media?id=' . urlencode((string)$mediaId);
   }
   if (preg_match('~^https?://~i', $raw)) return $raw;
-  return BASE_PATH . '/' . ltrim($raw, '/');
+
+  $normalized = ltrim($raw, '/');
+  foreach (['storage/', 'uploads/', 'public/uploads/'] as $allowedPrefix) {
+    if (str_starts_with($normalized, $allowedPrefix)) {
+      return BASE_PATH . '/' . $normalized;
+    }
+  }
+
+  return null;
 }
 
 function verAdminUserDetails($conn, int $uid): array
@@ -133,9 +157,9 @@ if ($q !== '') {
 
 // Status conditions for combined status
 $statusConditions = [
-    'pendente'   => " AND (vd.status = 'pendente' OR vemail.status = 'pendente' OR vdoc.status = 'pendente')",
+  'pendente'   => " AND (vd.status = 'pendente' OR vemail.status = 'pendente' OR vdoc.status = 'pendente') AND vd.status != 'rejeitado' AND vemail.status != 'rejeitado' AND vdoc.status != 'rejeitado'",
     'verificado' => " AND vd.status = 'verificado' AND vemail.status = 'verificado' AND vdoc.status = 'verificado'",
-    'rejeitado'  => " AND (vd.status = 'rejeitado' OR vemail.status = 'rejeitado' OR vdoc.status = 'rejeitado') AND vd.status != 'pendente' AND vemail.status != 'pendente' AND vdoc.status != 'pendente'",
+  'rejeitado'  => " AND (vd.status = 'rejeitado' OR vemail.status = 'rejeitado' OR vdoc.status = 'rejeitado')",
 ];
 
 // Get counts for tabs
@@ -370,11 +394,13 @@ var verifDetails = <?= json_encode(array_map(function($idx) use ($itens, $detail
     foreach (['identidade' => 'Identidade', 'selfie' => 'Selfie', 'comprovante_residencia' => 'Comprovante'] as $dk => $dl) {
         $doc = $d['docs'][$dk] ?? [];
         $dStatus = mb_strtolower((string)($doc['status'] ?? ''));
-        $dUrl = verAdminMediaUrl((string)($doc['arquivo'] ?? ''));
+      $docRaw = (string)($doc['arquivo'] ?? '');
+      $dUrl = verAdminMediaUrl($docRaw, (int)$row['user_id']);
         $docs[] = [
             'label' => $dl,
             'status' => $dStatus ?: 'sem envio',
             'url' => $dUrl,
+        'invalid_ref' => $docRaw !== '' && $dUrl === null,
             'obs' => (string)($doc['observacao'] ?? ''),
         ];
     }
@@ -449,7 +475,9 @@ function openVerifModal(idx) {
         html += '<p class="text-xs text-zinc-400 font-semibold mb-1">' + doc.label + '</p>';
         html += '<p class="text-xs ' + dStatusCls + '">Status: ' + (doc.status || 'sem envio') + '</p>';
         if (doc.url) {
-            html += '<a href="' + escAttr(doc.url) + '" target="_blank" class="inline-flex items-center gap-1 mt-2 text-xs text-purple-300 hover:text-purple-200 transition"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg> Ver arquivo</a>';
+          html += '<a href="' + escAttr(doc.url) + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 mt-2 text-xs text-purple-300 hover:text-purple-200 transition"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg> Abrir arquivo</a>';
+        } else if (doc.invalid_ref) {
+          html += '<p class="text-[11px] text-red-300 mt-1">Referência de arquivo inválida. Reenvie o documento.</p>';
         } else {
             html += '<p class="text-[11px] text-zinc-600 mt-1">Sem arquivo</p>';
         }
