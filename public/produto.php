@@ -427,14 +427,32 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
 
                 <!-- Stats: DISPONÍVEL / VENDAS -->
                 <?php
-                    // For dynamic products, compute stock from variant quantities
                     $_tipoProd = (string)($produto['tipo'] ?? 'produto');
-                    $_varJson  = $produto['variantes'] ?? null;
-                    $_varArr   = ($_tipoProd === 'dinamico' && $_varJson) ? json_decode($_varJson, true) : null;
-                    if (!is_array($_varArr)) $_varArr = null;
-                    $_dispQtd  = ($_tipoProd === 'dinamico' && $_varArr !== null)
-                        ? array_sum(array_column($_varArr, 'quantidade'))
-                        : (int)($produto['quantidade'] ?? 0);
+                    $_variantesRaw = $produto['variantes'] ?? null;
+                    $variantesArr = ($_tipoProd === 'dinamico' && $_variantesRaw) ? json_decode($_variantesRaw, true) : [];
+                    if (!is_array($variantesArr)) $variantesArr = [];
+                    if (!empty($produto['auto_delivery_enabled']) && (int)($produto['id'] ?? 0) > 0) {
+                        require_once __DIR__ . '/../src/stock_items.php';
+                        $_dispQtd = stockCountAll($conn, (int)$produto['id'], null, 'disponivel');
+                        if ($_tipoProd === 'dinamico' && $variantesArr) {
+                            foreach ($variantesArr as $index => $variant) {
+                                if (!is_array($variant)) continue;
+                                $variantName = trim((string)($variant['nome'] ?? ''));
+                                $variantesArr[$index]['quantidade'] = $variantName !== ''
+                                    ? stockCountAvailable($conn, (int)$produto['id'], $variantName)
+                                    : 0;
+                            }
+                        }
+                    } elseif ($_tipoProd === 'dinamico' && $variantesArr) {
+                        $_dispQtd = 0;
+                        foreach ($variantesArr as $variant) {
+                            if (is_array($variant)) {
+                                $_dispQtd += (int)($variant['quantidade'] ?? 0);
+                            }
+                        }
+                    } else {
+                        $_dispQtd = (int)($produto['quantidade'] ?? 0);
+                    }
                     $_dispLabel = $_tipoProd === 'servico' ? 'Serviço' : 'Disponível';
                     $_dispValue = $_tipoProd === 'servico' ? '-' : (string)$_dispQtd;
                     $_tipoProdLabel = $_tipoProd === 'servico' ? 'Serviço' : ($_tipoProd === 'dinamico' ? 'Dinâmico' : 'Produto');
@@ -460,9 +478,9 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <!-- Price + Buy -->
                 <?php
                     $tipoProduto = (string)($produto['tipo'] ?? 'produto');
-                    $variantesJson = $produto['variantes'] ?? null;
-                    $variantesArr = ($tipoProduto === 'dinamico' && $variantesJson) ? json_decode($variantesJson, true) : [];
-                    if (!is_array($variantesArr)) $variantesArr = [];
+                    if ($tipoProduto !== 'dinamico' || !isset($variantesArr) || !is_array($variantesArr)) {
+                        $variantesArr = [];
+                    }
                 ?>
                 <?php if ($tipoProduto === 'dinamico' && count($variantesArr) > 0): ?>
                 <div x-data="{

@@ -354,7 +354,7 @@ function homeBuildCatalogPayload($conn, array $categories, string $catSlug, stri
     $total = sfCountProducts($conn, $filters);
     $page = max(1, $page);
     $offset = ($page - 1) * $perPage;
-    $products = sfListProducts($conn, array_merge($filters, ['limit' => $perPage, 'offset' => $offset]));
+    $products = sfListProducts($conn, array_merge($filters, ['limit' => $perPage, 'offset' => $offset, 'order' => 'best_sellers']));
     $stockMap = homeCatalogStockMap($conn, $products);
     $stockResolver = static fn(array $product): array => homeCatalogStockOf($product, $stockMap);
     $html = '';
