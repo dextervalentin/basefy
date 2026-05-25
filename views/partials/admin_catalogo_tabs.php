@@ -3,6 +3,7 @@ $adminCatalogTab = $adminCatalogTab ?? 'produtos';
 $tabs = [
     'produtos'   => ['label' => 'Produtos',   'href' => BASE_PATH . '/admin/produtos',   'icon' => 'package'],
     'categorias' => ['label' => 'Categorias', 'href' => BASE_PATH . '/admin/categorias', 'icon' => 'tags'],
+  'solicitacoes_produto' => ['label' => 'Solicitações', 'href' => BASE_PATH . '/admin/solicitacoes_produto', 'icon' => 'package-check'],
 ];
 ?>
 <div class="mb-4 bg-blackx2 border border-blackx3 rounded-2xl p-1.5 flex gap-1 overflow-x-auto no-scrollbar">

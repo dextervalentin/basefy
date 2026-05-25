@@ -30,8 +30,8 @@ $menuFixed = [
 ];
 
 $menuGroups = [
-    ['label' => 'Gerenc. Produtos', 'icon' => 'shopping-bag', 'items' => [
-      ['key' => 'catalogo', 'label' => 'Gerenc. Produtos', 'href' => 'produtos', 'icon' => 'shopping-bag'],
+    ['label' => 'Gerenciar Produtos', 'icon' => 'shopping-bag', 'items' => [
+      ['key' => 'catalogo', 'label' => 'Gerenciar Produtos', 'href' => 'produtos', 'icon' => 'shopping-bag'],
     ]],
     ['label' => 'Pessoas', 'icon' => 'users', 'items' => [
         ['key' => 'admins', 'label' => 'Administradores', 'href' => 'admins', 'icon' => 'shield-check'],

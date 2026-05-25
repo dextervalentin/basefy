@@ -186,9 +186,9 @@ function adminUsersEnsureWalletColumns($conn): void
     try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen BOOLEAN NOT NULL DEFAULT FALSE"); } catch (Throwable $e) {}
     try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen_at TIMESTAMP NULL"); } catch (Throwable $e) {}
     try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen_by BIGINT NULL"); } catch (Throwable $e) {}
-    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS status_conta VARCHAR(20) DEFAULT 'ativo'"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS status_conta VARCHAR(20) DEFAULT 'ativa'"); } catch (Throwable $e) {}
     try {
-        $conn->query("CREATE TABLE IF NOT EXISTS admin_wallet_adjustments (
+        $conn->query("CREATE TABLE IF NOT EXISTS wallet_admin_movements (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             user_id BIGINT NOT NULL,
             admin_id BIGINT NULL,
@@ -209,7 +209,7 @@ function adminUserWalletHistorico($conn, int $userId, int $limit = 30): array
     $limit = max(1, min(100, $limit));
     try {
         $st = $conn->prepare("SELECT a.*, adm.nome AS admin_nome, adm.email AS admin_email
-            FROM admin_wallet_adjustments a
+            FROM wallet_admin_movements a
             LEFT JOIN users adm ON adm.id = a.admin_id
             WHERE a.user_id = ?
             ORDER BY a.id DESC
@@ -253,7 +253,7 @@ function adminUserWalletAjustar($conn, int $userId, int $adminId, string $action
         $up->bind_param('di', $after, $userId);
         $up->execute();
 
-        $ins = $conn->prepare("INSERT INTO admin_wallet_adjustments (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins = $conn->prepare("INSERT INTO wallet_admin_movements (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $ins->bind_param('iisdddss', $userId, $adminId, $action, $amount, $before, $after, $reason, $note);
         $ins->execute();
         $adjustId = (int)$conn->insert_id;
@@ -261,7 +261,7 @@ function adminUserWalletAjustar($conn, int $userId, int $adminId, string $action
         try {
             $tipo = $action === 'credit' ? 'credito' : 'debito';
             $origem = 'admin_adjustment';
-            $refTipo = 'admin_wallet_adjustment';
+            $refTipo = 'wallet_admin_movement';
             $descricao = trim($reason . ($note !== '' ? ' - ' . $note : ''));
             $tx = $conn->prepare("INSERT INTO wallet_transactions (user_id, tipo, origem, referencia_tipo, referencia_id, valor, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $tx->bind_param('isssids', $userId, $tipo, $origem, $refTipo, $adjustId, $amount, $descricao);
@@ -281,26 +281,34 @@ function adminUserWalletCongelar($conn, int $userId, int $adminId, bool $freeze,
     adminUsersEnsureWalletColumns($conn);
     if ($userId <= 0 || $adminId <= 0) return [false, 'Dados inválidos.'];
     $frozen = $freeze ? 1 : 0;
-    $statusConta = $freeze ? 'wallet_bloqueada' : 'ativo';
+    $frozenAtSql = $freeze ? 'CURRENT_TIMESTAMP' : 'NULL';
+    $conn->begin_transaction();
     try {
-        $up = $conn->prepare('UPDATE users SET wallet_frozen = ?, wallet_frozen_at = CURRENT_TIMESTAMP, wallet_frozen_by = ?, status_conta = ? WHERE id = ?');
-        $up->bind_param('iisi', $frozen, $adminId, $statusConta, $userId);
-        $up->execute();
-
         $saldo = 0.0;
-        $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? LIMIT 1');
+        $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? FOR UPDATE');
         $st->bind_param('i', $userId);
         $st->execute();
-        $saldo = (float)($st->get_result()->fetch_assoc()['wallet_saldo'] ?? 0);
+        $row = $st->get_result()->fetch_assoc();
+        if (!$row) {
+            $conn->rollback();
+            return [false, 'Usuário não encontrado.'];
+        }
+        $saldo = (float)($row['wallet_saldo'] ?? 0);
+
+        $up = $conn->prepare('UPDATE users SET wallet_frozen = ?, wallet_frozen_at = ' . $frozenAtSql . ', wallet_frozen_by = ? WHERE id = ?');
+        $up->bind_param('iii', $frozen, $adminId, $userId);
+        $up->execute();
 
         $action = $freeze ? 'freeze' : 'unfreeze';
         $reason = trim($reason) !== '' ? trim($reason) : ($freeze ? 'Wallet congelada pelo admin' : 'Wallet desbloqueada pelo admin');
-        $ins = $conn->prepare("INSERT INTO admin_wallet_adjustments (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, 0, ?, ?, ?, '')");
+        $ins = $conn->prepare("INSERT INTO wallet_admin_movements (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, 0, ?, ?, ?, '')");
         $ins->bind_param('iisdds', $userId, $adminId, $action, $saldo, $saldo, $reason);
         $ins->execute();
 
+        $conn->commit();
         return [true, $freeze ? 'Wallet congelada.' : 'Wallet desbloqueada.'];
     } catch (Throwable $e) {
+        $conn->rollback();
         return [false, 'Falha ao atualizar bloqueio da wallet.'];
     }
 }

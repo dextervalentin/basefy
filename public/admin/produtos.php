@@ -23,7 +23,7 @@ $lista = listarProdutos($conn, $f, $pagina, $pp);
 $categorias = listarCategoriasProdutoAtivas($conn);
 $vendedores = listarVendedoresAprovados($conn);
 
-$pageTitle = 'Gerenc. Produtos';
+$pageTitle = 'Gerenciar Produtos';
 $activeMenu = 'catalogo';
 $adminCatalogTab = 'produtos';
 $topActions = [['label' => 'Novo produto', 'href' => 'produtos_form']];

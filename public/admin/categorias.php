@@ -38,7 +38,7 @@ $homeCategoryOptions = array_values(array_filter(
 ));
 $homeFeaturedCategorySetting = sfHomeSettingGet($conn, 'featured_category_id', '');
 
-$pageTitle = 'Catálogo';
+$pageTitle = 'Categorias';
 $activeMenu = 'catalogo';
 $adminCatalogTab = 'categorias';
 $topActions = [['label' => 'Nova categoria', 'href' => 'categorias_form']];

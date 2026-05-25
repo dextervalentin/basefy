@@ -1013,7 +1013,9 @@ function sfWalletSaldo($conn, int $userId): float
         return 0.0;
     }
 
-    $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? LIMIT 1');
+    $userCols = sfTableColumns($conn, 'users');
+    $walletFrozenSelect = in_array('wallet_frozen', $userCols, true) ? ', wallet_frozen' : '';
+    $st = $conn->prepare('SELECT wallet_saldo' . $walletFrozenSelect . ' FROM users WHERE id = ? LIMIT 1');
     if (!$st) {
         return 0.0;
     }
@@ -1022,6 +1024,10 @@ function sfWalletSaldo($conn, int $userId): float
     $st->execute();
     $row = $st->get_result()->fetch_assoc() ?: [];
     $st->close();
+
+    if ((string)($row['wallet_frozen'] ?? '0') === '1' || (string)($row['wallet_frozen'] ?? '') === 't') {
+        return 0.0;
+    }
 
     return (float)($row['wallet_saldo'] ?? 0);
 }
@@ -1110,7 +1116,9 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
 
     $conn->begin_transaction();
     try {
-        $stUser = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? FOR UPDATE');
+        $userCols = sfTableColumns($conn, 'users');
+        $walletFrozenSelect = in_array('wallet_frozen', $userCols, true) ? ', wallet_frozen' : '';
+        $stUser = $conn->prepare('SELECT wallet_saldo' . $walletFrozenSelect . ' FROM users WHERE id = ? FOR UPDATE');
         $stUser->bind_param('i', $userId);
         $stUser->execute();
         $user = $stUser->get_result()->fetch_assoc();
@@ -1119,7 +1127,8 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
             return [false, 'Usuário não encontrado.', []];
         }
 
-        $walletSaldo = (float)($user['wallet_saldo'] ?? 0);
+        $walletFrozen = (string)($user['wallet_frozen'] ?? '0') === '1' || (string)($user['wallet_frozen'] ?? '') === 't';
+        $walletSaldo = $walletFrozen ? 0.0 : (float)($user['wallet_saldo'] ?? 0);
         if ($useWallet && $walletSaldo > 0) {
             $walletUsed = min($walletSaldo, $totalComTaxa);
             $walletUsed = round($walletUsed, 2);

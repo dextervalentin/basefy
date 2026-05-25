@@ -22,13 +22,16 @@ $pp     = in_array(($_pp = (int)($_GET['pp'] ?? 10)), [5,10,20]) ? $_pp : 10;
 $lista  = listarSolicitacoesProduto($conn, $filtros, $pagina, $pp);
 
 $pageTitle   = 'Solicitações de Produto';
-$activeMenu  = 'solicitacoes_produto';
+$activeMenu  = 'catalogo';
+$adminCatalogTab = 'solicitacoes_produto';
 $subnavItems = [['label' => 'Pendentes', 'href' => 'solicitacoes_produto', 'active' => true]];
 
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 ?>
 
+  <div>
+  <?php include __DIR__ . '/../../views/partials/admin_catalogo_tabs.php'; ?>
   <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5">
     <!-- Filter -->
     <form method="get" class="mb-4 rounded-2xl border border-blackx3 bg-blackx/50 p-3 md:p-4">
@@ -156,6 +159,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       $totalPaginas = (int)($lista['total_paginas'] ?? 1);
       include __DIR__ . '/../../views/partials/pagination.php';
     ?>
+  </div>
   </div>
 
 <?php include __DIR__ . '/../../views/partials/admin_layout_end.php'; include __DIR__ . '/../../views/partials/footer.php'; ?>
