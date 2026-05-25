@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/auth.php';
 require_once __DIR__ . '/../src/upload_paths.php';
 require_once __DIR__ . '/../src/media.php';
 require_once __DIR__ . '/../src/email.php';
+require_once __DIR__ . '/../src/user_identity.php';
 
 exigirLogin();
 
@@ -150,30 +151,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'dados') {
         $nome     = trim((string)($_POST['nome'] ?? ''));
-        $cpfRaw   = preg_replace('/\D/', '', trim((string)($_POST['cpf'] ?? '')));
-        // Save CPF with mask: 123.456.789-00
-        $cpf      = $cpfRaw;
-        if (strlen($cpfRaw) === 11) {
-            $cpf = substr($cpfRaw,0,3).'.'.substr($cpfRaw,3,3).'.'.substr($cpfRaw,6,3).'-'.substr($cpfRaw,9,2);
-        }
+        $cpfRaw   = identityDigits(trim((string)($_POST['cpf'] ?? '')));
+        $cpf      = identityFormatCpf($cpfRaw);
         $email    = trim((string)($_POST['email'] ?? ''));
         // Save phone with mask
         $telefone = trim((string)($_POST['telefone'] ?? ''));
 
-        if ($nome === '' || $cpfRaw === '' || strlen($cpfRaw) < 11) {
+        if ($nome === '' || $cpfRaw === '' || strlen($cpfRaw) !== 11) {
             $err = 'Preencha nome completo e CPF corretamente.';
         } else {
-            // Check unique CPF
-            if ($docCol) {
-                $chkCpf = $conn->prepare("SELECT id FROM users WHERE {$docCol} = ? AND id != ? LIMIT 1");
-                $chkCpf->bind_param('si', $cpf, $uid);
-                $chkCpf->execute();
-                if ($chkCpf->get_result()->fetch_assoc()) {
-                    $err = 'Este CPF já está cadastrado em outra conta.';
-                    $chkCpf->close();
-                } else {
-                    $chkCpf->close();
-                }
+            if (userCpfJaExiste($conn, $cpfRaw, $uid)) {
+              $err = 'Este CPF já está cadastrado em outra conta.';
             }
             // Check unique phone
             if ($err === '' && $phoneCol && $telefone !== '') {

@@ -78,6 +78,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['verif_flash'] = ['type' => 'error', 'msg' => 'Parâmetros inválidos.'];
     } elseif ($postAction === 'aprovar') {
         try {
+        $stDocCount = $conn->prepare("SELECT COUNT(*) AS qtd FROM user_verification_docs WHERE user_id = ? AND COALESCE(TRIM(arquivo), '') <> ''");
+        $stDocCount->bind_param('i', $postUserId);
+        $stDocCount->execute();
+        $docCount = (int)($stDocCount->get_result()->fetch_assoc()['qtd'] ?? 0);
+        $stDocCount->close();
+
+        if ($docCount < 3) {
+          $obsSemDocs = 'Documento inválido. Reenvie o documento.';
+          $stRejectMissing = $conn->prepare("UPDATE user_verifications SET status = 'rejeitado', observacao = ?, atualizado = CURRENT_TIMESTAMP WHERE user_id = ? AND tipo IN ('dados', 'documentos') AND status = 'pendente'");
+          $stRejectMissing->bind_param('si', $obsSemDocs, $postUserId);
+          $stRejectMissing->execute();
+          $stRejectMissing->close();
+
+          $_SESSION['verif_flash'] = ['type' => 'error', 'msg' => "KYC do usuário #{$postUserId} rejeitado: documentos ausentes."];
+          $redirectTab = 'rejeitado';
+          throw new RuntimeException('__redirect_only__');
+        }
+
             $st = $conn->prepare("UPDATE user_verifications SET status = 'verificado', observacao = ?, atualizado = CURRENT_TIMESTAMP WHERE user_id = ? AND tipo IN ('dados', 'documentos') AND status = 'pendente'");
             $st->bind_param('si', $postObs, $postUserId);
             $st->execute();
@@ -89,14 +107,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stDocs->execute();
                 $stDocs->close();
             }
-            $_SESSION['verif_flash'] = ['type' => 'ok', 'msg' => "Verificação do usuário #{$postUserId} aprovada com sucesso."];
+            $_SESSION['verif_flash'] = ['type' => 'ok', 'msg' => "KYC do usuário #{$postUserId} aprovado com sucesso."];
             $redirectTab = 'verificado';
         } catch (\Throwable $e) {
+          if ($e->getMessage() !== '__redirect_only__') {
             $_SESSION['verif_flash'] = ['type' => 'error', 'msg' => 'Erro ao aprovar: ' . $e->getMessage()];
+          }
         }
     } elseif ($postAction === 'rejeitar') {
         try {
-            $obsRej = $postObs ?: 'Rejeitado pelo administrador.';
+            $obsRej = $postObs ?: 'Documento inválido. Reenvie o documento.';
             $st = $conn->prepare("UPDATE user_verifications SET status = 'rejeitado', observacao = ?, atualizado = CURRENT_TIMESTAMP WHERE user_id = ? AND tipo IN ('dados', 'documentos') AND status = 'pendente'");
             $st->bind_param('si', $obsRej, $postUserId);
             $st->execute();
@@ -108,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stDocs->execute();
                 $stDocs->close();
             }
-            $_SESSION['verif_flash'] = ['type' => 'ok', 'msg' => "Verificação do usuário #{$postUserId} rejeitada."];
+            $_SESSION['verif_flash'] = ['type' => 'ok', 'msg' => "KYC do usuário #{$postUserId} rejeitado."];
             $redirectTab = 'rejeitado';
         } catch (\Throwable $e) {
             $_SESSION['verif_flash'] = ['type' => 'error', 'msg' => 'Erro ao rejeitar: ' . $e->getMessage()];
@@ -211,7 +231,7 @@ foreach ($itens as $idx => $row) {
     $detailData[$idx] = ['user' => $uDet, 'dados' => $dadosPayload, 'docs' => $docMap];
 }
 
-$pageTitle   = 'Verificações';
+$pageTitle   = 'KYC';
 $activeMenu  = 'verificacoes';
 $subnavItems = [];
 
@@ -275,7 +295,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     <?php if (!$itens): ?>
       <div class="text-center py-12 text-zinc-500">
         <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-3 opacity-40"></i>
-        <p class="text-sm">Nenhuma verificação encontrada.</p>
+        <p class="text-sm">Nenhum KYC encontrado.</p>
       </div>
     <?php else: ?>
       <div class="overflow-x-auto">
@@ -348,7 +368,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     <div style="position:relative;width:100%;max-width:64rem;margin:auto 0;flex-shrink:0" onclick="event.stopPropagation()">
       <div class="bg-blackx2 border border-blackx3 rounded-2xl shadow-2xl">
         <div class="flex items-center justify-between px-5 py-4 border-b border-blackx3">
-          <h2 class="text-lg font-bold flex items-center gap-2"><i data-lucide="shield-check" class="w-5 h-5 text-purple-400"></i> Detalhes da Verificação</h2>
+          <h2 class="text-lg font-bold flex items-center gap-2"><i data-lucide="shield-check" class="w-5 h-5 text-purple-400"></i> Detalhes do KYC</h2>
           <button onclick="closeVerifModal()" class="w-8 h-8 rounded-lg border border-blackx3 flex items-center justify-center text-zinc-400 hover:text-white hover:border-red-400 transition">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
@@ -477,7 +497,7 @@ function openVerifModal(idx) {
         if (doc.url) {
           html += '<a href="' + escAttr(doc.url) + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 mt-2 text-xs text-purple-300 hover:text-purple-200 transition"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg> Abrir arquivo</a>';
         } else if (doc.invalid_ref) {
-          html += '<p class="text-[11px] text-red-300 mt-1">Referência de arquivo inválida. Reenvie o documento.</p>';
+          html += '<p class="text-[11px] text-red-300 mt-1">Documento inválido. Reenvie o documento.</p>';
         } else {
             html += '<p class="text-[11px] text-zinc-600 mt-1">Sem arquivo</p>';
         }

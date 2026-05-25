@@ -422,12 +422,14 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     $_dispQtd  = ($_tipoProd === 'dinamico' && $_varArr !== null)
                         ? array_sum(array_column($_varArr, 'quantidade'))
                         : (int)($produto['quantidade'] ?? 0);
+                    $_dispLabel = $_tipoProd === 'servico' ? 'Serviço' : 'Disponível';
+                    $_dispValue = $_tipoProd === 'servico' ? '-' : (string)$_dispQtd;
                     $_deliveryMode = !empty($produto['auto_delivery_enabled']) ? 'Automática' : 'Manual';
                 ?>
                 <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
                     <div class="text-center">
-                        <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Disponível</p>
-                        <p class="text-xl font-bold mt-0.5"><?= $_dispQtd ?></p>
+                        <p class="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold"><?= htmlspecialchars($_dispLabel, ENT_QUOTES, 'UTF-8') ?></p>
+                        <p class="text-xl font-bold mt-0.5"><?= htmlspecialchars($_dispValue, ENT_QUOTES, 'UTF-8') ?></p>
                     </div>
                     <div class="w-px h-10 bg-white/[0.08]"></div>
                     <div class="text-center">

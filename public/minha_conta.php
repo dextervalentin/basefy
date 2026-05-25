@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/db.php';
 require_once __DIR__ . '/../src/auth.php';
 require_once __DIR__ . '/../src/upload_paths.php';
 require_once __DIR__ . '/../src/media.php';
+require_once __DIR__ . '/../src/user_identity.php';
 
 exigirLogin();
 
@@ -84,11 +85,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Save document / CPF (only if dados not verified)
             if (!$_dadosVerificado) {
-                $documento = preg_replace('/\D/', '', trim((string)($_POST['documento'] ?? '')));
+                $documento = identityDigits(trim((string)($_POST['documento'] ?? '')));
                 if ($docCol && $documento !== '') {
-                    $set[] = "`{$docCol}` = ?";
-                    $types .= 's';
-                    $vals[] = $documento;
+                  if (strlen($documento) !== 11) {
+                    $err = 'CPF inválido.';
+                  } elseif (userCpfJaExiste($conn, $documento, $uid)) {
+                        $err = 'Este CPF já está cadastrado em outra conta.';
+                    } else {
+                        $set[] = "`{$docCol}` = ?";
+                        $types .= 's';
+                        $vals[] = identityFormatCpf($documento);
+                    }
                 }
             }
 

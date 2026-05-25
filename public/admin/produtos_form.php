@@ -34,6 +34,7 @@ if ($produto) {
 }
 
 $erro = '';
+$imagemPostPersistida = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $idPost = (int)($_POST['id'] ?? 0);
 
@@ -48,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$imagemFinal) {
         $imagemFinal = (string)($_POST['imagem_atual'] ?? '');
     }
+    $imagemPostPersistida = (string)$imagemFinal;
 
     $preco = isset($_POST['preco']) ? (float)$_POST['preco'] : brToFloat((string)($_POST['preco_display'] ?? '0,00'));
 
@@ -133,7 +135,8 @@ $subnavItems = [
 include __DIR__ . '/../../views/partials/header.php';
 include __DIR__ . '/../../views/partials/admin_layout_start.php';
 
-$imgAtual = $produto ? mediaResolveUrl((string)($produto['imagem'] ?? '')) : '';
+$imagemHiddenAtual = $imagemPostPersistida !== '' ? $imagemPostPersistida : (string)($produto['imagem'] ?? '');
+$imgAtual = $imagemHiddenAtual !== '' ? mediaResolveUrl($imagemHiddenAtual) : '';
 $precoInicial = isset($produto['preco']) ? number_format((float)$produto['preco'], 2, ',', '.') : '0,00';
 $tipoAtual = (string)($produto['tipo'] ?? 'produto');
 $qtdAtual = (int)($produto['quantidade'] ?? 1);
@@ -194,7 +197,7 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
 
     <form method="post" enctype="multipart/form-data" class="space-y-5" id="produto-form">
         <?php if ($produto): ?><input type="hidden" name="id" value="<?= (int)$produto['id'] ?>"><?php endif; ?>
-        <input type="hidden" name="imagem_atual" value="<?= htmlspecialchars((string)($produto['imagem'] ?? '')) ?>">
+        <input type="hidden" name="imagem_atual" value="<?= htmlspecialchars($imagemHiddenAtual, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" id="preco" name="preco" value="<?= htmlspecialchars(str_replace(',', '.', str_replace('.', '', $precoInicial))) ?>">
         <input type="hidden" name="descricao" id="descricao-hidden">
         <input type="hidden" name="variantes" id="variantes-hidden">

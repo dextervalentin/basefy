@@ -30,14 +30,13 @@ $menuFixed = [
 ];
 
 $menuGroups = [
-    ['label' => 'Catálogo', 'icon' => 'shopping-bag', 'items' => [
-      ['key' => 'catalogo', 'label' => 'Catálogo', 'href' => 'produtos', 'icon' => 'shopping-bag'],
+    ['label' => 'Gerenc. Produtos', 'icon' => 'shopping-bag', 'items' => [
+      ['key' => 'catalogo', 'label' => 'Gerenc. Produtos', 'href' => 'produtos', 'icon' => 'shopping-bag'],
     ]],
     ['label' => 'Pessoas', 'icon' => 'users', 'items' => [
         ['key' => 'admins', 'label' => 'Administradores', 'href' => 'admins', 'icon' => 'shield-check'],
         ['key' => 'usuarios', 'label' => 'Usuários', 'href' => 'usuarios', 'icon' => 'users'],
-        ['key' => 'verificacoes', 'label' => 'Verificações', 'href' => 'verificacoes', 'icon' => 'shield-check'],
-        ['key' => 'solicitacoes_produto', 'label' => 'Solic. Produto', 'href' => 'solicitacoes_produto', 'icon' => 'package-check'],
+        ['key' => 'verificacoes', 'label' => 'KYC', 'href' => 'verificacoes', 'icon' => 'shield-check'],
     ]],
     ['label' => 'Financeiro', 'icon' => 'landmark', 'items' => [
       ['key' => 'financeiro', 'label' => 'Financeiro', 'href' => 'vendas', 'icon' => 'landmark'],

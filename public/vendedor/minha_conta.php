@@ -12,6 +12,7 @@ require_once $ROOT . '/src/db.php';
 require_once $ROOT . '/src/upload_paths.php';
 require_once $ROOT . '/src/media.php';
 require_once $ROOT . '/src/chat.php';
+require_once $ROOT . '/src/user_identity.php';
 
 if (function_exists('exigirVendedor')) {
     exigirVendedor();
@@ -75,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'profi
     $novoEmail = trim((string)($_POST['email'] ?? ''));
 
     $novoTelefone = trim((string)($_POST['telefone'] ?? ''));
-    $novoDocumento = preg_replace('/\D/', '', trim((string)($_POST['documento'] ?? '')));
+    $novoDocumento = identityDigits(trim((string)($_POST['documento'] ?? '')));
 
     if ($novoNome === '') $errors[] = 'Informe o nome.';
     if ($novoEmail === '' || !filter_var($novoEmail, FILTER_VALIDATE_EMAIL)) $errors[] = 'Informe um e-mail válido.';
@@ -120,9 +121,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'profi
         if ($emailCol) { $sets[] = "`{$emailCol}` = ?"; $types .= 's'; $vals[] = $novoEmail; }
         if ($fotoCol && $novoFotoRel !== null) { $sets[] = "`{$fotoCol}` = ?"; $types .= 's'; $vals[] = $novoFotoRel; }
         if ($phoneCol && $novoTelefone !== '') { $sets[] = "`{$phoneCol}` = ?"; $types .= 's'; $vals[] = $novoTelefone; }
-        if ($docCol && $novoDocumento !== '')   { $sets[] = "`{$docCol}` = ?"; $types .= 's'; $vals[] = $novoDocumento; }
+        if ($docCol && $novoDocumento !== '') {
+          if (strlen($novoDocumento) !== 11) {
+            $errors[] = 'CPF inválido.';
+          } elseif (userCpfJaExiste($conn, $novoDocumento, $uid)) {
+                $errors[] = 'Este CPF já está cadastrado em outra conta.';
+            } else {
+                $sets[] = "`{$docCol}` = ?"; $types .= 's'; $vals[] = identityFormatCpf($novoDocumento);
+            }
+        }
 
-        if ($sets) {
+        if (!$errors && $sets) {
             $sqlUp = "UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?";
             $types .= 'i';
             $vals[] = $uid;

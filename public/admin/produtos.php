@@ -23,7 +23,7 @@ $lista = listarProdutos($conn, $f, $pagina, $pp);
 $categorias = listarCategoriasProdutoAtivas($conn);
 $vendedores = listarVendedoresAprovados($conn);
 
-$pageTitle = 'Catálogo';
+$pageTitle = 'Gerenc. Produtos';
 $activeMenu = 'catalogo';
 $adminCatalogTab = 'produtos';
 $topActions = [['label' => 'Novo produto', 'href' => 'produtos_form']];
@@ -152,7 +152,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             </td>
             <td class="py-3 pr-3">
               <?php if ($rowTipo === 'servico'): ?>
-                <span class="text-zinc-600">&mdash;</span>
+                <span class="text-zinc-600">-</span>
               <?php elseif ($rowTipo === 'dinamico'): ?>
                 <?php
                   $varQtd = 0;

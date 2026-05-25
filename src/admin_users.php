@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/user_identity.php';
 
 function statusVendedorValido(string $status): bool
 {
@@ -177,6 +178,133 @@ function emailJaExiste($conn, string $email, ?int $ignorarId = null): bool
     return (bool)$stmt->get_result()->fetch_assoc();
 }
 
+function adminUsersEnsureWalletColumns($conn): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen BOOLEAN NOT NULL DEFAULT FALSE"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen_at TIMESTAMP NULL"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_frozen_by BIGINT NULL"); } catch (Throwable $e) {}
+    try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS status_conta VARCHAR(20) DEFAULT 'ativo'"); } catch (Throwable $e) {}
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS admin_wallet_adjustments (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            admin_id BIGINT NULL,
+            action VARCHAR(30) NOT NULL,
+            amount NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+            balance_before NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+            balance_after NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+            reason VARCHAR(120),
+            note TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )");
+    } catch (Throwable $e) {}
+}
+
+function adminUserWalletHistorico($conn, int $userId, int $limit = 30): array
+{
+    adminUsersEnsureWalletColumns($conn);
+    $limit = max(1, min(100, $limit));
+    try {
+        $st = $conn->prepare("SELECT a.*, adm.nome AS admin_nome, adm.email AS admin_email
+            FROM admin_wallet_adjustments a
+            LEFT JOIN users adm ON adm.id = a.admin_id
+            WHERE a.user_id = ?
+            ORDER BY a.id DESC
+            LIMIT {$limit}");
+        $st->bind_param('i', $userId);
+        $st->execute();
+        return $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function adminUserWalletAjustar($conn, int $userId, int $adminId, string $action, float $amount, string $reason, string $note = ''): array
+{
+    adminUsersEnsureWalletColumns($conn);
+    $action = strtolower(trim($action));
+    if (!in_array($action, ['credit', 'debit'], true)) return [false, 'Tipo de movimentação inválido.'];
+    if ($userId <= 0 || $adminId <= 0 || $amount <= 0) return [false, 'Dados inválidos.'];
+    $reason = trim($reason);
+    if ($reason === '') return [false, 'Informe o motivo da movimentação.'];
+
+    $conn->begin_transaction();
+    try {
+        $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? FOR UPDATE');
+        $st->bind_param('i', $userId);
+        $st->execute();
+        $row = $st->get_result()->fetch_assoc();
+        if (!$row) {
+            $conn->rollback();
+            return [false, 'Usuário não encontrado.'];
+        }
+
+        $before = (float)($row['wallet_saldo'] ?? 0);
+        $after = $action === 'credit' ? $before + $amount : $before - $amount;
+        if ($after < 0) {
+            $conn->rollback();
+            return [false, 'Saldo insuficiente para remover esse valor.'];
+        }
+
+        $up = $conn->prepare('UPDATE users SET wallet_saldo = ? WHERE id = ?');
+        $up->bind_param('di', $after, $userId);
+        $up->execute();
+
+        $ins = $conn->prepare("INSERT INTO admin_wallet_adjustments (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins->bind_param('iisdddss', $userId, $adminId, $action, $amount, $before, $after, $reason, $note);
+        $ins->execute();
+        $adjustId = (int)$conn->insert_id;
+
+        try {
+            $tipo = $action === 'credit' ? 'credito' : 'debito';
+            $origem = 'admin_adjustment';
+            $refTipo = 'admin_wallet_adjustment';
+            $descricao = trim($reason . ($note !== '' ? ' - ' . $note : ''));
+            $tx = $conn->prepare("INSERT INTO wallet_transactions (user_id, tipo, origem, referencia_tipo, referencia_id, valor, descricao) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $tx->bind_param('isssids', $userId, $tipo, $origem, $refTipo, $adjustId, $amount, $descricao);
+            $tx->execute();
+        } catch (Throwable $e) {}
+
+        $conn->commit();
+        return [true, 'Wallet atualizada com sucesso.'];
+    } catch (Throwable $e) {
+        $conn->rollback();
+        return [false, 'Falha ao movimentar wallet.'];
+    }
+}
+
+function adminUserWalletCongelar($conn, int $userId, int $adminId, bool $freeze, string $reason = ''): array
+{
+    adminUsersEnsureWalletColumns($conn);
+    if ($userId <= 0 || $adminId <= 0) return [false, 'Dados inválidos.'];
+    $frozen = $freeze ? 1 : 0;
+    $statusConta = $freeze ? 'wallet_bloqueada' : 'ativo';
+    try {
+        $up = $conn->prepare('UPDATE users SET wallet_frozen = ?, wallet_frozen_at = CURRENT_TIMESTAMP, wallet_frozen_by = ?, status_conta = ? WHERE id = ?');
+        $up->bind_param('iisi', $frozen, $adminId, $statusConta, $userId);
+        $up->execute();
+
+        $saldo = 0.0;
+        $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? LIMIT 1');
+        $st->bind_param('i', $userId);
+        $st->execute();
+        $saldo = (float)($st->get_result()->fetch_assoc()['wallet_saldo'] ?? 0);
+
+        $action = $freeze ? 'freeze' : 'unfreeze';
+        $reason = trim($reason) !== '' ? trim($reason) : ($freeze ? 'Wallet congelada pelo admin' : 'Wallet desbloqueada pelo admin');
+        $ins = $conn->prepare("INSERT INTO admin_wallet_adjustments (user_id, admin_id, action, amount, balance_before, balance_after, reason, note) VALUES (?, ?, ?, 0, ?, ?, ?, '')");
+        $ins->bind_param('iisdds', $userId, $adminId, $action, $saldo, $saldo, $reason);
+        $ins->execute();
+
+        return [true, $freeze ? 'Wallet congelada.' : 'Wallet desbloqueada.'];
+    } catch (Throwable $e) {
+        return [false, 'Falha ao atualizar bloqueio da wallet.'];
+    }
+}
+
 function criarUsuarioPainel(
     $conn,
     string $nome,
@@ -236,10 +364,14 @@ function atualizarUsuarioPainel(
     string $email,
     string $role,
     string $statusVendedor = 'nao_solicitado',
-    string $novaSenha = ''
+    string $novaSenha = '',
+    string $telefone = '',
+    string $cpf = ''
 ): array {
     $nome = trim($nome);
     $email = trim($email);
+    $telefone = trim($telefone);
+    $cpfDigits = identityDigits($cpf);
 
     if ($id <= 0 || $nome === '' || $email === '') {
         return [false, 'Dados inválidos.'];
@@ -263,28 +395,49 @@ function atualizarUsuarioPainel(
         return [false, 'Este e-mail já está em uso por outra conta.'];
     }
 
+    if ($cpfDigits !== '' && strlen($cpfDigits) !== 11) {
+        return [false, 'CPF inválido.'];
+    }
+
+    if ($cpfDigits !== '' && userCpfJaExiste($conn, $cpfDigits, $id)) {
+        return [false, 'Este CPF já está cadastrado em outra conta.'];
+    }
+
     $isVendedor = $role === 'vendedor' ? 1 : 0;
     $status = $role === 'vendedor' ? $statusVendedor : 'nao_solicitado';
+    $cols = identityTableColumns($conn, 'users');
+
+    $sets = ['nome = ?', 'email = ?', 'role = ?', 'is_vendedor = ?', 'status_vendedor = ?'];
+    $types = 'sssis';
+    $params = [$nome, $email, $role, $isVendedor, $status];
+
+    if (in_array('telefone', $cols, true)) {
+        $sets[] = 'telefone = ?';
+        $types .= 's';
+        $params[] = $telefone !== '' ? $telefone : null;
+    }
+
+    if (in_array('cpf', $cols, true)) {
+        $sets[] = 'cpf = ?';
+        $types .= 's';
+        $params[] = $cpfDigits !== '' ? identityFormatCpf($cpfDigits) : null;
+    }
 
     if ($novaSenha !== '') {
         if (strlen($novaSenha) < 8) {
             return [false, 'A nova senha deve ter no mínimo 8 caracteres.'];
         }
         $hash = password_hash($novaSenha, PASSWORD_DEFAULT);
-        $stmt = $conn->prepare(
-            'UPDATE users
-             SET nome = ?, email = ?, role = ?, is_vendedor = ?, status_vendedor = ?, senha = ?
-             WHERE id = ?'
-        );
-        $stmt->bind_param('sssissi', $nome, $email, $role, $isVendedor, $status, $hash, $id);
-    } else {
-        $stmt = $conn->prepare(
-            'UPDATE users
-             SET nome = ?, email = ?, role = ?, is_vendedor = ?, status_vendedor = ?
-             WHERE id = ?'
-        );
-        $stmt->bind_param('sssisi', $nome, $email, $role, $isVendedor, $status, $id);
+        $sets[] = 'senha = ?';
+        $types .= 's';
+        $params[] = $hash;
     }
+
+    $params[] = $id;
+    $types .= 'i';
+
+    $stmt = $conn->prepare('UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = ?');
+    $stmt->bind_param($types, ...$params);
 
     $stmt->execute();
     return [true, 'Registro atualizado com sucesso.'];

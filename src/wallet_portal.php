@@ -401,11 +401,18 @@ function walletSolicitarSaque($conn, int $userId, float $valor, string $pixKey, 
 
     $conn->begin_transaction();
     try {
-        $st = $conn->prepare('SELECT wallet_saldo FROM users WHERE id = ? FOR UPDATE');
+        $userCols = walletPortalTableColumns($conn, 'users');
+        $walletFrozenSelect = in_array('wallet_frozen', $userCols, true) ? ', wallet_frozen' : '';
+        $st = $conn->prepare('SELECT wallet_saldo' . $walletFrozenSelect . ' FROM users WHERE id = ? FOR UPDATE');
         $st->bind_param('i', $userId);
         $st->execute();
         $row = $st->get_result()->fetch_assoc();
         $saldo = (float)($row['wallet_saldo'] ?? 0);
+
+        if ((string)($row['wallet_frozen'] ?? '0') === '1' || (string)($row['wallet_frozen'] ?? '') === 't') {
+            $conn->rollback();
+            return [false, 'Wallet bloqueada pelo admin.'];
+        }
 
         if ($saldo < $valor) {
             $conn->rollback();
