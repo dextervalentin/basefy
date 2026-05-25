@@ -1059,6 +1059,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
             });
             clearBtn.addEventListener('click', function(){ input.value = ''; fetchCatalog({ query: '', updateUrl: true }); input.focus(); });
             if (loadMore) loadMore.addEventListener('click', function(){ fetchCatalog({ append: true, updateUrl: false }); });
+            if (sortSelect) sortSelect.value = 'vendidos';
             if (sortSelect) sortSelect.addEventListener('change', sortCatalog);
 
             window.catalogOpenPopup = function(){
