@@ -66,6 +66,9 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
     $colCategoria = colunaExiste($conn, 'products', 'categoria_id') ? 'categoria_id' : null;
     $selectImagem = colunaExiste($conn, 'products', 'imagem') ? 'p.imagem' : 'NULL AS imagem';
     $selectDestaque = colunaExiste($conn, 'products', 'destaque') ? 'COALESCE(p.destaque, FALSE) AS destaque' : 'FALSE AS destaque';
+    $selectAutoDelivery = colunaExiste($conn, 'products', 'auto_delivery_enabled')
+        ? 'COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled'
+        : 'FALSE AS auto_delivery_enabled';
 
     if ($colVendedor === null || $colCategoria === null) {
         return ['itens' => []];
@@ -87,6 +90,7 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.variantes,
+                     {$selectAutoDelivery},
                    {$selectDestaque},
                    c.nome AS categoria_nome, u.nome AS vendedor_nome
             FROM products p

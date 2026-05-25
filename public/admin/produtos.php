@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/admin_produtos.php';
+require_once __DIR__ . '/../../src/stock_items.php';
 exigirAdmin();
 
 $db = new Database();
@@ -153,6 +154,12 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <td class="py-3 pr-3">
               <?php if ($rowTipo === 'servico'): ?>
                 <span class="text-zinc-600">-</span>
+              <?php elseif (!empty($row['auto_delivery_enabled'])): ?>
+                <?php $autoQtd = stockCountAll($conn, (int)$row['id'], null, 'disponivel'); ?>
+                <span class="<?= $autoQtd <= 0 ? 'text-red-400' : 'text-zinc-300' ?>">
+                  <?= $autoQtd ?>
+                </span>
+                <span class="text-[10px] text-amber-400 ml-1">(auto)</span>
               <?php elseif ($rowTipo === 'dinamico'): ?>
                 <?php
                   $varQtd = 0;
