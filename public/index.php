@@ -241,11 +241,18 @@ function homeCatalogStockMap($conn, array $products): array
 
 function homeCatalogStockOf(array $product, array $stockMap): array
 {
-    $autoDelivery = !empty($product['auto_delivery_enabled']);
     $productId = (int)($product['id'] ?? 0);
-    if ($autoDelivery) {
-        $quantity = $stockMap[$productId] ?? 0;
-    } else {
+    $typeKey = mb_strtolower(trim((string)($product['tipo'] ?? 'produto')));
+    $legacyCount = $typeKey === 'dinamico' ? 0 : count(sfAutoDeliveryItemsList((string)($product['auto_delivery_items'] ?? '')));
+    $autoQuantity = (int)($stockMap[$productId] ?? 0) + $legacyCount;
+    if (!empty($product['auto_delivery_enabled'])) {
+        if ($autoQuantity > 0) {
+            return ['qty' => $autoQuantity, 'auto' => true];
+        }
+        return ['qty' => 0, 'auto' => false];
+    }
+
+    if ($typeKey === 'dinamico') {
         $variantsRaw = $product['variantes'] ?? null;
         $variants = is_string($variantsRaw) ? (json_decode($variantsRaw, true) ?: []) : (is_array($variantsRaw) ? $variantsRaw : []);
         $variantStock = 0;
@@ -253,8 +260,11 @@ function homeCatalogStockOf(array $product, array $stockMap): array
             if (is_array($variant)) $variantStock += (int)($variant['quantidade'] ?? 0);
         }
         $quantity = $variantStock > 0 ? $variantStock : (int)($product['quantidade'] ?? 0);
+    } else {
+        $quantity = (int)($product['quantidade'] ?? 0);
     }
-    return ['qty' => (int)$quantity, 'auto' => $autoDelivery];
+
+    return ['qty' => (int)$quantity, 'auto' => false];
 }
 
 function homeRenderCatalogProductCard(array $product, callable $stockResolver): string
@@ -1281,6 +1291,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <span class="text-xs sm:text-base font-bold text-greenx whitespace-nowrap"><?= sfDisplayPrice($p) ?></span>
                     </div>
                     <?php
+                    $canBuyPopular = sfProductCanPurchase($conn, $p);
                     $hasVariants2 = (($p['tipo'] ?? '') === 'dinamico' && !empty($p['variantes']));
                     $varsJson2 = $hasVariants2 ? htmlspecialchars(is_string($p['variantes']) ? $p['variantes'] : json_encode($p['variantes']), ENT_QUOTES, 'UTF-8') : '';
                     ?>
@@ -1290,9 +1301,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                         <input type="hidden" name="qty" value="1">
                         <input type="hidden" name="redirect_to" value="carrinho">
-                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                        <button class="w-full flex items-center justify-center gap-1 sm:gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-2 py-2 sm:px-3 sm:py-2.5 text-[10px] sm:text-xs shadow-lg shadow-greenx/15 hover:shadow-greenx/30 hover:scale-[1.02] active:scale-[0.98] transition-all <?= !$canBuyPopular ? 'opacity-50 cursor-not-allowed hover:scale-100 hover:shadow-greenx/15' : '' ?>"
+                                <?= !$canBuyPopular ? 'disabled' : '' ?>>
                             <i data-lucide="shopping-bag" class="w-3 h-3 sm:w-3.5 sm:h-3.5"></i>
-                            Comprar
+                            <?= $canBuyPopular ? 'Comprar' : 'Esgotado' ?>
                         </button>
                     </form>
                 </div>

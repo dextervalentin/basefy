@@ -155,11 +155,18 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
               <?php if ($rowTipo === 'servico'): ?>
                 <span class="text-zinc-600">-</span>
               <?php elseif (!empty($row['auto_delivery_enabled'])): ?>
-                <?php $autoQtd = stockCountAll($conn, (int)$row['id'], null, 'disponivel'); ?>
+                <?php
+                  $autoConfigured = sfAutoDeliveryConfiguredCount($conn, (int)$row['id'], (string)($row['auto_delivery_items'] ?? '')) > 0;
+                  $autoQtd = $autoConfigured
+                      ? sfAutoDeliveryAvailableCount($conn, (int)$row['id'], $rowTipo, null, (string)($row['auto_delivery_items'] ?? ''))
+                      : 0;
+                ?>
                 <span class="<?= $autoQtd <= 0 ? 'text-red-400' : 'text-zinc-300' ?>">
                   <?= $autoQtd ?>
                 </span>
-                <span class="text-[10px] text-amber-400 ml-1">(auto)</span>
+                <span class="text-[10px] ml-1 <?= $autoConfigured ? 'text-amber-400' : 'text-red-400' ?>">
+                  <?= $autoConfigured ? '(auto)' : '(sem config)' ?>
+                </span>
               <?php elseif ($rowTipo === 'dinamico'): ?>
                 <?php
                   $varQtd = 0;

@@ -242,6 +242,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <span class="text-sm sm:text-base font-bold text-greenx"><?= sfDisplayPrice($p) ?>
                     </div>
                     <?php
+                    $canBuyCategory = sfProductCanPurchase($conn, $p);
                     $hv = (($p['tipo'] ?? '') === 'dinamico' && !empty($p['variantes']));
                     $vj = $hv ? htmlspecialchars(is_string($p['variantes']) ? $p['variantes'] : json_encode($p['variantes']), ENT_QUOTES, 'UTF-8') : '';
                     ?>
@@ -250,9 +251,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                         <input type="hidden" name="action" value="add_cart">
                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                         <input type="hidden" name="qty" value="1">
-                        <button class="w-full flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-3 py-2 text-xs shadow-lg shadow-greenx/10 hover:shadow-greenx/20 transition-all">
+                        <button class="w-full flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-3 py-2 text-xs shadow-lg shadow-greenx/10 hover:shadow-greenx/20 transition-all <?= !$canBuyCategory ? 'opacity-50 cursor-not-allowed' : '' ?>"
+                                <?= !$canBuyCategory ? 'disabled' : '' ?>>
                             <i data-lucide="shopping-bag" class="w-3 h-3"></i>
-                            Comprar
+                            <?= $canBuyCategory ? 'Comprar' : 'Esgotado' ?>
                         </button>
                     </form>
                 </div>

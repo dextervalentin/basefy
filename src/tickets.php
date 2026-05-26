@@ -197,6 +197,24 @@ function ticketCreate($conn, int $userId, string $categoria, string $titulo, str
     $ticketId = $conn->insert_id;
     $stmt->close();
 
+    try {
+        $userName = 'Cliente';
+        $stUser = $conn->prepare('SELECT nome FROM users WHERE id = ? LIMIT 1');
+        if ($stUser) {
+            $stUser->bind_param('i', $userId);
+            $stUser->execute();
+            $userRow = $stUser->get_result()->fetch_assoc() ?: null;
+            $stUser->close();
+            $userName = trim((string)($userRow['nome'] ?? '')) ?: 'Cliente';
+        }
+
+        $title = 'Novo ticket aberto';
+        $summary = $userName . ' abriu o ticket #' . $ticketId . ': ' . $titulo;
+        notificationsNotifyAdmins($conn, 'ticket', $title, $summary, '/admin/tickets?open=' . $ticketId, [], $userId);
+    } catch (\Throwable $e) {
+        error_log('[Tickets] Admin notification error: ' . $e->getMessage());
+    }
+
     return ['ok' => true, 'msg' => 'Ticket criado com sucesso!', 'id' => $ticketId];
 }
 
@@ -255,9 +273,11 @@ function ticketsList($conn, array $filters = [], int $page = 1, int $pp = 10): a
     $page = min($page, $totalPaginas);
     $offset = ($page - 1) * $pp;
 
-    $sql = "SELECT t.*, u.nome AS user_nome, u.email AS user_email
+    $sql = "SELECT t.*, u.nome AS user_nome, u.email AS user_email,
+                   COALESCE(NULLIF(u.telefone, ''), NULLIF(sp.telefone, '')) AS user_whatsapp
             FROM support_tickets t
             LEFT JOIN users u ON u.id = t.user_id
+            LEFT JOIN seller_profiles sp ON sp.user_id = u.id
             WHERE $where
             ORDER BY
                 CASE t.status
@@ -299,9 +319,11 @@ function ticketGetById($conn, int $id): ?array
 {
     ticketsEnsureTable($conn);
     $stmt = $conn->prepare(
-        "SELECT t.*, u.nome AS user_nome, u.email AS user_email
+        "SELECT t.*, u.nome AS user_nome, u.email AS user_email,
+            COALESCE(NULLIF(u.telefone, ''), NULLIF(sp.telefone, '')) AS user_whatsapp
          FROM support_tickets t
          LEFT JOIN users u ON u.id = t.user_id
+         LEFT JOIN seller_profiles sp ON sp.user_id = u.id
          WHERE t.id = ? LIMIT 1"
     );
     $stmt->bind_param('i', $id);
@@ -347,6 +369,18 @@ function ticketAddMessage($conn, int $ticketId, int $userId, string $mensagem, b
     if (!$ticketRow) return [false, 'Ticket não encontrado.'];
     if (ticketIsFinalStatus((string)$ticketRow['status'])) return [false, 'Este ticket já foi encerrado.'];
 
+    $ownerId = 0;
+    $ticketTitle = '';
+    $stOwner = $conn->prepare('SELECT user_id, titulo FROM support_tickets WHERE id = ? LIMIT 1');
+    if ($stOwner) {
+        $stOwner->bind_param('i', $ticketId);
+        $stOwner->execute();
+        $ticketMeta = $stOwner->get_result()->fetch_assoc() ?: [];
+        $stOwner->close();
+        $ownerId = (int)($ticketMeta['user_id'] ?? 0);
+        $ticketTitle = trim((string)($ticketMeta['titulo'] ?? ''));
+    }
+
     $admin = $isAdmin ? 1 : 0;
     $stmt = $conn->prepare(
         "INSERT INTO support_ticket_messages (ticket_id, user_id, is_admin, mensagem) VALUES (?, ?, ?, ?)"
@@ -367,16 +401,30 @@ function ticketAddMessage($conn, int $ticketId, int $userId, string $mensagem, b
 
         // Notify ticket owner about admin reply
         try {
-            require_once __DIR__ . '/notifications.php';
-            $stOwner = $conn->prepare("SELECT user_id FROM support_tickets WHERE id = ? LIMIT 1");
-            $stOwner->bind_param('i', $ticketId);
-            $stOwner->execute();
-            $ownerRow = $stOwner->get_result()->fetch_assoc();
-            $stOwner->close();
-            if ($ownerRow && (int)$ownerRow['user_id'] > 0) {
-                notificationsCreate($conn, (int)$ownerRow['user_id'], 'ticket', 'Resposta no seu ticket', 'O suporte respondeu ao seu ticket #' . $ticketId . '. Confira a resposta.', '/ticket_detalhe?id=' . $ticketId);
+            if ($ownerId > 0) {
+                notificationsCreate($conn, $ownerId, 'ticket', 'Resposta no seu ticket', 'O suporte respondeu ao seu ticket #' . $ticketId . '. Confira a resposta.', '/ticket_detalhe?id=' . $ticketId);
             }
         } catch (\Throwable $e) { error_log('[Tickets] Notification error: ' . $e->getMessage()); }
+    } else {
+        try {
+            $userName = 'Cliente';
+            $stUser = $conn->prepare('SELECT nome FROM users WHERE id = ? LIMIT 1');
+            if ($stUser) {
+                $stUser->bind_param('i', $userId);
+                $stUser->execute();
+                $userRow = $stUser->get_result()->fetch_assoc() ?: null;
+                $stUser->close();
+                $userName = trim((string)($userRow['nome'] ?? '')) ?: 'Cliente';
+            }
+
+            $summary = $userName . ' respondeu ao ticket #' . $ticketId;
+            if ($ticketTitle !== '') {
+                $summary .= ': ' . $ticketTitle;
+            }
+            notificationsNotifyAdmins($conn, 'ticket', 'Nova mensagem em ticket', $summary, '/admin/tickets?open=' . $ticketId, [], $userId);
+        } catch (\Throwable $e) {
+            error_log('[Tickets] Admin reply notification error: ' . $e->getMessage());
+        }
     }
 
     return [true, 'Mensagem enviada.'];

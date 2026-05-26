@@ -85,17 +85,27 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 .chat-main-messages .chat-msg .msg-time { font-size: 10px; margin-top: 4px; opacity: 0.6; }
 .chat-main-messages .chat-msg.mine .msg-time { text-align: right; color: rgba(0,0,0,0.5); }
 .chat-main-messages .chat-msg.theirs .msg-time { color: #555; }
+.chat-main-messages .chat-msg .chat-attachment { display: block; overflow: hidden; border-radius: 12px; margin-bottom: 8px; background: rgba(0,0,0,0.18); }
+.chat-main-messages .chat-msg .chat-attachment img { display: block; width: 100%; max-width: 280px; max-height: 320px; object-fit: cover; }
+.chat-main-messages .chat-msg .chat-attachment-caption { white-space: pre-wrap; word-break: break-word; }
 .chat-main-messages .msg-date { text-align: center; font-size: 11px; color: #555; padding: 8px 0; font-weight: 500; }
 @keyframes cmsgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-.chat-main-input { display: flex; align-items: flex-end; gap: 8px; padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.3); flex-shrink: 0; }
+.chat-main-compose { border-top: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.3); flex-shrink: 0; padding: 10px 20px 16px; }
+.chat-main-input { display: flex; align-items: flex-end; gap: 8px; padding: 0; background: transparent; }
 .chat-main-input textarea { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px 14px; color: #fff; font-size: 13px; line-height: 1.4; resize: none; outline: none; max-height: 100px; min-height: 42px; font-family: inherit; transition: border-color 0.2s; }
 .chat-main-input textarea:focus { border-color: rgba(var(--t-accent-rgb),0.4); }
 .chat-main-input textarea::placeholder { color: #555; }
+.chat-main-input .attach-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #a1a1aa; transition: all 0.2s; flex-shrink: 0; }
+.chat-main-input .attach-btn:hover { border-color: rgba(var(--t-accent-rgb),0.35); color: #fff; }
+.chat-main-input .attach-btn.is-ready { border-color: rgba(16,185,129,0.45); background: rgba(16,185,129,0.12); color: #6ee7b7; }
 .chat-main-input .send-btn { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, var(--t-accent), var(--t-accent-hover)); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
 .chat-main-input .send-btn:hover { filter: brightness(1.1); transform: scale(1.05); }
 .chat-main-input .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .chat-main-input .send-btn svg { width: 18px; height: 18px; color: #fff; }
+.chat-attachment-bar { display: none; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(16,185,129,0.2); background: rgba(16,185,129,0.08); color: #d1fae5; font-size: 12px; }
+.chat-attachment-bar .attachment-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-attachment-bar .attachment-clear { border: none; background: transparent; color: #fca5a5; font-size: 12px; cursor: pointer; }
 
 .chat-empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; }
 .chat-empty-state svg { width: 64px; height: 64px; color: #222; margin-bottom: 16px; }
@@ -260,9 +270,10 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
             <?php
                 // Detect system message type
                 $msgText = (string)$m['message'];
+                $attachment = chatParseAttachmentMessage($msgText);
                 $sysType = '';
                 $sysContent = $msgText;
-                if (preg_match('/^\[(INSTRUCOES_VENDA|ENTREGA_AUTO|CODIGO_ENTREGA|SISTEMA)\]\n/', $msgText, $sysMatch)) {
+                if (!$attachment && preg_match('/^\[(INSTRUCOES_VENDA|ENTREGA_AUTO|CODIGO_ENTREGA|SISTEMA)\]\n/', $msgText, $sysMatch)) {
                     $sysType = match ($sysMatch[1]) {
                         'INSTRUCOES_VENDA' => 'instructions',
                         'ENTREGA_AUTO'     => 'delivery',
@@ -272,7 +283,20 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                     $sysContent = substr($msgText, strlen($sysMatch[0]));
                 }
             ?>
-            <?php if ($sysType !== ''): ?>
+            <?php if ($attachment): ?>
+            <?php $attachmentUrl = chatAttachmentUrl((string)$attachment['media_ref']); ?>
+            <div class="chat-msg <?= (int)$m['sender_id'] === $uid ? 'mine' : 'theirs' ?>" data-msg-id="<?= (int)$m['id'] ?>">
+                <?php if ($attachmentUrl !== ''): ?>
+                <a href="<?= htmlspecialchars($attachmentUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="chat-attachment">
+                    <img src="<?= htmlspecialchars($attachmentUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Imagem enviada no chat" loading="lazy">
+                </a>
+                <?php endif; ?>
+                <?php if ($attachment['caption'] !== ''): ?>
+                <div class="chat-attachment-caption"><?= nl2br(htmlspecialchars((string)$attachment['caption'], ENT_QUOTES, 'UTF-8')) ?></div>
+                <?php endif; ?>
+                <div class="msg-time"><?= (new DateTime($m['criado_em']))->format('H:i') ?></div>
+            </div>
+            <?php elseif ($sysType !== ''): ?>
             <div class="chat-msg theirs system-msg type-<?= $sysType ?>" data-msg-id="<?= (int)$m['id'] ?>">
                 <div class="sys-header">
                     <?php if ($sysType === 'instructions'): ?>
@@ -363,7 +387,16 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
         </div>
 
         <!-- Input -->
+        <div class="chat-main-compose">
+            <div id="buyerChatAttachmentBar" class="chat-attachment-bar">
+                <span class="attachment-name" id="buyerChatAttachmentName"></span>
+                <button type="button" class="attachment-clear" id="buyerChatAttachmentClear">Remover</button>
+            </div>
         <div class="chat-main-input">
+            <input type="file" id="buyerChatFile" accept="image/*" hidden>
+            <label class="attach-btn" id="buyerChatAttachBtn" for="buyerChatFile" title="Enviar print">
+                <i data-lucide="paperclip" class="w-4 h-4"></i>
+            </label>
             <textarea id="buyerChatInput" rows="1" placeholder="Digite uma mensagem..." maxlength="2000"></textarea>
             <button class="send-btn" id="buyerChatSend" title="Enviar">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -371,14 +404,21 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 </svg>
             </button>
         </div>
+        </div>
 
         <script>
         (function(){
+            const APP_BASE = '<?= BASE_PATH ?>';
             const CHAT_API = '<?= BASE_PATH ?>/api/chat';
             const CONV_ID  = <?= $activeConvId ?>;
             const USER_ID  = <?= $uid ?>;
             const input    = document.getElementById('buyerChatInput');
             const sendBtn  = document.getElementById('buyerChatSend');
+            const fileInput = document.getElementById('buyerChatFile');
+            const attachBtn = document.getElementById('buyerChatAttachBtn');
+            const attachBar = document.getElementById('buyerChatAttachmentBar');
+            const attachName = document.getElementById('buyerChatAttachmentName');
+            const attachClear = document.getElementById('buyerChatAttachmentClear');
             const msgArea  = document.getElementById('buyerChatMsgs');
             let lastMsgId  = 0;
             let sending    = false;
@@ -396,28 +436,118 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 input.style.height = Math.min(input.scrollHeight, 100) + 'px';
             });
 
+            function selectedAttachment() {
+                return fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+            }
+
+            function syncAttachmentBar() {
+                const file = selectedAttachment();
+                if (!attachBar || !attachBtn || !attachName) return;
+                if (file) {
+                    attachBar.style.display = 'flex';
+                    attachName.textContent = file.name;
+                    attachBtn.classList.add('is-ready');
+                    attachBtn.title = 'Imagem pronta para envio: ' + file.name;
+                } else {
+                    attachBar.style.display = 'none';
+                    attachName.textContent = '';
+                    attachBtn.classList.remove('is-ready');
+                    attachBtn.title = 'Enviar print';
+                }
+            }
+
+            function resolveAttachmentUrl(raw) {
+                if (!raw) return '';
+                if (/^https?:\/\//i.test(raw)) return raw;
+                if (raw.indexOf('media:') === 0) return APP_BASE + '/api/media?id=' + raw.slice(6);
+                return raw.charAt(0) === '/' ? raw : (APP_BASE + '/' + raw.replace(/^\/+/, ''));
+            }
+
+            function parseAttachmentMessage(raw) {
+                const text = String(raw || '').replace(/\r\n?/g, '\n').trim();
+                const prefix = '[ANEXO_IMAGEM]\n';
+                if (text.indexOf(prefix) !== 0) return null;
+                const payload = text.slice(prefix.length);
+                const separator = payload.indexOf('\n');
+                const mediaRef = (separator === -1 ? payload : payload.slice(0, separator)).trim();
+                if (!mediaRef) return null;
+                const caption = separator === -1 ? '' : payload.slice(separator + 1).trim();
+                return { mediaRef, caption, url: resolveAttachmentUrl(mediaRef) };
+            }
+
+            function appendAttachmentContent(container, attachment) {
+                if (attachment.url) {
+                    const link = document.createElement('a');
+                    link.className = 'chat-attachment';
+                    link.href = attachment.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    const img = document.createElement('img');
+                    img.src = attachment.url;
+                    img.alt = attachment.caption || 'Imagem enviada no chat';
+                    img.loading = 'lazy';
+                    link.appendChild(img);
+                    container.appendChild(link);
+                }
+                if (attachment.caption) {
+                    const caption = document.createElement('div');
+                    caption.className = 'chat-attachment-caption';
+                    caption.textContent = attachment.caption;
+                    container.appendChild(caption);
+                }
+            }
+
+            if (fileInput) {
+                fileInput.addEventListener('change', () => {
+                    const file = selectedAttachment();
+                    if (file && (!file.type || file.type.indexOf('image/') !== 0)) {
+                        alert('Envie apenas imagens no chat.');
+                        fileInput.value = '';
+                    }
+                    if (file && file.size > 5 * 1024 * 1024) {
+                        alert('A imagem deve ter no máximo 5MB.');
+                        fileInput.value = '';
+                    }
+                    syncAttachmentBar();
+                });
+            }
+
+            if (attachClear) {
+                attachClear.addEventListener('click', () => {
+                    if (fileInput) fileInput.value = '';
+                    syncAttachmentBar();
+                    input.focus();
+                });
+            }
+
             // Send message
             async function send() {
                 if (sending) return;
                 const text = input.value.trim();
-                if (!text) return;
+                const file = selectedAttachment();
+                if (!text && !file) return;
                 sending = true;
                 sendBtn.disabled = true;
+                if (attachBtn) attachBtn.style.pointerEvents = 'none';
 
                 try {
                     const fd = new FormData();
                     fd.append('conversation_id', CONV_ID);
                     fd.append('message', text);
+                    if (file) fd.append('attachment', file);
                     const r = await fetch(CHAT_API + '?action=send', { method: 'POST', body: fd });
                     const j = await r.json();
                     if (j.ok && j.msg) {
                         appendMsg(j.msg);
                         input.value = '';
                         input.style.height = 'auto';
+                        if (fileInput) fileInput.value = '';
+                        syncAttachmentBar();
                     }
                 } catch(e) { console.error(e); }
                 sending = false;
                 sendBtn.disabled = false;
+                if (attachBtn) attachBtn.style.pointerEvents = '';
                 input.focus();
             }
 
@@ -430,10 +560,14 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 const el = document.createElement('div');
                 el.dataset.msgId = m.id;
                 const msg = m.message || '';
+                const attachment = parseAttachmentMessage(msg);
 
                 // Detect system message types
                 const sysMatch = msg.match(/^\[(INSTRUCOES_VENDA|ENTREGA_AUTO|CODIGO_ENTREGA|SISTEMA)\]\n/);
-                if (sysMatch) {
+                if (attachment) {
+                    el.className = 'chat-msg ' + (m.is_mine ? 'mine' : 'theirs');
+                    appendAttachmentContent(el, attachment);
+                } else if (sysMatch) {
                     const typeMap = { 'INSTRUCOES_VENDA': 'instructions', 'ENTREGA_AUTO': 'delivery', 'CODIGO_ENTREGA': 'delivery_code', 'SISTEMA': 'system' };
                     const sysType = typeMap[sysMatch[1]] || 'system';
                     const sysContent = msg.substring(sysMatch[0].length);
@@ -498,6 +632,8 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
                 if (m.id > lastMsgId) lastMsgId = m.id;
                 msgArea.scrollTop = msgArea.scrollHeight;
             }
+
+            syncAttachmentBar();
 
             function escHtml(s) {
                 return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

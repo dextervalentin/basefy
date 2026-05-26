@@ -13,6 +13,18 @@ $conn = $db->connect();
 $erro = '';
 $ok   = '';
 
+function adminWhatsappHref(?string $rawPhone): string
+{
+  $digits = preg_replace('/\D+/', '', (string)$rawPhone) ?? '';
+  if ($digits === '') {
+    return '';
+  }
+  if (strlen($digits) === 10 || strlen($digits) === 11) {
+    $digits = '55' . $digits;
+  }
+  return 'https://wa.me/' . $digits;
+}
+
 // Handle status update via POST (AJAX)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $acao      = (string)($_POST['acao'] ?? '');
@@ -195,6 +207,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         </tr></thead>
         <tbody>
         <?php foreach ($lista['itens'] as $row): ?>
+          <?php $userWhatsappHref = adminWhatsappHref((string)($row['user_whatsapp'] ?? '')); ?>
           <tr id="tk-row-<?= (int)$row['id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
               data-click-selector=".js-tk-detail" tabindex="0">
             <td class="py-3 pr-3 font-mono text-xs">#<?= (int)$row['id'] ?></td>
@@ -227,6 +240,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 <button type="button" class="js-tk-detail inline-flex items-center gap-1 rounded-lg bg-blackx border border-blackx3 text-zinc-300 hover:border-greenx hover:text-white px-2.5 py-1.5 text-xs font-medium transition" data-id="<?= (int)$row['id'] ?>">
                   <i data-lucide="eye" class="w-3.5 h-3.5"></i> Ver
                 </button>
+                <?php if ($userWhatsappHref !== ''): ?>
+                <a href="<?= htmlspecialchars($userWhatsappHref, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-lg bg-blackx border border-emerald-400/30 text-emerald-300 hover:border-emerald-300 hover:text-white px-2.5 py-1.5 text-xs font-medium transition" title="Abrir WhatsApp do cliente">
+                  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> WhatsApp
+                </a>
+                <?php endif; ?>
                 <select class="js-tk-status-select rounded-lg bg-blackx border border-blackx3 text-xs px-2 py-1.5 outline-none focus:border-greenx cursor-pointer"
                         data-id="<?= (int)$row['id'] ?>" data-current="<?= htmlspecialchars((string)$row['status']) ?>">
                   <?php if (!isset($manualStatusOptions[(string)$row['status']])): ?>
@@ -266,6 +284,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 <script>
 (function(){
   var cats=<?= json_encode(array_map(fn($c) => $c['label'], $cats), JSON_UNESCAPED_UNICODE) ?>;
+  var openTicketId=<?= (int)($_GET['open'] ?? 0) ?>;
 
   function escH(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
   function fmtDate(s){ if(!s)return'-'; try{var d=new Date(s.replace(' ','T'));return d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return s;} }
@@ -288,6 +307,18 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     if(s==='reembolsado')return'Reembolsado';
     if(s==='fechado')return'Fechado';
     return s;
+  }
+  function whatsappHref(phone){
+    var digits=String(phone||'').replace(/\D+/g,'');
+    if(!digits)return'';
+    if(digits.length===10||digits.length===11)digits='55'+digits;
+    return 'https://wa.me/'+digits;
+  }
+  function whatsappButton(phone){
+    var href=whatsappHref(phone);
+    if(!href)return'';
+    return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:border-emerald-300 hover:text-white transition">'+
+      '<i data-lucide="message-circle" class="w-3.5 h-3.5"></i> WhatsApp do cliente</a>';
   }
   function isFinalStatus(s){ return ['resolvido','nao_resolvido','reembolsado','fechado'].indexOf((s||'').toLowerCase()) !== -1; }
   function toast(m,ok){
@@ -316,6 +347,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       var tk=j.ticket;
       var msgs=j.messages||[];
       var html=
+        (tk.user_whatsapp?'<div class="mb-4 flex justify-end">'+whatsappButton(tk.user_whatsapp)+'</div>':'')+
         '<div class="grid md:grid-cols-2 gap-3 mb-4">'+
         '<div><span class="text-zinc-400">ID:</span> #'+tk.id+'</div>'+
         '<div><span class="text-zinc-400">Status:</span> <span class="px-2 py-0.5 rounded-full text-xs font-medium '+statusBadge(tk.status)+'">'+statusLabel(tk.status)+'</span></div>'+
@@ -436,6 +468,13 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       }catch(err){toast('Erro ao atualizar status.',false);sel.value=sel.dataset.current;}
     });
   });
+
+  if(openTicketId>0){
+    window.requestAnimationFrame(function(){
+      var openBtn=document.querySelector('.js-tk-detail[data-id="'+openTicketId+'"]');
+      if(openBtn) openBtn.click();
+    });
+  }
 })();
 </script>
 

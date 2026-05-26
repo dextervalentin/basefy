@@ -3,6 +3,7 @@
 // Note: strict_types intentionally omitted — session values are strings
 
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/media.php';
 
 /**
  * Chat System — Business Logic
@@ -36,6 +37,69 @@ function chatEnsureTables($conn): void
     } catch (Throwable $e) {
         error_log('chatEnsureTables migration error: ' . $e->getMessage());
     }
+}
+
+function chatBuildAttachmentMessage(string $mediaRef, string $caption = ''): string
+{
+    $mediaRef = trim($mediaRef);
+    $caption = trim($caption);
+    if ($mediaRef === '') {
+        return $caption;
+    }
+
+    return "[ANEXO_IMAGEM]\n" . $mediaRef . ($caption !== '' ? "\n" . $caption : '');
+}
+
+function chatParseAttachmentMessage(string $message): ?array
+{
+    $normalized = str_replace(["\r\n", "\r"], "\n", trim($message));
+    $prefix = "[ANEXO_IMAGEM]\n";
+    if (!str_starts_with($normalized, $prefix)) {
+        return null;
+    }
+
+    $payload = substr($normalized, strlen($prefix));
+    $lines = explode("\n", $payload, 2);
+    $mediaRef = trim((string)($lines[0] ?? ''));
+    if ($mediaRef === '') {
+        return null;
+    }
+
+    return [
+        'media_ref' => $mediaRef,
+        'caption' => trim((string)($lines[1] ?? '')),
+    ];
+}
+
+function chatAttachmentUrl(string $mediaRef): string
+{
+    return mediaResolveUrl($mediaRef, '');
+}
+
+function chatMessagePreview(string $message): string
+{
+    $attachment = chatParseAttachmentMessage($message);
+    if ($attachment) {
+        return $attachment['caption'] !== ''
+            ? 'Imagem enviada: ' . $attachment['caption']
+            : 'Imagem enviada';
+    }
+
+    $normalized = str_replace(["\r\n", "\r"], "\n", trim($message));
+    if ($normalized === '') {
+        return '';
+    }
+
+    if (preg_match('/^\[(INSTRUCOES_VENDA|ENTREGA_AUTO|CODIGO_ENTREGA|SISTEMA)\]\n/', $normalized, $match)) {
+        return match ($match[1]) {
+            'INSTRUCOES_VENDA' => 'Instruções da compra',
+            'ENTREGA_AUTO' => 'Produto entregue',
+            'CODIGO_ENTREGA' => 'Código de entrega',
+            default => 'Mensagem do sistema',
+        };
+    }
+
+    return trim((string)preg_replace('/^Equipe Basefy:\s*\n?/u', '', $normalized));
 }
 
 /**
@@ -258,6 +322,37 @@ function chatSendMessage($conn, $conversationId, $senderId, string $message): ?a
         if ($recipientId > 0) {
             notificationsCreate($conn, $recipientId, 'chat', 'Nova mensagem', 'Você recebeu uma nova mensagem. Abra o chat para responder.', '/dashboard?open_chat=' . $conversationId);
         }
+
+        $senderName = 'Cliente';
+        $otherName = 'Participante';
+        $stNames = $conn->prepare(
+            "SELECT bu.nome AS buyer_name, vu.nome AS vendor_name
+             FROM chat_conversations c
+             JOIN users bu ON bu.id = c.buyer_id
+             JOIN users vu ON vu.id = c.vendor_id
+             WHERE c.id = ?
+             LIMIT 1"
+        );
+        if ($stNames) {
+            $stNames->bind_param('i', $conversationId);
+            $stNames->execute();
+            $namesRow = $stNames->get_result()->fetch_assoc() ?: null;
+            $stNames->close();
+            if ($namesRow) {
+                $buyerName = trim((string)($namesRow['buyer_name'] ?? '')) ?: 'Comprador';
+                $vendorName = trim((string)($namesRow['vendor_name'] ?? '')) ?: 'Vendedor';
+                if ($senderId === (int)$conv['buyer_id']) {
+                    $senderName = $buyerName;
+                    $otherName = $vendorName;
+                } else {
+                    $senderName = $vendorName;
+                    $otherName = $buyerName;
+                }
+            }
+        }
+
+        $adminSummary = $senderName . ' enviou uma mensagem para ' . $otherName . ' na conversa #' . $conversationId . '.';
+        notificationsNotifyAdmins($conn, 'chat', 'Nova mensagem no chat', $adminSummary, '/admin/chat?open=' . $conversationId, [], $senderId);
     } catch (\Throwable $e) { error_log('[Chat] Notification error: ' . $e->getMessage()); }
 
     return $msg;
@@ -356,7 +451,9 @@ function chatSendAdminMessage($conn, int $conversationId, int $adminId, string $
     $conv = chatGetConversationAdmin($conn, $conversationId);
     if (!$conv) return null;
 
-    $fullMessage = "Equipe Basefy:\n" . $message;
+    $fullMessage = chatParseAttachmentMessage($message)
+        ? $message
+        : "Equipe Basefy:\n" . $message;
 
     $st = $conn->prepare(
         "INSERT INTO chat_messages (conversation_id, sender_id, message) VALUES (?, ?, ?) RETURNING *"
@@ -628,6 +725,11 @@ function chatListConversations($conn, $userId, string $role = 'usuario'): array
     $rows = $st->get_result()->fetch_all();
     $st->close();
 
+    foreach ($rows as &$row) {
+        $row['last_message'] = chatMessagePreview((string)($row['last_message'] ?? ''));
+    }
+    unset($row);
+
     return $rows;
 }
 
@@ -705,6 +807,11 @@ function chatGetNewMessages($conn, $conversationId, $afterId): array
     $st->execute();
     $rows = $st->get_result()->fetch_all();
     $st->close();
+
+    foreach ($rows as &$row) {
+        $row['last_message'] = chatMessagePreview((string)($row['last_message'] ?? ''));
+    }
+    unset($row);
 
     return $rows;
 }

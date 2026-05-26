@@ -431,9 +431,12 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     $_variantesRaw = $produto['variantes'] ?? null;
                     $variantesArr = ($_tipoProd === 'dinamico' && $_variantesRaw) ? json_decode($_variantesRaw, true) : [];
                     if (!is_array($variantesArr)) $variantesArr = [];
+                    $_autoDeliveryConfigured = !empty($produto['auto_delivery_enabled'])
+                        && sfAutoDeliveryConfiguredCount($conn, (int)($produto['id'] ?? 0), (string)($produto['auto_delivery_items'] ?? '')) > 0;
                     if (!empty($produto['auto_delivery_enabled']) && (int)($produto['id'] ?? 0) > 0) {
-                        require_once __DIR__ . '/../src/stock_items.php';
-                        $_dispQtd = stockCountAll($conn, (int)$produto['id'], null, 'disponivel');
+                        $_dispQtd = $_autoDeliveryConfigured
+                            ? sfAutoDeliveryAvailableCount($conn, (int)($produto['id'] ?? 0), $_tipoProd, null, (string)($produto['auto_delivery_items'] ?? ''))
+                            : 0;
                         if ($_tipoProd === 'dinamico' && $variantesArr) {
                             foreach ($variantesArr as $index => $variant) {
                                 if (!is_array($variant)) continue;
@@ -456,7 +459,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     $_dispLabel = $_tipoProd === 'servico' ? 'Serviço' : 'Disponível';
                     $_dispValue = $_tipoProd === 'servico' ? '-' : (string)$_dispQtd;
                     $_tipoProdLabel = $_tipoProd === 'servico' ? 'Serviço' : ($_tipoProd === 'dinamico' ? 'Dinâmico' : 'Produto');
-                    $_deliveryMode = !empty($produto['auto_delivery_enabled']) ? 'Automática' : 'Manual';
+                    $_deliveryMode = $_autoDeliveryConfigured ? 'Automática' : 'Manual';
                 ?>
                 <div class="flex items-center gap-4 sm:gap-6 flex-wrap">
                     <div class="text-center">
@@ -531,11 +534,13 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                 <?php else: ?>
                 <div class="flex items-center gap-4 pt-2">
                     <p class="text-3xl sm:text-4xl font-black text-greenx tracking-tight">R$&nbsp;<?= number_format((float)$produto['preco'], 2, ',', '.') ?></p>
+                    <?php $simpleCanBuy = $_tipoProd === 'servico' ? true : ($_dispQtd > 0); ?>
                     <form method="post" class="flex-1 max-w-[200px]">
                         <input type="hidden" name="action" value="add_cart">
                         <input type="hidden" name="qty" value="1">
-                        <button class="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-5 py-3 text-sm shadow-lg shadow-greenx/20 hover:shadow-greenx/30 transition-all uppercase tracking-wide">
-                            Comprar
+                        <button class="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-bold px-5 py-3 text-sm shadow-lg shadow-greenx/20 hover:shadow-greenx/30 transition-all uppercase tracking-wide <?= !$simpleCanBuy ? 'opacity-50 cursor-not-allowed' : '' ?>"
+                                <?= !$simpleCanBuy ? 'disabled' : '' ?>>
+                            <?= $simpleCanBuy ? 'Comprar' : 'Esgotado' ?>
                         </button>
                     </form>
                 </div>
@@ -558,7 +563,7 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <h2 class="text-sm font-black uppercase tracking-wide mb-4">Características</h2>
                     <?php
                     $deliveryText = '';
-                    if (!empty($produto['auto_delivery_enabled'])) {
+                    if ($_autoDeliveryConfigured) {
                         $deliveryText = 'Automática após confirmação do pagamento';
                     } elseif (!empty($produto['data_entrega'])) {
                         $deliveryText = 'Manual até ' . date('d/m/Y', strtotime((string)$produto['data_entrega']));

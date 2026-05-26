@@ -108,6 +108,54 @@ function notificationsSendEmail($conn, int $userId, string $tipo, string $titulo
     return smtpSend($recipient['email'], $subject, $html);
 }
 
+function notificationsAdminRecipientIds($conn, int $excludeUserId = 0): array
+{
+    $excludeUserId = max(0, $excludeUserId);
+    $ids = [];
+
+    try {
+        $sql = "SELECT id FROM users WHERE role IN ('admin','administrador') AND COALESCE(ativo, 1) = 1";
+        if ($excludeUserId > 0) {
+            $sql .= ' AND id <> ?';
+        }
+        $sql .= ' ORDER BY id ASC';
+
+        $st = $conn->prepare($sql);
+        if (!$st) {
+            return [];
+        }
+
+        if ($excludeUserId > 0) {
+            $st->bind_param('i', $excludeUserId);
+        }
+
+        $st->execute();
+        $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC) ?: [];
+        $st->close();
+
+        foreach ($rows as $row) {
+            $userId = (int)($row['id'] ?? 0);
+            if ($userId > 0) {
+                $ids[] = $userId;
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('[Notifications] Admin recipients error: ' . $e->getMessage());
+    }
+
+    return array_values(array_unique($ids));
+}
+
+function notificationsNotifyAdmins($conn, string $tipo, string $titulo, string $mensagem = '', string $link = '', array $options = [], int $excludeUserId = 0): int
+{
+    $sent = 0;
+    foreach (notificationsAdminRecipientIds($conn, $excludeUserId) as $adminId) {
+        notificationsCreate($conn, (int)$adminId, $tipo, $titulo, $mensagem, $link, $options);
+        $sent++;
+    }
+    return $sent;
+}
+
 /**
  * Create a notification for a specific user.
  * @param string $tipo  anuncio|venda|chat|ticket

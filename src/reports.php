@@ -114,10 +114,12 @@ function reportsList($conn, array $filters = [], int $page = 1, int $pp = 10): a
     $page = min($page, $totalPaginas);
     $offset = ($page - 1) * $pp;
 
-    $sql = "SELECT r.*, p.nome AS produto_nome, p.imagem AS produto_imagem, u.nome AS user_nome, u.email AS user_email
+        $sql = "SELECT r.*, p.nome AS produto_nome, p.imagem AS produto_imagem, u.nome AS user_nome, u.email AS user_email,
+               COALESCE(NULLIF(u.telefone, ''), NULLIF(sp.telefone, '')) AS user_whatsapp
             FROM product_reports r
             LEFT JOIN products p ON p.id = r.product_id
             LEFT JOIN users u ON u.id = r.user_id
+            LEFT JOIN seller_profiles sp ON sp.user_id = u.id
             WHERE $where
             ORDER BY r.criado_em DESC
             LIMIT ? OFFSET ?";
@@ -148,10 +150,12 @@ function reportsGetById($conn, int $id): ?array
 {
     reportsEnsureTable($conn);
     $stmt = $conn->prepare(
-        "SELECT r.*, p.nome AS produto_nome, p.imagem AS produto_imagem, u.nome AS user_nome, u.email AS user_email
+        "SELECT r.*, p.nome AS produto_nome, p.imagem AS produto_imagem, u.nome AS user_nome, u.email AS user_email,
+            COALESCE(NULLIF(u.telefone, ''), NULLIF(sp.telefone, '')) AS user_whatsapp
          FROM product_reports r
          LEFT JOIN products p ON p.id = r.product_id
          LEFT JOIN users u ON u.id = r.user_id
+         LEFT JOIN seller_profiles sp ON sp.user_id = u.id
          WHERE r.id = ? LIMIT 1"
     );
     $stmt->bind_param('i', $id);

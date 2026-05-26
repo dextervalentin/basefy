@@ -32,6 +32,127 @@ $erro = '';
 if (empty($_SESSION['vendor_product_form_token'])) {
     $_SESSION['vendor_product_form_token'] = bin2hex(random_bytes(16));
 }
+if (!isset($_SESSION['vendor_auto_delivery_drafts']) || !is_array($_SESSION['vendor_auto_delivery_drafts'])) {
+    $_SESSION['vendor_auto_delivery_drafts'] = [];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $ajaxAction = (string)($_POST['ajax_action'] ?? '');
+    $ajaxId = (int)($_POST['id'] ?? 0);
+    $draftToken = trim((string)($_POST['draft_token'] ?? ''));
+
+    if ($ajaxId <= 0) {
+        $sessionToken = (string)($_SESSION['vendor_product_form_token'] ?? '');
+        if ($draftToken === '' || $sessionToken === '' || !hash_equals($sessionToken, $draftToken)) {
+            echo json_encode(['ok' => false, 'msg' => 'Rascunho inválido. Atualize a página e tente novamente.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($ajaxAction === 'toggle_auto_delivery') {
+            $enabledRequested = !empty($_POST['enabled']);
+            $draft = $_SESSION['vendor_auto_delivery_drafts'][$draftToken] ?? [];
+            $itemsText = sfAutoDeliveryItemsText((string)($draft['items'] ?? ''));
+            $hasConfig = count(sfAutoDeliveryItemsList($itemsText)) > 0;
+            $_SESSION['vendor_auto_delivery_drafts'][$draftToken] = [
+                'enabled' => $enabledRequested,
+                'items' => $itemsText,
+            ];
+
+            echo json_encode([
+                'ok' => true,
+                'draft' => true,
+                'has_config' => $hasConfig,
+                'effective_enabled' => $enabledRequested && $hasConfig,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($ajaxAction === 'save_auto_delivery_items') {
+            $itemsText = sfAutoDeliveryItemsText((string)($_POST['items'] ?? ''));
+            $enabledRequested = !empty($_POST['enabled']);
+            $hasConfig = count(sfAutoDeliveryItemsList($itemsText)) > 0;
+            $_SESSION['vendor_auto_delivery_drafts'][$draftToken] = [
+                'enabled' => $enabledRequested,
+                'items' => $itemsText,
+            ];
+
+            echo json_encode([
+                'ok' => true,
+                'draft' => true,
+                'has_config' => $hasConfig,
+                'effective_enabled' => $enabledRequested && $hasConfig,
+                'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        echo json_encode(['ok' => false, 'msg' => 'Ação inválida.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $produtoAjax = obterMeuProduto($conn, $uid, $ajaxId);
+    if (!$produtoAjax) {
+        echo json_encode(['ok' => false, 'msg' => 'Produto não encontrado.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $colV = vpColunaVendedorProdutos($conn);
+    if (!$colV) {
+        echo json_encode(['ok' => false, 'msg' => 'Configuração de vendedor indisponível.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($ajaxAction === 'toggle_auto_delivery') {
+        $enabledRequested = !empty($_POST['enabled']);
+        $hasConfig = sfAutoDeliveryConfiguredCount($conn, $ajaxId, (string)($produtoAjax['auto_delivery_items'] ?? '')) > 0;
+        $enabledInt = ($enabledRequested && $hasConfig) ? 1 : 0;
+        $st = $conn->prepare("UPDATE products SET auto_delivery_enabled = ? WHERE id = ? AND $colV = ?");
+        if (!$st) {
+            echo json_encode(['ok' => false, 'msg' => 'Falha ao preparar atualização.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st->bind_param('iii', $enabledInt, $ajaxId, $uid);
+        $ok = $st->execute();
+        $st->close();
+
+        echo json_encode([
+            'ok' => (bool)$ok,
+            'has_config' => $hasConfig,
+            'effective_enabled' => (bool)$enabledInt,
+            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($ajaxAction === 'save_auto_delivery_items') {
+        $itemsText = sfAutoDeliveryItemsText((string)($_POST['items'] ?? ''));
+        $itemsJson = sfAutoDeliveryItemsJson($itemsText);
+        $enabledRequested = !empty($_POST['enabled']);
+        $hasConfig = sfAutoDeliveryConfiguredCount($conn, $ajaxId, $itemsText) > 0;
+        $enabledInt = ($enabledRequested && $hasConfig) ? 1 : 0;
+        $st = $conn->prepare("UPDATE products SET auto_delivery_enabled = ?, auto_delivery_items = ? WHERE id = ? AND $colV = ?");
+        if (!$st) {
+            echo json_encode(['ok' => false, 'msg' => 'Falha ao preparar atualização.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st->bind_param('isii', $enabledInt, $itemsJson, $ajaxId, $uid);
+        $ok = $st->execute();
+        $st->close();
+
+        echo json_encode([
+            'ok' => (bool)$ok,
+            'has_config' => $hasConfig,
+            'effective_enabled' => (bool)$enabledInt,
+            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    echo json_encode(['ok' => false, 'msg' => 'Ação inválida.'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = (string)($_POST['form_token'] ?? '');
@@ -40,6 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $erro = 'Envio duplicado ou inválido. Atualize a página e tente novamente.';
     } else {
         unset($_SESSION['vendor_product_form_token']);
+        $draft = is_array($_SESSION['vendor_auto_delivery_drafts'][$token] ?? null) ? $_SESSION['vendor_auto_delivery_drafts'][$token] : [];
 
         $idPost = (int)($_POST['id'] ?? 0);
         $categoriaId = (int)($_POST['categoria_id'] ?? 0);
@@ -67,11 +189,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $customSlug = trim((string)($_POST['slug'] ?? ''));
         $variantes = trim((string)($_POST['variantes'] ?? '')) !== '' ? (string)$_POST['variantes'] : null;
         $autoDeliveryEnabled = !empty($_POST['auto_delivery_enabled']);
-        $autoDeliveryItems = trim((string)($_POST['auto_delivery_items'] ?? '')) !== '' ? (string)$_POST['auto_delivery_items'] : null;
+        $autoDeliveryItems = trim((string)($_POST['auto_delivery_items'] ?? ''));
+        if ($idPost <= 0 && $autoDeliveryItems === '' && isset($draft['items'])) {
+            $autoDeliveryItems = (string)$draft['items'];
+        }
+        if ($autoDeliveryItems === '') {
+            $autoDeliveryItems = null;
+        }
 
         [$ok, $msg] = salvarMeuProduto($conn, $uid, $idPost, $categoriaId, $nome, $descricao, $preco, $imagemMedia, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $customSlug, $variantes, $autoDeliveryEnabled, $autoDeliveryItems);
 
         if ($ok) {
+            unset($_SESSION['vendor_auto_delivery_drafts'][$token]);
             // Determine product ID for gallery
             $productId = (int)$idPost;
             if ($productId <= 0) {
@@ -148,7 +277,16 @@ $prazoAtual = $produto['prazo_entrega_dias'] ?? '';
 $dataEntregaAtual = $produto['data_entrega'] ?? '';
 $variantesAtual = $produto['variantes'] ?? '[]';
 if (!$variantesAtual || $variantesAtual === '') $variantesAtual = '[]';
-$adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
+$draft = !$produto && is_array($_SESSION['vendor_auto_delivery_drafts'][$formToken] ?? null)
+    ? $_SESSION['vendor_auto_delivery_drafts'][$formToken]
+    : [];
+$adEnabled = $produto ? sfProductAutoDeliveryEnabledEffective($conn, $produto) : !empty($draft['enabled']);
+$autoDeliveryItemsAtual = $produto
+    ? sfAutoDeliveryItemsText((string)($produto['auto_delivery_items'] ?? ''))
+    : sfAutoDeliveryItemsText((string)($draft['items'] ?? ''));
+$adHasConfig = $produto
+    ? sfAutoDeliveryConfiguredCount($conn, (int)($produto['id'] ?? 0), (string)($produto['auto_delivery_items'] ?? '')) > 0
+    : count(sfAutoDeliveryItemsList((string)($draft['items'] ?? ''))) > 0;
 ?>
 
 <!-- Quill.js CDN (100% free, MIT license) -->
@@ -231,7 +369,7 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
                     <div class="rounded-xl border-2 p-4 text-center transition-all" :class="tipo==='produto'?'border-greenx bg-greenx/10 shadow-lg shadow-greenx/10':'border-blackx3 bg-blackx hover:border-zinc-600'">
                         <div class="w-12 h-12 mx-auto rounded-xl flex items-center justify-center mb-3" :class="tipo==='produto'?'bg-greenx/20':'bg-blackx3'"><i data-lucide="package" class="w-6 h-6" :class="tipo==='produto'?'text-greenx':'text-zinc-500'"></i></div>
                         <p class="font-semibold text-sm" :class="tipo==='produto'?'text-white':'text-zinc-400'">Produto</p>
-                        <p class="text-xs mt-1" :class="tipo==='produto'?'text-zinc-300':'text-zinc-600'">Item com estoque</p>
+                        <p class="text-xs mt-1" :class="tipo==='produto'?'text-zinc-300':'text-zinc-600'">Item digital com estoque</p>
                     </div>
                 </label>
                 <label class="relative cursor-pointer" @click="tipo = 'dinamico'">
@@ -431,13 +569,21 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
             <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-zinc-300 flex items-center gap-2"><i data-lucide="zap" class="w-4 h-4 text-amber-400"></i> Entrega Automática</h3>
                 <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" name="auto_delivery_enabled" value="1" x-model="adEnabled" class="sr-only peer">
+                    <input type="checkbox" name="auto_delivery_enabled" value="1" x-model="adEnabled" @change="onToggleAutoDelivery($event.target.checked)" class="sr-only peer">
                     <div class="w-11 h-6 bg-blackx3 peer-focus:ring-2 peer-focus:ring-greenx/40 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-500 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-greenx peer-checked:after:bg-white"></div>
                 </label>
             </div>
             <p class="text-xs text-zinc-500 mb-4">Quando ativada, o produto é entregue automaticamente ao comprador assim que o pagamento é confirmado. Ideal para chaves, códigos, contas e links de download.</p>
 
             <div x-show="adEnabled" x-transition x-cloak x-init="$watch('adEnabled', v => { if(v) $nextTick(() => { if(window.lucide) lucide.createIcons() }) })">
+                <div class="mb-4">
+                    <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Itens da entrega automática</label>
+                    <textarea name="auto_delivery_items" x-model="adItems" @input.debounce.700ms="saveAutoDeliveryItems()" :disabled="!adEnabled" rows="6" class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors" placeholder="Um item por linha&#10;Exemplo:&#10;login:usuario@email.com&#10;senha:123456"></textarea>
+                    <p class="text-xs text-zinc-500 mt-2">Cada linha será tratada como 1 item de entrega automática.</p>
+                    <p x-show="adAjaxSaving" class="text-xs mt-1 text-amber-300">Salvando automaticamente...</p>
+                    <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-1"></p>
+                </div>
+
                 <div class="flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 mb-5">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                         <i data-lucide="info" class="w-4 h-4 text-amber-400"></i>
@@ -457,7 +603,7 @@ $adEnabled = (bool)($produto['auto_delivery_enabled'] ?? false);
                 <?php else: ?>
                 <div class="flex items-center gap-2 text-xs text-zinc-500">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                    Salve o produto primeiro para gerenciar o estoque automático.
+                    O campo já pode ser preenchido agora. Após salvar o produto, você poderá gerenciar o estoque automático completo.
                 </div>
                 <?php endif; ?>
             </div>
@@ -529,10 +675,17 @@ produtoFormEl.addEventListener('submit', function(e){
 
 function produtoForm() {
     return {
+        productId: <?= (int)($produto['id'] ?? 0) ?>,
+        draftToken: <?= json_encode($formToken, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
         tipo: '<?= $tipoAtual ?>',
         quantidade: <?= $qtdAtual ?>,
         variantes: <?= $variantesAtual ?>,
         adEnabled: <?= $adEnabled ? 'true' : 'false' ?>,
+        adItems: <?= json_encode($autoDeliveryItemsAtual, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        adHasConfig: <?= $adHasConfig ? 'true' : 'false' ?>,
+        adAjaxMsg: '',
+        adAjaxError: false,
+        adAjaxSaving: false,
         variantePriceFormat(val) {
             const cents = Math.round((Number(val) || 0) * 100);
             return (cents / 100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -553,6 +706,83 @@ function produtoForm() {
             // If new dynamic product with no variants, add one empty
             if (this.tipo === 'dinamico' && this.variantes.length === 0) {
                 this.variantes.push({nome:'',preco:0,quantidade:1});
+            }
+        },
+        hasAutoDeliveryItems() {
+            return (this.adItems || '').split(/\r?\n/).some((line) => line.trim() !== '');
+        },
+        async sendAutoDeliveryRequest(action, extraFields = {}) {
+            const fd = new FormData();
+            fd.append('ajax_action', action);
+            if (this.productId) {
+                fd.append('id', String(this.productId));
+            } else if (this.draftToken) {
+                fd.append('draft_token', this.draftToken);
+            }
+            Object.entries(extraFields).forEach(([key, value]) => fd.append(key, value));
+
+            const resp = await fetch(window.location.pathname + window.location.search, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                body: fd
+            });
+            return resp.json();
+        },
+        async onToggleAutoDelivery(enabled) {
+            this.adAjaxMsg = '';
+            this.adAjaxError = false;
+            if (!enabled && !this.productId && !this.draftToken) return;
+            if (enabled && !this.adHasConfig && !this.hasAutoDeliveryItems()) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Preencha ao menos 1 item para ativar a entrega automática.';
+                return;
+            }
+
+            this.adAjaxSaving = true;
+
+            try {
+                const data = await this.sendAutoDeliveryRequest('toggle_auto_delivery', {
+                    enabled: enabled ? '1' : '0'
+                });
+                if (!data || !data.ok) throw new Error((data && data.msg) ? data.msg : 'Falha ao salvar.');
+                this.adHasConfig = !!data.has_config;
+                if (enabled && data.effective_enabled === false) {
+                    this.adAjaxError = true;
+                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                } else if (!enabled) {
+                    this.adAjaxMsg = data.draft ? 'Rascunho atualizado.' : 'Entrega automática desativada.';
+                }
+            } catch (e) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Não foi possível atualizar agora.';
+            } finally {
+                this.adAjaxSaving = false;
+            }
+        },
+        async saveAutoDeliveryItems() {
+            this.adAjaxMsg = '';
+            this.adAjaxError = false;
+            if (!this.adEnabled || (!this.productId && !this.draftToken)) return;
+            this.adAjaxSaving = true;
+
+            try {
+                const data = await this.sendAutoDeliveryRequest('save_auto_delivery_items', {
+                    items: this.adItems || '',
+                    enabled: this.adEnabled ? '1' : '0'
+                });
+                if (!data || !data.ok) throw new Error((data && data.msg) ? data.msg : 'Falha ao salvar.');
+                this.adHasConfig = !!data.has_config;
+                if (this.adEnabled && data.effective_enabled === false) {
+                    this.adAjaxError = true;
+                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                } else {
+                    this.adAjaxMsg = data.draft ? 'Rascunho salvo automaticamente.' : 'Itens salvos automaticamente.';
+                }
+            } catch (e) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Não foi possível salvar os itens agora.';
+            } finally {
+                this.adAjaxSaving = false;
             }
         }
     };

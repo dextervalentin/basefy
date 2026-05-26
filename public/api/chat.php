@@ -11,6 +11,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/chat.php';
+require_once __DIR__ . '/../../src/media.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -80,6 +81,33 @@ function chatResolveMediaUrl(?string $raw, string $placeholder = ''): ?string
     return BASE_PATH . '/' . ltrim($raw, '/');
 }
 
+function apiChatPrepareOutboundMessage(int $conversationId, string $message, string $fileField = 'attachment'): array
+{
+    $message = trim($message);
+    if ($message !== '' && mb_strlen($message) > 2000) {
+        return [null, 'Mensagem muito longa (máx 2000 caracteres)'];
+    }
+
+    $attachmentRef = '';
+    $file = $_FILES[$fileField] ?? null;
+    $hasFile = is_array($file)
+        && (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
+
+    if ($hasFile) {
+        $attachmentId = mediaSaveFromUpload($file, 'chat_attachment', $conversationId);
+        if (!$attachmentId) {
+            return [null, 'Falha ao enviar a imagem. Use JPG, PNG, GIF ou WEBP com at\u00e9 5MB.'];
+        }
+        $attachmentRef = 'media:' . $attachmentId;
+    }
+
+    if ($attachmentRef === '' && $message === '') {
+        return [null, 'Dados incompletos'];
+    }
+
+    return [$attachmentRef !== '' ? chatBuildAttachmentMessage($attachmentRef, $message) : $message, null];
+}
+
 // ─── Action handlers ───────────────────────────────────────
 
 function apiChatStart($conn, int $userId, string $role): void
@@ -133,13 +161,8 @@ function apiChatSend($conn, int $userId): void
     $convId  = (int)($_POST['conversation_id'] ?? 0);
     $message = trim((string)($_POST['message'] ?? ''));
 
-    if ($convId <= 0 || $message === '') {
+    if ($convId <= 0) {
         echo json_encode(['ok' => false, 'msg' => 'Dados incompletos']);
-        return;
-    }
-
-    if (mb_strlen($message) > 2000) {
-        echo json_encode(['ok' => false, 'msg' => 'Mensagem muito longa (máx 2000 caracteres)']);
         return;
     }
 
@@ -157,7 +180,13 @@ function apiChatSend($conn, int $userId): void
         return;
     }
 
-    $msg = chatSendMessage($conn, $convId, $userId, $message);
+    [$payload, $payloadError] = apiChatPrepareOutboundMessage($convId, $message);
+    if ($payload === null) {
+        echo json_encode(['ok' => false, 'msg' => $payloadError ?: 'Dados incompletos']);
+        return;
+    }
+
+    $msg = chatSendMessage($conn, $convId, $userId, $payload);
     if (!$msg) {
         echo json_encode(['ok' => false, 'msg' => 'Erro ao enviar mensagem']);
         return;
@@ -510,13 +539,8 @@ function apiChatAdminSend($conn, int $adminId, string $role): void
     $convId = (int)($_POST['conversation_id'] ?? 0);
     $message = trim((string)($_POST['message'] ?? ''));
 
-    if ($convId <= 0 || $message === '') {
+    if ($convId <= 0) {
         echo json_encode(['ok' => false, 'msg' => 'Dados incompletos']);
-        return;
-    }
-
-    if (mb_strlen($message) > 2000) {
-        echo json_encode(['ok' => false, 'msg' => 'Mensagem muito longa (máx 2000 caracteres)']);
         return;
     }
 
@@ -526,7 +550,13 @@ function apiChatAdminSend($conn, int $adminId, string $role): void
         return;
     }
 
-    $msg = chatSendAdminMessage($conn, $convId, $adminId, $message);
+    [$payload, $payloadError] = apiChatPrepareOutboundMessage($convId, $message);
+    if ($payload === null) {
+        echo json_encode(['ok' => false, 'msg' => $payloadError ?: 'Dados incompletos']);
+        return;
+    }
+
+    $msg = chatSendAdminMessage($conn, $convId, $adminId, $payload);
     if (!$msg) {
         echo json_encode(['ok' => false, 'msg' => 'Erro ao enviar mensagem']);
         return;

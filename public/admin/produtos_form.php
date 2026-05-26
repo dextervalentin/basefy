@@ -10,6 +10,10 @@ require_once __DIR__ . '/../../src/media.php';
 
 exigirAdmin();
 
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
 $db = new Database();
 $conn = $db->connect();
 
@@ -35,8 +39,127 @@ if ($produto) {
 
 $erro = '';
 $imagemPostPersistida = '';
+if (empty($_SESSION['admin_product_form_token'])) {
+    $_SESSION['admin_product_form_token'] = bin2hex(random_bytes(16));
+}
+if (!isset($_SESSION['admin_auto_delivery_drafts']) || !is_array($_SESSION['admin_auto_delivery_drafts'])) {
+    $_SESSION['admin_auto_delivery_drafts'] = [];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $ajaxAction = (string)($_POST['ajax_action'] ?? '');
+    $ajaxId = (int)($_POST['id'] ?? 0);
+    $draftToken = trim((string)($_POST['draft_token'] ?? ''));
+
+    if ($ajaxId <= 0) {
+        $sessionToken = (string)($_SESSION['admin_product_form_token'] ?? '');
+        if ($draftToken === '' || $sessionToken === '' || !hash_equals($sessionToken, $draftToken)) {
+            echo json_encode(['ok' => false, 'msg' => 'Rascunho inválido. Atualize a página e tente novamente.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($ajaxAction === 'toggle_auto_delivery') {
+            $enabledRequested = !empty($_POST['enabled']);
+            $draft = $_SESSION['admin_auto_delivery_drafts'][$draftToken] ?? [];
+            $itemsText = sfAutoDeliveryItemsText((string)($draft['items'] ?? ''));
+            $hasConfig = count(sfAutoDeliveryItemsList($itemsText)) > 0;
+            $_SESSION['admin_auto_delivery_drafts'][$draftToken] = [
+                'enabled' => $enabledRequested,
+                'items' => $itemsText,
+            ];
+
+            echo json_encode([
+                'ok' => true,
+                'draft' => true,
+                'has_config' => $hasConfig,
+                'effective_enabled' => $enabledRequested && $hasConfig,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($ajaxAction === 'save_auto_delivery_items') {
+            $itemsText = sfAutoDeliveryItemsText((string)($_POST['items'] ?? ''));
+            $enabledRequested = !empty($_POST['enabled']);
+            $hasConfig = count(sfAutoDeliveryItemsList($itemsText)) > 0;
+            $_SESSION['admin_auto_delivery_drafts'][$draftToken] = [
+                'enabled' => $enabledRequested,
+                'items' => $itemsText,
+            ];
+
+            echo json_encode([
+                'ok' => true,
+                'draft' => true,
+                'has_config' => $hasConfig,
+                'effective_enabled' => $enabledRequested && $hasConfig,
+                'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        echo json_encode(['ok' => false, 'msg' => 'Ação inválida.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $produtoAjax = obterProdutoPorId($conn, $ajaxId);
+    if (!$produtoAjax) {
+        echo json_encode(['ok' => false, 'msg' => 'Produto não encontrado.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($ajaxAction === 'toggle_auto_delivery') {
+        $enabledRequested = !empty($_POST['enabled']);
+        $hasConfig = sfAutoDeliveryConfiguredCount($conn, $ajaxId, (string)($produtoAjax['auto_delivery_items'] ?? '')) > 0;
+        $enabledInt = ($enabledRequested && $hasConfig) ? 1 : 0;
+        $st = $conn->prepare('UPDATE products SET auto_delivery_enabled = ? WHERE id = ?');
+        if (!$st) {
+            echo json_encode(['ok' => false, 'msg' => 'Falha ao preparar atualização.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st->bind_param('ii', $enabledInt, $ajaxId);
+        $ok = $st->execute();
+        $st->close();
+        echo json_encode([
+            'ok' => (bool)$ok,
+            'has_config' => $hasConfig,
+            'effective_enabled' => (bool)$enabledInt,
+            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($ajaxAction === 'save_auto_delivery_items') {
+        $itemsText = sfAutoDeliveryItemsText((string)($_POST['items'] ?? ''));
+        $itemsJson = sfAutoDeliveryItemsJson($itemsText);
+        $enabledRequested = !empty($_POST['enabled']);
+        $hasConfig = sfAutoDeliveryConfiguredCount($conn, $ajaxId, $itemsText) > 0;
+        $enabledInt = ($enabledRequested && $hasConfig) ? 1 : 0;
+        $st = $conn->prepare('UPDATE products SET auto_delivery_enabled = ?, auto_delivery_items = ? WHERE id = ?');
+        if (!$st) {
+            echo json_encode(['ok' => false, 'msg' => 'Falha ao preparar atualização.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $st->bind_param('isi', $enabledInt, $itemsJson, $ajaxId);
+        $ok = $st->execute();
+        $st->close();
+        echo json_encode([
+            'ok' => (bool)$ok,
+            'has_config' => $hasConfig,
+            'effective_enabled' => (bool)$enabledInt,
+            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    echo json_encode(['ok' => false, 'msg' => 'Ação inválida.'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $idPost = (int)($_POST['id'] ?? 0);
+    $draftToken = (string)($_POST['auto_delivery_draft_token'] ?? ($_SESSION['admin_product_form_token'] ?? ''));
+    $draft = is_array($_SESSION['admin_auto_delivery_drafts'][$draftToken] ?? null) ? $_SESSION['admin_auto_delivery_drafts'][$draftToken] : [];
 
     // --- Save cover image to DB ---
     $imagemFinal = null;
@@ -59,6 +182,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dataEntrega = trim((string)($_POST['data_entrega'] ?? '')) !== '' ? (string)$_POST['data_entrega'] : null;
     $customSlug = trim((string)($_POST['slug'] ?? ''));
     $variantes = trim((string)($_POST['variantes'] ?? '')) !== '' ? (string)$_POST['variantes'] : null;
+    $autoDeliveryEnabled = !empty($_POST['auto_delivery_enabled']);
+    $autoDeliveryItems = trim((string)($_POST['auto_delivery_items'] ?? ''));
+    if ($idPost <= 0 && $autoDeliveryItems === '' && isset($draft['items'])) {
+        $autoDeliveryItems = (string)$draft['items'];
+    }
+    if ($autoDeliveryItems === '') {
+        $autoDeliveryItems = null;
+    }
     $productFeeOverrideEnabled = !empty($_POST['product_fee_override_enabled']);
     $productFeePercent = trim((string)($_POST['product_fee_percent'] ?? '')) !== '' ? (float)str_replace(',', '.', (string)$_POST['product_fee_percent']) : null;
 
@@ -72,10 +203,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $customSlug, $variantes,
         isset($_POST['destaque']),
         $productFeeOverrideEnabled,
-        $productFeePercent
+        $productFeePercent,
+        $autoDeliveryEnabled,
+        $autoDeliveryItems
     );
 
     if ($ok) {
+        unset($_SESSION['admin_auto_delivery_drafts'][$draftToken]);
         // Determine product ID for gallery
         $productId = (int)$idPost;
         if ($productId <= 0) {
@@ -118,6 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Redirect to edit form of the saved product (PRG pattern)
         $savedId = $idPost > 0 ? $idPost : $productId;
+
         header('Location: produtos_form?id=' . $savedId . '&saved=1');
         exit;
     }
@@ -145,6 +280,17 @@ $variantesAtual = $produto ? (string)($produto['variantes'] ?? '[]') : '[]';
 if (!$variantesAtual || $variantesAtual === '') $variantesAtual = '[]';
 $prazoAtual = $produto['prazo_entrega_dias'] ?? '';
 $dataEntregaAtual = $produto['data_entrega'] ?? '';
+$adminDraftToken = (string)($_SESSION['admin_product_form_token'] ?? '');
+$draft = !$produto && is_array($_SESSION['admin_auto_delivery_drafts'][$adminDraftToken] ?? null)
+    ? $_SESSION['admin_auto_delivery_drafts'][$adminDraftToken]
+    : [];
+$adEnabled = $produto ? sfProductAutoDeliveryEnabledEffective($conn, $produto) : !empty($draft['enabled']);
+$autoDeliveryItemsAtual = $produto
+    ? sfAutoDeliveryItemsText((string)($produto['auto_delivery_items'] ?? ''))
+    : sfAutoDeliveryItemsText((string)($draft['items'] ?? ''));
+$adHasConfig = $produto
+    ? sfAutoDeliveryConfiguredCount($conn, (int)($produto['id'] ?? 0), (string)($produto['auto_delivery_items'] ?? '')) > 0
+    : count(sfAutoDeliveryItemsList((string)($draft['items'] ?? ''))) > 0;
 $productFeeOverrideAtual = !empty($produto['product_fee_override_enabled']);
 $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
 ?>
@@ -200,6 +346,7 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
 
     <form method="post" enctype="multipart/form-data" class="space-y-5" id="produto-form">
         <?php if ($produto): ?><input type="hidden" name="id" value="<?= (int)$produto['id'] ?>"><?php endif; ?>
+        <input type="hidden" name="auto_delivery_draft_token" value="<?= htmlspecialchars($adminDraftToken, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" name="imagem_atual" value="<?= htmlspecialchars($imagemHiddenAtual, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" id="preco" name="preco" value="<?= htmlspecialchars(str_replace(',', '.', str_replace('.', '', $precoInicial))) ?>">
         <input type="hidden" name="descricao" id="descricao-hidden">
@@ -216,7 +363,7 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
                     <div class="rounded-xl border-2 p-4 text-center transition-all" :class="tipo==='produto'?'border-greenx bg-greenx/10 shadow-lg shadow-greenx/10':'border-blackx3 bg-blackx hover:border-zinc-600'">
                         <div class="w-12 h-12 mx-auto rounded-xl flex items-center justify-center mb-3" :class="tipo==='produto'?'bg-greenx/20':'bg-blackx3'"><i data-lucide="package" class="w-6 h-6" :class="tipo==='produto'?'text-greenx':'text-zinc-500'"></i></div>
                         <p class="font-semibold text-sm" :class="tipo==='produto'?'text-white':'text-zinc-400'">Produto</p>
-                        <p class="text-xs mt-1" :class="tipo==='produto'?'text-zinc-300':'text-zinc-600'">Item físico com estoque</p>
+                        <p class="text-xs mt-1" :class="tipo==='produto'?'text-zinc-300':'text-zinc-600'">Item digital com estoque</p>
                     </div>
                 </label>
                 <label class="relative cursor-pointer" @click="tipo = 'dinamico'">
@@ -332,6 +479,35 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
                 <div>
                     <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Ou data específica</label>
                     <input type="date" name="data_entrega" value="<?= htmlspecialchars((string)$dataEntregaAtual) ?>" min="<?= date('Y-m-d') ?>" class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors [color-scheme:dark]">
+                </div>
+            </div>
+        </div>
+        </template>
+
+        <!-- ═══ Entrega Automática ═══ -->
+        <template x-if="tipo !== 'servico'">
+        <div class="bg-blackx2 border border-blackx3 rounded-2xl p-5 md:p-6 shadow-2xl shadow-black/20" x-init="$nextTick(()=>{if(window.lucide)lucide.createIcons()})">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-zinc-300 flex items-center gap-2"><i data-lucide="zap" class="w-4 h-4 text-amber-400"></i> Entrega Automática</h3>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" name="auto_delivery_enabled" value="1" x-model="adEnabled" @change="onToggleAutoDelivery($event.target.checked)" class="sr-only peer">
+                    <div class="w-11 h-6 bg-blackx3 peer-focus:ring-2 peer-focus:ring-greenx/40 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-500 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-greenx peer-checked:after:bg-white"></div>
+                </label>
+            </div>
+            <p class="text-xs text-zinc-500 mb-4">Quando ativada, o conteúdo do item é entregue automaticamente ao comprador após pagamento aprovado.</p>
+
+            <div x-show="adEnabled" x-transition x-cloak>
+                <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Itens da entrega automática</label>
+                <textarea name="auto_delivery_items" x-model="adItems" @input.debounce.700ms="saveAutoDeliveryItems()" :disabled="!adEnabled" rows="6" class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors" placeholder="Um item por linha&#10;Ex:&#10;login:usuario@email.com&#10;senha:123456"></textarea>
+                <p class="text-xs text-zinc-500 mt-2">Cada linha é 1 item para entrega automática.</p>
+                <p x-show="adAjaxSaving" class="text-xs mt-1 text-amber-300">Salvando automaticamente...</p>
+                <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-1"></p>
+            </div>
+
+            <div x-show="!adEnabled" x-transition x-cloak>
+                <div class="flex items-center gap-2 text-xs text-zinc-500">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
+                    Ative para exibir e preencher os itens sem precisar recarregar.
                 </div>
             </div>
         </div>
@@ -453,9 +629,17 @@ produtoFormEl.addEventListener('submit', function(){
 
 function produtoForm() {
     return {
+        productId: <?= (int)($produto['id'] ?? 0) ?>,
+        draftToken: <?= json_encode($adminDraftToken, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
         tipo: '<?= $tipoAtual ?>',
         quantidade: <?= $qtdAtual ?>,
         variantes: <?= $variantesAtual ?>,
+        adEnabled: <?= $adEnabled ? 'true' : 'false' ?>,
+        adItems: <?= json_encode($autoDeliveryItemsAtual, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
+        adHasConfig: <?= $adHasConfig ? 'true' : 'false' ?>,
+        adAjaxMsg: '',
+        adAjaxError: false,
+        adAjaxSaving: false,
         variantePriceFormat(val) {
             const cents = Math.round((Number(val) || 0) * 100);
             return (cents / 100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -474,6 +658,83 @@ function produtoForm() {
             // If new dynamic product with no variants, add one empty
             if (this.tipo === 'dinamico' && this.variantes.length === 0) {
                 this.variantes.push({nome:'',preco:0,quantidade:1});
+            }
+        },
+        hasAutoDeliveryItems() {
+            return (this.adItems || '').split(/\r?\n/).some((line) => line.trim() !== '');
+        },
+        async sendAutoDeliveryRequest(action, extraFields = {}) {
+            const fd = new FormData();
+            fd.append('ajax_action', action);
+            if (this.productId) {
+                fd.append('id', String(this.productId));
+            } else if (this.draftToken) {
+                fd.append('draft_token', this.draftToken);
+            }
+            Object.entries(extraFields).forEach(([key, value]) => fd.append(key, value));
+
+            const resp = await fetch(window.location.pathname + window.location.search, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                body: fd
+            });
+            return resp.json();
+        },
+        async onToggleAutoDelivery(enabled) {
+            this.adAjaxMsg = '';
+            this.adAjaxError = false;
+            if (!enabled && !this.productId && !this.draftToken) return;
+            if (enabled && !this.adHasConfig && !this.hasAutoDeliveryItems()) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Preencha ao menos 1 item para ativar a entrega automática.';
+                return;
+            }
+
+            this.adAjaxSaving = true;
+
+            try {
+                const data = await this.sendAutoDeliveryRequest('toggle_auto_delivery', {
+                    enabled: enabled ? '1' : '0'
+                });
+                if (!data || !data.ok) throw new Error((data && data.msg) ? data.msg : 'Falha ao salvar.');
+                this.adHasConfig = !!data.has_config;
+                if (enabled && data.effective_enabled === false) {
+                    this.adAjaxError = true;
+                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                } else if (!enabled) {
+                    this.adAjaxMsg = data.draft ? 'Rascunho atualizado.' : 'Entrega automática desativada.';
+                }
+            } catch (e) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Não foi possível atualizar agora.';
+            } finally {
+                this.adAjaxSaving = false;
+            }
+        },
+        async saveAutoDeliveryItems() {
+            this.adAjaxMsg = '';
+            this.adAjaxError = false;
+            if (!this.adEnabled || (!this.productId && !this.draftToken)) return;
+            this.adAjaxSaving = true;
+
+            try {
+                const data = await this.sendAutoDeliveryRequest('save_auto_delivery_items', {
+                    items: this.adItems || '',
+                    enabled: this.adEnabled ? '1' : '0'
+                });
+                if (!data || !data.ok) throw new Error((data && data.msg) ? data.msg : 'Falha ao salvar.');
+                this.adHasConfig = !!data.has_config;
+                if (this.adEnabled && data.effective_enabled === false) {
+                    this.adAjaxError = true;
+                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                } else {
+                    this.adAjaxMsg = data.draft ? 'Rascunho salvo automaticamente.' : 'Itens salvos automaticamente.';
+                }
+            } catch (e) {
+                this.adAjaxError = true;
+                this.adAjaxMsg = 'Não foi possível salvar os itens agora.';
+            } finally {
+                this.adAjaxSaving = false;
             }
         }
     };

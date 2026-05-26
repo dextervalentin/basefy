@@ -14,6 +14,18 @@ $conn = $db->connect();
 $erro = '';
 $ok   = '';
 
+function adminWhatsappHref(?string $rawPhone): string
+{
+  $digits = preg_replace('/\D+/', '', (string)$rawPhone) ?? '';
+  if ($digits === '') {
+    return '';
+  }
+  if (strlen($digits) === 10 || strlen($digits) === 11) {
+    $digits = '55' . $digits;
+  }
+  return 'https://wa.me/' . $digits;
+}
+
 // Handle status update via POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $acao     = (string)($_POST['acao'] ?? '');
@@ -160,6 +172,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         </tr></thead>
         <tbody>
         <?php foreach ($lista['itens'] as $row): ?>
+          <?php $userWhatsappHref = adminWhatsappHref((string)($row['user_whatsapp'] ?? '')); ?>
           <tr id="rep-row-<?= (int)$row['id'] ?>" class="row-link border-b border-blackx3/50 hover:bg-blackx/40"
               data-click-selector=".js-rep-detail" tabindex="0">
             <td class="py-3 pr-3 font-mono text-xs">#<?= (int)$row['id'] ?></td>
@@ -189,6 +202,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 <button type="button" class="js-rep-detail inline-flex items-center gap-1 rounded-lg bg-blackx border border-blackx3 text-zinc-300 hover:border-greenx hover:text-white px-2.5 py-1.5 text-xs font-medium transition" data-id="<?= (int)$row['id'] ?>">
                   <i data-lucide="eye" class="w-3.5 h-3.5"></i> Ver
                 </button>
+                <?php if ($userWhatsappHref !== ''): ?>
+                <a href="<?= htmlspecialchars($userWhatsappHref, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-lg bg-blackx border border-emerald-400/30 text-emerald-300 hover:border-emerald-300 hover:text-white px-2.5 py-1.5 text-xs font-medium transition" title="Abrir WhatsApp do cliente">
+                  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> WhatsApp
+                </a>
+                <?php endif; ?>
                 <select class="js-rep-status-select rounded-lg bg-blackx border border-blackx3 text-xs px-2 py-1.5 outline-none focus:border-greenx cursor-pointer"
                         data-id="<?= (int)$row['id'] ?>" data-current="<?= htmlspecialchars((string)$row['status']) ?>">
                   <option value="pendente" <?= $row['status'] === 'pendente' ? 'selected' : '' ?>>Pendente</option>
@@ -234,6 +252,18 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     if(s==='rejeitado')return'bg-zinc-500/15 border border-zinc-400/40 text-zinc-300';
     return'bg-orange-500/15 border border-orange-400/40 text-orange-300';
   }
+  function whatsappHref(phone){
+    var digits=String(phone||'').replace(/\D+/g,'');
+    if(!digits)return'';
+    if(digits.length===10||digits.length===11)digits='55'+digits;
+    return 'https://wa.me/'+digits;
+  }
+  function whatsappButton(phone){
+    var href=whatsappHref(phone);
+    if(!href)return'';
+    return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:border-emerald-300 hover:text-white transition">'+
+      '<i data-lucide="message-circle" class="w-3.5 h-3.5"></i> WhatsApp do cliente</a>';
+  }
   function toast(m,ok){
     var box=document.getElementById('admin-toast');
     if(!box){box=document.createElement('div');box.id='admin-toast';box.className='fixed top-8 right-4 z-[9999] px-4 py-2 rounded-lg border text-sm shadow-lg transition-opacity duration-200 opacity-0';document.body.appendChild(box);}
@@ -259,6 +289,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
       if(!j.ok){body.innerHTML='<p class="text-red-400">'+escH(j.msg)+'</p>';return;}
       var rp=j.report;
       body.innerHTML=
+        (rp.user_whatsapp?'<div class="mb-4 flex justify-end">'+whatsappButton(rp.user_whatsapp)+'</div>':'')+
         '<div class="grid md:grid-cols-2 gap-3 mb-4">'+
         '<div><span class="text-zinc-400">ID:</span> #'+rp.id+'</div>'+
         '<div><span class="text-zinc-400">Status:</span> <span class="px-2 py-0.5 rounded-full text-xs font-medium '+statusBadge(rp.status)+'">'+escH(rp.status)+'</span></div>'+

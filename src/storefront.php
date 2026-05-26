@@ -5,6 +5,126 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/wallet_escrow.php';
 require_once __DIR__ . '/upload_paths.php';
 require_once __DIR__ . '/media.php';
+require_once __DIR__ . '/stock_items.php';
+
+function sfAutoDeliveryItemsList(?string $raw): array
+{
+    $value = trim((string)$raw);
+    if ($value === '') {
+        return [];
+    }
+
+    $decoded = json_decode($value, true);
+    $source = is_array($decoded) ? $decoded : preg_split('/\r\n|\r|\n/', $value);
+    if (!is_array($source)) {
+        return [];
+    }
+
+    $items = [];
+    foreach ($source as $item) {
+        $text = trim((string)$item);
+        if ($text !== '') {
+            $items[] = $text;
+        }
+    }
+
+    return $items;
+}
+
+function sfAutoDeliveryItemsText(?string $raw): string
+{
+    return implode("\n", sfAutoDeliveryItemsList($raw));
+}
+
+function sfAutoDeliveryItemsJson(?string $raw): ?string
+{
+    $items = sfAutoDeliveryItemsList($raw);
+    return $items ? json_encode($items, JSON_UNESCAPED_UNICODE) : null;
+}
+
+function sfAutoDeliveryConfiguredCount($conn, int $productId, ?string $rawItems = null): int
+{
+    $legacyCount = count(sfAutoDeliveryItemsList($rawItems));
+    $stockCount = $productId > 0 ? stockCountAll($conn, $productId) : 0;
+    return $stockCount + $legacyCount;
+}
+
+function sfAutoDeliveryAvailableCount($conn, int $productId, string $type = 'produto', ?string $variant = null, ?string $rawItems = null): int
+{
+    $typeKey = mb_strtolower(trim($type));
+    if ($typeKey === 'dinamico') {
+        if ($productId <= 0) {
+            return 0;
+        }
+        if ($variant !== null && $variant !== '') {
+            return stockCountAvailable($conn, $productId, $variant);
+        }
+        return stockCountAll($conn, $productId, null, 'disponivel');
+    }
+
+    $stockCount = $productId > 0 ? stockCountAvailable($conn, $productId, $variant) : 0;
+    if ($variant !== null && $variant !== '') {
+        return $stockCount;
+    }
+
+    return $stockCount + count(sfAutoDeliveryItemsList($rawItems));
+}
+
+function sfProductAutoDeliveryEnabledEffective($conn, array $product): bool
+{
+    if (empty($product['auto_delivery_enabled'])) {
+        return false;
+    }
+
+    return sfAutoDeliveryConfiguredCount(
+        $conn,
+        (int)($product['id'] ?? 0),
+        (string)($product['auto_delivery_items'] ?? '')
+    ) > 0;
+}
+
+function sfProductAvailableQuantity($conn, array $product): int
+{
+    $typeKey = mb_strtolower(trim((string)($product['tipo'] ?? 'produto')));
+    if ($typeKey === 'servico' || $typeKey === 'serviço') {
+        return 1;
+    }
+
+    if (!empty($product['auto_delivery_enabled'])) {
+        return sfAutoDeliveryAvailableCount(
+            $conn,
+            (int)($product['id'] ?? 0),
+            $typeKey,
+            null,
+            (string)($product['auto_delivery_items'] ?? '')
+        );
+    }
+
+    if ($typeKey === 'dinamico') {
+        $variantsRaw = $product['variantes'] ?? null;
+        $variants = is_string($variantsRaw)
+            ? (json_decode($variantsRaw, true) ?: [])
+            : (is_array($variantsRaw) ? $variantsRaw : []);
+
+        $quantity = 0;
+        foreach ($variants as $variant) {
+            if (is_array($variant)) {
+                $quantity += max(0, (int)($variant['quantidade'] ?? 0));
+            }
+        }
+
+        if ($quantity > 0) {
+            return $quantity;
+        }
+    }
+
+    return max(0, (int)($product['quantidade'] ?? 0));
+}
+
+function sfProductCanPurchase($conn, array $product): bool
+{
+    return sfProductAvailableQuantity($conn, $product) > 0;
+}
 
 /* ── Slug helpers ── */
 
@@ -191,6 +311,7 @@ function _sfEnsureSlugColumn($conn): void
         @$conn->query("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_slug ON products(slug)");
         $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS destaque BOOLEAN NOT NULL DEFAULT FALSE");
         $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+        $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_items TEXT DEFAULT NULL");
         $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS prazo_entrega_dias INT DEFAULT NULL");
         $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS data_entrega DATE DEFAULT NULL");
     } catch (\Throwable $e) {}
@@ -281,7 +402,8 @@ function sfGetProductBySlug($conn, string $slug): ?array
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
-                   COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled
+                 COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
+                 p.auto_delivery_items
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . "
@@ -833,7 +955,8 @@ function sfListProducts($conn, array $filters = []): array
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
-                   COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled{$salesSelect}
+                 COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
+                 p.auto_delivery_items{$salesSelect}
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . $salesJoin;
@@ -906,7 +1029,8 @@ function sfGetProductById($conn, int $productId): ?array
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
-                   COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled
+                 COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
+                 p.auto_delivery_items
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . "
@@ -964,6 +1088,8 @@ function sfCartSummary($conn): array
                    p.slug, p.variantes,
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
+                 COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
+                 p.auto_delivery_items,
                    c.id AS categoria_id, c.nome AS categoria_nome, c.slug AS categoria_slug,
                    p." . $cols['vendor'] . " AS vendedor_id, u.nome AS vendedor_nome, u.slug AS vendedor_slug
             FROM products p
@@ -1118,29 +1244,24 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
             }
         }
 
-        // Extra: produtos com auto-delivery (estoque digital) precisam de itens disponíveis
-        // em product_stock_items na variante escolhida, senão o webhook vai deixar o
-        // comprador pagando sem receber conteúdo.
+        // Extra: produtos com auto-delivery precisam de itens realmente configurados
+        // e disponíveis, seja no estoque automático ou no pool legado JSON.
         try {
             $pidCk = (int)($ck['id'] ?? 0);
-            if ($pidCk > 0) {
-                $stAd = $conn->prepare("SELECT auto_delivery_enabled FROM products WHERE id = ? LIMIT 1");
-                if ($stAd) {
-                    $stAd->bind_param('i', $pidCk);
-                    $stAd->execute();
-                    $adRow = $stAd->get_result()->fetch_assoc() ?: [];
-                    $stAd->close();
-                    if (!empty($adRow['auto_delivery_enabled'])) {
-                        require_once __DIR__ . '/stock_items.php';
-                        $varForStock = $tipoCk === 'dinamico' ? (string)($ck['variante_nome'] ?? '') : null;
-                        $avail = stockCountAvailable($conn, $pidCk, $varForStock);
-                        if ($avail < $qtyCk) {
-                            $rotulo = $tipoCk === 'dinamico'
-                                ? ('"' . (string)($ck['variante_nome'] ?? '') . '" de "' . (string)($ck['nome'] ?? '') . '"')
-                                : ('"' . (string)($ck['nome'] ?? '') . '"');
-                            return [false, 'Estoque digital insuficiente para ' . $rotulo . '. Aguarde reposição.', []];
-                        }
-                    }
+            if ($pidCk > 0 && !empty($ck['auto_delivery_enabled'])) {
+                $varForStock = $tipoCk === 'dinamico' ? (string)($ck['variante_nome'] ?? '') : null;
+                $avail = sfAutoDeliveryAvailableCount(
+                    $conn,
+                    $pidCk,
+                    $tipoCk,
+                    $varForStock,
+                    (string)($ck['auto_delivery_items'] ?? '')
+                );
+                if ($avail < $qtyCk) {
+                    $rotulo = $tipoCk === 'dinamico'
+                        ? ('"' . (string)($ck['variante_nome'] ?? '') . '" de "' . (string)($ck['nome'] ?? '') . '"')
+                        : ('"' . (string)($ck['nome'] ?? '') . '"');
+                    return [false, 'Estoque digital insuficiente para ' . $rotulo . '. Aguarde reposição.', []];
                 }
             }
         } catch (\Throwable $eAd) {

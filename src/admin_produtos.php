@@ -69,6 +69,9 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
     $selectAutoDelivery = colunaExiste($conn, 'products', 'auto_delivery_enabled')
         ? 'COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled'
         : 'FALSE AS auto_delivery_enabled';
+    $selectAutoDeliveryItems = colunaExiste($conn, 'products', 'auto_delivery_items')
+        ? 'p.auto_delivery_items'
+        : 'NULL AS auto_delivery_items';
 
     if ($colVendedor === null || $colCategoria === null) {
         return ['itens' => []];
@@ -90,7 +93,8 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
                    COALESCE(p.tipo, 'produto') AS tipo,
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.variantes,
-                     {$selectAutoDelivery},
+                                     {$selectAutoDelivery},
+                                     {$selectAutoDeliveryItems},
                    {$selectDestaque},
                    c.nome AS categoria_nome, u.nome AS vendedor_nome
             FROM products p
@@ -124,7 +128,7 @@ function listarProdutos($conn, array|string $f = [], int $pagina = 1, int $pp = 
     ];
 }
 
-function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $destaque = false, bool $productFeeOverrideEnabled = false, ?float $productFeePercent = null): array
+function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string $nome, string $descricao, float $preco, ?string $imagem, string $tipo = 'produto', int $quantidade = 0, ?int $prazoEntregaDias = null, ?string $dataEntrega = null, string $customSlug = '', ?string $variantes = null, bool $destaque = false, bool $productFeeOverrideEnabled = false, ?float $productFeePercent = null, bool $autoDeliveryEnabled = false, ?string $autoDeliveryItems = null): array
 {
     if ($vendedorId <= 0) return [false, 'Selecione um vendedor para o produto.'];
     if ($categoriaId <= 0) return [false, 'Selecione uma categoria para o produto.'];
@@ -171,12 +175,24 @@ function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string
     require_once __DIR__ . '/helpers.php';
     $descricao = maskContactInfo($descricao, '***', true);
 
-    // Auto-migrate: ensure variantes column exists
+    // Auto-migrate: ensure variantes/auto-delivery columns exist
     try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS variantes TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_enabled BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+    try { $conn->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_items TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
     _sfEnsureSlugColumn($conn);
     sellerProductFeeOverrideEnsureColumns($conn);
     $destaqueInt = $destaque ? 1 : 0;
     $productFeeOverrideInt = $productFeeOverrideEnabled ? 1 : 0;
+    $autoDeliveryItemsJson = sfAutoDeliveryItemsJson($autoDeliveryItems);
+    $hasAutoDeliveryConfig = sfAutoDeliveryConfiguredCount($conn, $id, $autoDeliveryItems) > 0;
+    if ($autoDeliveryEnabled && !$hasAutoDeliveryConfig) {
+        return [false, 'Adicione pelo menos 1 item na entrega automática ou configure o Estoque Automático antes de ativar.'];
+    }
+    $autoDeliveryInt = ($autoDeliveryEnabled && $hasAutoDeliveryConfig) ? 1 : 0;
+    if ($autoDeliveryInt === 1) {
+        $prazoEntregaDias = null;
+        $dataEntrega = null;
+    }
     if ($productFeeOverrideEnabled) {
         if ($productFeePercent === null) return [false, 'Informe a taxa personalizada do produto.'];
         $productFeePercent = max(0.0, min(100.0, $productFeePercent));
@@ -193,14 +209,44 @@ function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string
             $st = $conn->prepare("UPDATE products SET vendedor_id=?, categoria_id=?, nome=?, descricao=?, preco=?, tipo=?, quantidade=?, prazo_entrega_dias=?, data_entrega=?, slug=?, variantes=?, destaque=?, product_fee_override_enabled=?, product_fee_percent=? WHERE id=?");
             $st->bind_param('iissdsiisssiidi', $vendedorId, $categoriaId, $nome, $descricao, $preco, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $productFeeOverrideInt, $productFeePercent, $id);
         }
-        $st->execute();
+        $ok = $st->execute();
+        $st->close();
+        if (!$ok) {
+            return [false, 'Erro ao atualizar produto.'];
+        }
+
+        $stAd = $conn->prepare("UPDATE products SET auto_delivery_enabled = ?, auto_delivery_items = ? WHERE id = ?");
+        if ($stAd) {
+            $stAd->bind_param('isi', $autoDeliveryInt, $autoDeliveryItemsJson, $id);
+            $stAd->execute();
+            $stAd->close();
+        }
         return [true, 'Produto atualizado.'];
     }
 
     $slug = trim($customSlug) !== '' ? sfCreateUniqueSlug($conn, $customSlug) : sfCreateUniqueSlug($conn, $nome);
     $st = $conn->prepare("INSERT INTO products (vendedor_id, categoria_id, nome, descricao, preco, imagem, ativo, tipo, quantidade, prazo_entrega_dias, data_entrega, slug, variantes, destaque, product_fee_override_enabled, product_fee_percent) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?)");
     $st->bind_param('iissdssiisssiid', $vendedorId, $categoriaId, $nome, $descricao, $preco, $imagem, $tipo, $quantidade, $prazoEntregaDias, $dataEntrega, $slug, $variantes, $destaqueInt, $productFeeOverrideInt, $productFeePercent);
-    $st->execute();
+    $ok = $st->execute();
+    $st->close();
+    if (!$ok) {
+        return [false, 'Erro ao criar produto.'];
+    }
+
+    $savedId = (int)($conn->insert_id ?? 0);
+    if ($savedId <= 0) {
+        $lastRow = $conn->query("SELECT MAX(id) AS last_id FROM products")->fetch_assoc();
+        $savedId = (int)($lastRow['last_id'] ?? 0);
+    }
+    if ($savedId > 0) {
+        $stAd = $conn->prepare("UPDATE products SET auto_delivery_enabled = ?, auto_delivery_items = ? WHERE id = ?");
+        if ($stAd) {
+            $stAd->bind_param('isi', $autoDeliveryInt, $autoDeliveryItemsJson, $savedId);
+            $stAd->execute();
+            $stAd->close();
+        }
+    }
+
     return [true, 'Produto criado.'];
 }
 

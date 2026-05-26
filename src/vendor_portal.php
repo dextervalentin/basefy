@@ -204,25 +204,14 @@ function salvarMeuProduto($c, int $uid, int $id, int $categoriaId, string $nome,
     try { $c->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_enabled BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
     try { $c->query("ALTER TABLE products ADD COLUMN IF NOT EXISTS auto_delivery_items TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
 
-    // Validate auto-delivery items (JSON array of strings)
-    $autoDeliveryInt = $autoDeliveryEnabled ? 1 : 0;
-    if ($autoDeliveryEnabled && $autoDeliveryItems !== null && $autoDeliveryItems !== '') {
-        $adArr = json_decode($autoDeliveryItems, true);
-        if (!is_array($adArr)) {
-            $autoDeliveryItems = null;
-            $autoDeliveryInt = 0;
-        } else {
-            $cleanItems = [];
-            foreach ($adArr as $item) {
-                $item = trim((string)$item);
-                if ($item !== '') $cleanItems[] = $item;
-            }
-            $autoDeliveryItems = count($cleanItems) > 0 ? json_encode($cleanItems, JSON_UNESCAPED_UNICODE) : null;
-            if ($autoDeliveryItems === null) $autoDeliveryInt = 0;
-        }
-    } else {
-        $autoDeliveryItems = null;
+    $autoDeliveryItemsJson = sfAutoDeliveryItemsJson($autoDeliveryItems);
+    $hasAutoDeliveryConfig = sfAutoDeliveryConfiguredCount($c, $id, $autoDeliveryItems) > 0;
+    if ($autoDeliveryEnabled && !$hasAutoDeliveryConfig) {
+        return [false, 'Adicione pelo menos 1 item na entrega automática ou configure o Estoque Automático antes de ativar.'];
     }
+
+    $autoDeliveryItems = $autoDeliveryItemsJson;
+    $autoDeliveryInt = ($autoDeliveryEnabled && $hasAutoDeliveryConfig) ? 1 : 0;
 
     if ($autoDeliveryInt === 1) {
         $prazoEntregaDias = null;

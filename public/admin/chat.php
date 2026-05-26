@@ -225,6 +225,25 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     scrollbar-color: rgba(255,255,255,0.1) transparent;
 }
 
+.admin-msg .admin-attachment {
+    display: block;
+    overflow: hidden;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    background: rgba(0,0,0,0.18);
+}
+.admin-msg .admin-attachment img {
+    display: block;
+    width: 100%;
+    max-width: 280px;
+    max-height: 320px;
+    object-fit: cover;
+}
+.admin-msg .admin-attachment-caption {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .admin-msg {
     max-width: 82%;
     padding: 10px 14px;
@@ -304,14 +323,31 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 .chat-no-data svg { width: 48px; height: 48px; color: #333; margin: 0 auto 12px; }
 .chat-no-data p { font-size: 14px; }
 
-.chat-modal-compose {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
+.chat-modal-compose-wrap {
     padding: 14px;
     border-top: 1px solid rgba(255,255,255,0.06);
     background: linear-gradient(180deg, rgba(168,85,247,0.04), rgba(0,0,0,0.2));
 }
+.chat-modal-compose {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+}
+.chat-modal-attach {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #999;
+    transition: all 0.2s;
+}
+.chat-modal-attach:hover { border-color: rgba(168,85,247,0.45); color: #fff; }
+.chat-modal-attach.is-ready { border-color: rgba(16,185,129,0.45); background: rgba(16,185,129,0.12); color: #6ee7b7; }
 .chat-modal-compose textarea {
     flex: 1;
     min-height: 42px;
@@ -340,6 +376,33 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
 }
 .chat-modal-send:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .chat-modal-send:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.chat-modal-attachment-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 9px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(16,185,129,0.2);
+    background: rgba(16,185,129,0.08);
+    color: #d1fae5;
+    font-size: 12px;
+}
+.chat-modal-attachment-bar .attachment-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-modal-attachment-bar .attachment-clear {
+    border: none;
+    background: transparent;
+    color: #fca5a5;
+    font-size: 12px;
+    cursor: pointer;
+}
 </style>
 
 <!-- Stats cards -->
@@ -498,18 +561,29 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         <div class="chat-modal-body" id="modalBody">
             <div class="chat-loading"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Carregando…</div>
         </div>
+        <div class="chat-modal-compose-wrap">
+        <div class="chat-modal-attachment-bar" id="chatAdminAttachmentBar">
+            <span class="attachment-name" id="chatAdminAttachmentName"></span>
+            <button type="button" class="attachment-clear" id="chatAdminAttachmentClear">Remover</button>
+        </div>
         <form class="chat-modal-compose" id="chatAdminReplyForm" data-no-transition>
+            <input type="file" id="chatAdminAttachment" accept="image/*" hidden>
+            <label class="chat-modal-attach" id="chatAdminAttachBtn" for="chatAdminAttachment" title="Enviar print">
+                <i data-lucide="paperclip" class="w-4 h-4"></i>
+            </label>
             <textarea id="chatAdminReply" rows="1" maxlength="2000" placeholder="Responder como Equipe Basefy..."></textarea>
             <button type="submit" class="chat-modal-send" id="chatAdminReplyBtn" title="Enviar resposta">
                 <i data-lucide="send" class="w-4 h-4"></i>
             </button>
         </form>
+        </div>
     </div>
 </div>
 
 <script>
 (function(){
     const API = '<?= BASE_PATH ?>/api/chat';
+    const APP_BASE = '<?= BASE_PATH ?>';
     const modal = document.getElementById('chatModalOverlay');
     const modalClose = document.getElementById('chatModalClose');
     const modalTitle = document.getElementById('modalTitle');
@@ -518,7 +592,97 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
     const replyForm = document.getElementById('chatAdminReplyForm');
     const replyInput = document.getElementById('chatAdminReply');
     const replyBtn = document.getElementById('chatAdminReplyBtn');
+    const attachInput = document.getElementById('chatAdminAttachment');
+    const attachBtn = document.getElementById('chatAdminAttachBtn');
+    const attachBar = document.getElementById('chatAdminAttachmentBar');
+    const attachName = document.getElementById('chatAdminAttachmentName');
+    const attachClear = document.getElementById('chatAdminAttachmentClear');
+    const autoOpenConversation = <?= (int)($_GET['open'] ?? 0) ?>;
     let activeConvId = 0;
+
+    function selectedAttachment() {
+        return attachInput && attachInput.files && attachInput.files[0] ? attachInput.files[0] : null;
+    }
+
+    function syncAttachmentBar() {
+        const file = selectedAttachment();
+        if (!attachBar || !attachBtn || !attachName) return;
+        if (file) {
+            attachBar.style.display = 'flex';
+            attachName.textContent = file.name;
+            attachBtn.classList.add('is-ready');
+            attachBtn.title = 'Imagem pronta para envio: ' + file.name;
+        } else {
+            attachBar.style.display = 'none';
+            attachName.textContent = '';
+            attachBtn.classList.remove('is-ready');
+            attachBtn.title = 'Enviar print';
+        }
+    }
+
+    function resolveAttachmentUrl(raw) {
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (raw.indexOf('media:') === 0) return APP_BASE + '/api/media?id=' + raw.slice(6);
+        return raw.charAt(0) === '/' ? raw : (APP_BASE + '/' + raw.replace(/^\/+/, ''));
+    }
+
+    function parseAttachmentMessage(raw) {
+        const text = String(raw || '').replace(/\r\n?/g, '\n').trim();
+        const prefix = '[ANEXO_IMAGEM]\n';
+        if (text.indexOf(prefix) !== 0) return null;
+        const payload = text.slice(prefix.length);
+        const separator = payload.indexOf('\n');
+        const mediaRef = (separator === -1 ? payload : payload.slice(0, separator)).trim();
+        if (!mediaRef) return null;
+        const caption = separator === -1 ? '' : payload.slice(separator + 1).trim();
+        return { mediaRef, caption, url: resolveAttachmentUrl(mediaRef) };
+    }
+
+    function appendAttachmentContent(container, attachment) {
+        if (attachment.url) {
+            const link = document.createElement('a');
+            link.className = 'admin-attachment';
+            link.href = attachment.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            const img = document.createElement('img');
+            img.src = attachment.url;
+            img.alt = attachment.caption || 'Imagem enviada no chat';
+            img.loading = 'lazy';
+            link.appendChild(img);
+            container.appendChild(link);
+        }
+        if (attachment.caption) {
+            const caption = document.createElement('div');
+            caption.className = 'admin-attachment-caption';
+            caption.textContent = attachment.caption;
+            container.appendChild(caption);
+        }
+    }
+
+    if (attachInput) {
+        attachInput.addEventListener('change', () => {
+            const file = selectedAttachment();
+            if (file && (!file.type || file.type.indexOf('image/') !== 0)) {
+                alert('Envie apenas imagens no chat.');
+                attachInput.value = '';
+            }
+            if (file && file.size > 5 * 1024 * 1024) {
+                alert('A imagem deve ter no máximo 5MB.');
+                attachInput.value = '';
+            }
+            syncAttachmentBar();
+        });
+    }
+
+    if (attachClear) {
+        attachClear.addEventListener('click', () => {
+            if (attachInput) attachInput.value = '';
+            syncAttachmentBar();
+            replyInput.focus();
+        });
+    }
 
     // View thread
     window.viewThread = async function(convId) {
@@ -528,6 +692,8 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         modalSubtitle.textContent = 'Carregando…';
         modalBody.innerHTML = '<div class="chat-loading"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Carregando…</div>';
         if (replyInput) replyInput.value = '';
+        if (attachInput) attachInput.value = '';
+        syncAttachmentBar();
 
         try {
             const r = await fetch(API + '?action=admin_messages&conversation_id=' + convId);
@@ -575,12 +741,15 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         replyForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const text = (replyInput.value || '').trim();
-            if (!activeConvId || !text) return;
+            const file = selectedAttachment();
+            if (!activeConvId || (!text && !file)) return;
             replyBtn.disabled = true;
+            if (attachBtn) attachBtn.style.pointerEvents = 'none';
             try {
                 const fd = new FormData();
                 fd.append('conversation_id', activeConvId);
                 fd.append('message', text);
+                if (file) fd.append('attachment', file);
                 const r = await fetch(API + '?action=admin_send', { method: 'POST', body: fd });
                 const j = await r.json();
                 if (!j.ok) {
@@ -589,12 +758,15 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 }
                 appendThreadMessage(j.msg);
                 replyInput.value = '';
+                if (attachInput) attachInput.value = '';
+                syncAttachmentBar();
                 requestAnimationFrame(() => { modalBody.scrollTop = modalBody.scrollHeight; });
             } catch(e) {
                 console.error('Admin chat send error', e);
                 alert('Erro ao enviar mensagem.');
             } finally {
                 replyBtn.disabled = false;
+                if (attachBtn) attachBtn.style.pointerEvents = '';
                 replyInput.focus();
             }
         });
@@ -625,9 +797,16 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         sender.textContent = m.is_admin ? 'Equipe Basefy' : (m.is_buyer ? 'Comprador: ' + m.sender_name : 'Vendedor: ' + m.sender_name);
         el.appendChild(sender);
 
-        const text = document.createElement('div');
-        text.textContent = m.is_admin ? String(m.message || '').replace(/^Equipe Basefy:\s*\n?/, '') : m.message;
-        el.appendChild(text);
+        const rawMessage = String(m.message || '');
+        const visibleMessage = m.is_admin ? rawMessage.replace(/^Equipe Basefy:\s*\n?/, '') : rawMessage;
+        const attachment = parseAttachmentMessage(visibleMessage);
+        if (attachment) {
+            appendAttachmentContent(el, attachment);
+        } else {
+            const text = document.createElement('div');
+            text.textContent = visibleMessage;
+            el.appendChild(text);
+        }
 
         const time = document.createElement('div');
         time.className = 'admin-msg-time';
@@ -652,6 +831,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
         if (!dt) return '';
         const d = new Date(dt.replace(' ', 'T'));
         return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    syncAttachmentBar();
+    if (autoOpenConversation > 0) {
+        window.requestAnimationFrame(() => viewThread(autoOpenConversation));
     }
 })();
 </script>
