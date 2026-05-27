@@ -1552,6 +1552,7 @@ function sfListTopVendors($conn, int $limit = 5): array
                 GROUP BY vendedor_id
             ) os ON os.vendedor_id = u.id
             WHERE u.ativo = 1
+                        AND LOWER(COALESCE(u.email, '')) NOT IN ('karlosenrique368@gmail.com')
                             AND (
                                     u.role = 'vendedor'
                                     OR u.is_vendedor = true
