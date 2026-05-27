@@ -755,6 +755,14 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     <?php
                     // Map known category names to lucide icons
                     $catIconMap = [
+                        'financeiro' => 'banknote',
+                        'packs' => 'package', 'pack' => 'package',
+                        'ferramentas' => 'settings', 'ferramenta' => 'settings',
+                        'streaming' => 'play-circle',
+                        'bms de disparo' => 'rocket', 'bm de disparo' => 'rocket',
+                        'servicos' => 'package-check', 'serviços' => 'package-check', 'servico' => 'package-check', 'serviço' => 'package-check',
+                        'outros' => 'tags', 'outro' => 'tags',
+                        'kwai' => 'play-circle',
                         'meta' => 'facebook', 'facebook' => 'facebook',
                         'google' => 'chrome', 'google ads' => 'chrome', 'g-ads' => 'chrome',
                         'tiktok' => 'music', 'tik tok' => 'music',
