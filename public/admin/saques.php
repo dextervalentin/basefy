@@ -39,6 +39,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 
+  if ($action === 'reject_withdrawal') {
+    $withdrawalId = (int)($_POST['withdrawal_id'] ?? 0);
+    $noRefund = (string)($_POST['no_refund'] ?? '') === '1';
+    [$ok, $m] = walletRejeitarSaqueAdmin($conn, $withdrawalId, $adminId, !$noRefund);
+    if ($ok) {
+      $msg = $m;
+    } else {
+      $err = $m;
+    }
+  }
+
   if ($action === 'add_observation') {
     $withdrawalId = (int)($_POST['withdrawal_id'] ?? 0);
     $novaObs = trim((string)($_POST['nova_obs'] ?? ''));
@@ -226,11 +237,26 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
           <?php if ($tab !== 'aprovados'): ?>
           <td class="py-2">
             <?php if ($isPendente): ?>
-            <form method="post">
-              <input type="hidden" name="action" value="approve_withdrawal">
-              <input type="hidden" name="withdrawal_id" value="<?= (int)$row['id'] ?>">
-              <button class="rounded-lg bg-greenx hover:bg-greenx2 text-black font-semibold px-3 py-1 text-xs">Confirmar</button>
-            </form>
+            <div class="flex items-center gap-1.5">
+              <form method="post">
+                <input type="hidden" name="action" value="approve_withdrawal">
+                <input type="hidden" name="withdrawal_id" value="<?= (int)$row['id'] ?>">
+                <button class="rounded-lg bg-greenx hover:bg-greenx2 text-black font-semibold px-3 py-1 text-xs">Confirmar</button>
+              </form>
+              <form method="post" onsubmit="return confirm('Rejeitar este saque e estornar o saldo para o usuário?');">
+                <input type="hidden" name="action" value="reject_withdrawal">
+                <input type="hidden" name="withdrawal_id" value="<?= (int)$row['id'] ?>">
+                <button class="rounded-lg bg-red-500/90 hover:bg-red-500 text-white font-semibold px-3 py-1 text-xs">Rejeitar</button>
+              </form>
+              <?php if ((int)$row['id'] === 1): ?>
+              <form method="post" onsubmit="return confirm('EXCEÇÃO: rejeitar sem estornar saldo. Confirma?');">
+                <input type="hidden" name="action" value="reject_withdrawal">
+                <input type="hidden" name="withdrawal_id" value="<?= (int)$row['id'] ?>">
+                <input type="hidden" name="no_refund" value="1">
+                <button class="rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white font-semibold px-3 py-1 text-xs">Rejeitar sem estorno</button>
+              </form>
+              <?php endif; ?>
+            </div>
             <?php else: ?>
             <span class="text-xs text-zinc-600">—</span>
             <?php endif; ?>

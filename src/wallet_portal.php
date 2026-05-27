@@ -619,6 +619,71 @@ function walletAprovarSaqueAdmin($conn, int $withdrawalId, int $adminUserId): ar
     }
 }
 
+function walletRejeitarSaqueAdmin($conn, int $withdrawalId, int $adminUserId, bool $estornarSaldo = true): array
+{
+    if ($withdrawalId <= 0 || $adminUserId <= 0) {
+        return [false, 'Parâmetros inválidos.'];
+    }
+
+    $conn->begin_transaction();
+    try {
+        $st = $conn->prepare("SELECT id, user_id, valor, status, observacao
+                             FROM wallet_withdrawals
+                             WHERE id = ?
+                             FOR UPDATE");
+        $st->bind_param('i', $withdrawalId);
+        $st->execute();
+        $wd = $st->get_result()->fetch_assoc();
+
+        if (!$wd) {
+            $conn->rollback();
+            return [false, 'Solicitação não encontrada.'];
+        }
+
+        if ((string)$wd['status'] !== 'pendente') {
+            $conn->rollback();
+            return [false, 'Solicitação já processada.'];
+        }
+
+        $userId = (int)$wd['user_id'];
+        $valor = (float)$wd['valor'];
+        $obs = trim((string)($wd['observacao'] ?? ''));
+
+        if ($estornarSaldo && $valor > 0) {
+            $upSaldo = $conn->prepare('UPDATE users SET wallet_saldo = wallet_saldo + ? WHERE id = ?');
+            $upSaldo->bind_param('di', $valor, $userId);
+            $upSaldo->execute();
+
+            $stDup = $conn->prepare("SELECT id FROM wallet_transactions WHERE referencia_tipo='wallet_withdrawal' AND referencia_id=? AND tipo='credito' AND origem='withdraw_rejected' LIMIT 1");
+            $stDup->bind_param('i', $withdrawalId);
+            $stDup->execute();
+            $dup = $stDup->get_result()->fetch_assoc();
+
+            if (!$dup) {
+                $tx = $conn->prepare("INSERT INTO wallet_transactions
+                    (user_id, tipo, origem, referencia_tipo, referencia_id, valor, descricao)
+                    VALUES (?, 'credito', 'withdraw_rejected', 'wallet_withdrawal', ?, ?, ?)");
+                $desc = 'Saque rejeitado #' . $withdrawalId . ' por admin #' . $adminUserId . ' (saldo estornado)';
+                $tx->bind_param('iids', $userId, $withdrawalId, $valor, $desc);
+                $tx->execute();
+            }
+        }
+
+        $tag = $estornarSaldo ? 'rejeitado_por=' . $adminUserId . ' | saldo_estornado=1' : 'rejeitado_por=' . $adminUserId . ' | saldo_estornado=0';
+        $obsFinal = trim($obs === '' ? $tag : ($obs . ' | ' . $tag));
+
+        $upWd = $conn->prepare("UPDATE wallet_withdrawals SET status='recusado', observacao = ? WHERE id = ?");
+        $upWd->bind_param('si', $obsFinal, $withdrawalId);
+        $upWd->execute();
+
+        $conn->commit();
+        return [true, $estornarSaldo ? 'Saque rejeitado e saldo estornado.' : 'Saque rejeitado sem estorno de saldo.'];
+    } catch (Throwable $e) {
+        $conn->rollback();
+        return [false, 'Falha ao rejeitar saque.'];
+    }
+}
+
 /**
  * Paginated withdrawal listing for admin.
  * Returns ['itens' => [...], 'total' => int, 'pagina' => int, 'total_paginas' => int]

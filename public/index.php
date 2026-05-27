@@ -437,7 +437,7 @@ require_once dirname(__DIR__) . '/src/stock_items.php';
 $catalogCatSlug = trim((string)($_GET['cat'] ?? ''));
 $catalogQuery = trim((string)($_GET['q'] ?? ''));
 $catalogPage = max(1, (int)($_GET['page'] ?? 1));
-$catalogPerPage = 24;
+$catalogPerPage = 28;
 $catalogActiveCategory = homeCatalogResolveCategory($categorias, $catalogCatSlug);
 
 // Counts per category use the same storefront filters as the visible list.
