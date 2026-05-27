@@ -153,39 +153,48 @@ if (isset($_SESSION['verif_flash'])) {
     else $msgErr = (string)($flash['msg'] ?? '');
 }
 
-/* ═══ Filters & Query — one lead per user, only when dados AND email AND documentos submitted ═══ */
+/* ═══ Filters & Query — one lead per user, including incomplete/rejected flows ═══ */
 $filtroStatus = (string)($_GET['status'] ?? 'pendente');
 $q = trim((string)($_GET['q'] ?? ''));
 $pagina = max(1, (int)($_GET['p'] ?? 1));
 $pp = in_array((int)($_GET['pp'] ?? 10), [5, 10, 20], true) ? (int)($_GET['pp'] ?? 10) : 10;
 $offset = ($pagina - 1) * $pp;
 
-// Base: users with dados AND email AND documentos rows (all 3 steps submitted)
-$baseFrom = "FROM user_verifications vd
-             JOIN user_verifications vemail ON vemail.user_id = vd.user_id AND vemail.tipo = 'email'
-             JOIN user_verifications vdoc ON vdoc.user_id = vd.user_id AND vdoc.tipo = 'documentos'
-             JOIN users u ON u.id = vd.user_id
-             WHERE vd.tipo = 'dados'";
+$stDados = "COALESCE(vd.status, 'nao_enviado')";
+$stEmail = "COALESCE(vemail.status, 'nao_enviado')";
+$stDocs  = "COALESCE(vdoc.status, 'nao_enviado')";
+
+// Base: any user that touched KYC (verification rows or uploaded docs)
+$baseFrom = "FROM (
+               SELECT DISTINCT user_id FROM user_verifications WHERE tipo IN ('dados', 'email', 'documentos')
+               UNION
+               SELECT DISTINCT user_id FROM user_verification_docs
+             ) vk
+             JOIN users u ON u.id = vk.user_id
+             LEFT JOIN user_verifications vd ON vd.user_id = vk.user_id AND vd.tipo = 'dados'
+             LEFT JOIN user_verifications vemail ON vemail.user_id = vk.user_id AND vemail.tipo = 'email'
+             LEFT JOIN user_verifications vdoc ON vdoc.user_id = vk.user_id AND vdoc.tipo = 'documentos'
+             WHERE 1=1";
 
 $searchWhere = '';
 $searchParams = [];
 if ($q !== '') {
     $like = '%' . $q . '%';
-    $searchWhere = " AND (u.nome LIKE ? OR u.email LIKE ?)";
+    $searchWhere = " AND (LOWER(COALESCE(u.nome, '')) LIKE LOWER(?) OR LOWER(COALESCE(u.email, '')) LIKE LOWER(?))";
     $searchParams = [$like, $like];
 }
 
 // Status conditions for combined status
 $statusConditions = [
-  'pendente'   => " AND (vd.status = 'pendente' OR vemail.status = 'pendente' OR vdoc.status = 'pendente') AND vd.status != 'rejeitado' AND vemail.status != 'rejeitado' AND vdoc.status != 'rejeitado'",
-    'verificado' => " AND vd.status = 'verificado' AND vemail.status = 'verificado' AND vdoc.status = 'verificado'",
-  'rejeitado'  => " AND (vd.status = 'rejeitado' OR vemail.status = 'rejeitado' OR vdoc.status = 'rejeitado')",
+  'pendente'   => " AND (($stDados IN ('pendente', 'nao_enviado')) OR ($stEmail IN ('pendente', 'nao_enviado')) OR ($stDocs IN ('pendente', 'nao_enviado'))) AND $stDados <> 'rejeitado' AND $stEmail <> 'rejeitado' AND $stDocs <> 'rejeitado'",
+    'verificado' => " AND $stDados = 'verificado' AND $stEmail = 'verificado' AND $stDocs = 'verificado'",
+  'rejeitado'  => " AND ($stDados = 'rejeitado' OR $stEmail = 'rejeitado' OR $stDocs = 'rejeitado')",
 ];
 
 // Get counts for tabs
 $counts = ['todos' => 0, 'pendente' => 0, 'verificado' => 0, 'rejeitado' => 0];
 foreach (['pendente', 'verificado', 'rejeitado'] as $sts) {
-    $cSql = "SELECT COUNT(DISTINCT vd.user_id) AS c " . $baseFrom . $searchWhere . $statusConditions[$sts];
+  $cSql = "SELECT COUNT(DISTINCT vk.user_id) AS c " . $baseFrom . $searchWhere . $statusConditions[$sts];
     $cSt = $conn->prepare($cSql);
     $cSt->execute($searchParams ?: []);
     $counts[$sts] = (int)($cSt->get_result()->fetch_assoc()['c'] ?? 0);
@@ -197,20 +206,20 @@ $counts['todos'] = $counts['pendente'] + $counts['verificado'] + $counts['rejeit
 $statusFilter = $statusConditions[$filtroStatus] ?? '';
 if ($filtroStatus === 'todos') $statusFilter = '';
 
-$countSql = "SELECT COUNT(DISTINCT vd.user_id) AS total " . $baseFrom . $searchWhere . $statusFilter;
+$countSql = "SELECT COUNT(DISTINCT vk.user_id) AS total " . $baseFrom . $searchWhere . $statusFilter;
 $stC = $conn->prepare($countSql);
 $stC->execute($searchParams ?: []);
 $total = (int)($stC->get_result()->fetch_assoc()['total'] ?? 0);
 $stC->close();
 $totalPaginas = max(1, (int)ceil($total / $pp));
 
-$listSql = "SELECT vd.user_id, u.nome, u.email, u.role,
-                   vd.status AS dados_status, vd.dados AS dados_dados, vd.observacao AS dados_obs, vd.atualizado AS dados_atualizado,
-                   vemail.status AS email_status, vemail.observacao AS email_obs, vemail.atualizado AS email_atualizado,
-                   vdoc.status AS docs_status, vdoc.dados AS docs_dados, vdoc.observacao AS docs_obs, vdoc.atualizado AS docs_atualizado,
-                   GREATEST(vd.atualizado, vemail.atualizado, vdoc.atualizado) AS last_update
+$listSql = "SELECT vk.user_id, u.nome, u.email, u.role,
+         $stDados AS dados_status, vd.dados AS dados_dados, vd.observacao AS dados_obs, vd.atualizado AS dados_atualizado,
+         $stEmail AS email_status, vemail.observacao AS email_obs, vemail.atualizado AS email_atualizado,
+         $stDocs AS docs_status, vdoc.dados AS docs_dados, vdoc.observacao AS docs_obs, vdoc.atualizado AS docs_atualizado,
+         GREATEST(COALESCE(vd.atualizado, '1970-01-01 00:00:00'), COALESCE(vemail.atualizado, '1970-01-01 00:00:00'), COALESCE(vdoc.atualizado, '1970-01-01 00:00:00')) AS last_update
             " . $baseFrom . $searchWhere . $statusFilter . "
-            ORDER BY GREATEST(vd.atualizado, vemail.atualizado, vdoc.atualizado) DESC
+       ORDER BY GREATEST(COALESCE(vd.atualizado, '1970-01-01 00:00:00'), COALESCE(vemail.atualizado, '1970-01-01 00:00:00'), COALESCE(vdoc.atualizado, '1970-01-01 00:00:00')) DESC
             LIMIT ? OFFSET ?";
 $stL = $conn->prepare($listSql);
 $stL->execute(array_merge($searchParams, [$pp, $offset]));
