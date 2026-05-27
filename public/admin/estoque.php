@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/admin_produtos.php';
+require_once __DIR__ . '/../../src/upload_paths.php';
+require_once __DIR__ . '/../../src/media.php';
 require_once __DIR__ . '/../../src/stock_items.php';
 
 exigirAdmin();
@@ -46,7 +48,7 @@ if ($tipo === 'dinamico') {
     $variantes = json_decode((string)($produto['variantes'] ?? ''), true) ?: [];
 }
 
-$imgUrl = normalizarProdutoImagemUrl((string)($produto['imagem'] ?? ''));
+$imgUrl = mediaResolveUrl((string)($produto['imagem'] ?? ''), '');
 $msg = '';
 $err = '';
 
