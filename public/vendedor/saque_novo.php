@@ -3,12 +3,18 @@
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/vendor_portal.php';
+require_once __DIR__ . '/../../src/wallet_portal.php';
 
 exigirVendedor();
 $conn = (new Database())->connect();
+$uid = (int)($_SESSION['user_id'] ?? 0);
+$savedPixData = walletSavedPixData($conn, $uid);
+$savedPixKey = (string)($savedPixData['key'] ?? '');
+$savedTipoChave = (string)($savedPixData['type'] ?? '');
+$pixLocked = $savedPixKey !== '';
 
 // Verification gate — withdrawals require completed profile
-$_uid_check = (int)($_SESSION['user_id'] ?? 0);
+$_uid_check = $uid;
 if (!contaVerificada($_uid_check)) {
     $_SESSION['flash_error'] = 'Para solicitar saques, complete a verificação da sua conta.';
     header('Location: ' . BASE_PATH . '/verificacao');
@@ -35,7 +41,6 @@ $activeMenu = 'financeiro';
 $finTab = 'saques';
 $pageTitle  = 'Solicitar Saque';
 
-$uid  = (int)($_SESSION['user_id'] ?? 0);
 $erro = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -48,9 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pix = trim((string)($_POST['pix_chave'] ?? ''));
     $obs = trim((string)($_POST['observacao'] ?? ''));
     $tipoChave = trim((string)($_POST['tipo_chave'] ?? ''));
+    if ($pix === '') $pix = $savedPixKey;
+    $tipoChave = walletNormalizePixType($tipoChave) ?: $savedTipoChave ?: walletInferPixKeyType($pix);
 
     if ($valor <= 0) {
         $erro = 'Informe um valor válido.';
+    } elseif ($pix === '' || $tipoChave === '') {
+      $erro = 'Dados inválidos. Preencha o tipo de chave e a chave PIX.';
     } else {
         $colsList = 'user_id, valor, status';
         $placeholders = '?, ?, \'pendente\'';
@@ -102,7 +111,7 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
       </div>
     <?php endif; ?>
 
-    <form method="post" class="space-y-3" x-data="{ tipoChave: '', pixKey: '' }">
+    <form method="post" class="space-y-3" x-data="{ tipoChave: <?= htmlspecialchars(json_encode($savedTipoChave, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, pixKey: <?= htmlspecialchars(json_encode($savedPixKey, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?> }">
       <div>
         <label class="text-xs text-zinc-500 uppercase tracking-wide mb-1 block">Valor</label>
         <input type="text" name="valor" id="valor" inputmode="numeric" placeholder="R$ 0,00" required
@@ -111,7 +120,8 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 
       <div>
         <label class="text-xs text-zinc-500 uppercase tracking-wide mb-1 block">Tipo de chave PIX <span class="text-red-400">*</span></label>
-        <select name="tipo_chave" x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2" required>
+        <?php if ($pixLocked): ?><input type="hidden" name="tipo_chave" value="<?= htmlspecialchars($savedTipoChave, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+        <select <?= $pixLocked ? 'disabled' : 'name="tipo_chave"' ?> x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
           <option value="">Selecione o tipo</option>
           <option value="CPF">CPF</option>
           <option value="CNPJ">CNPJ</option>
@@ -123,10 +133,14 @@ include __DIR__ . '/../../views/partials/vendor_layout_start.php';
 
       <div>
         <label class="text-xs text-zinc-500 uppercase tracking-wide mb-1 block">Chave PIX <span class="text-red-400">*</span></label>
-        <input type="text" name="pix_chave" x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
+        <?php if ($pixLocked): ?><input type="hidden" name="pix_chave" value="<?= htmlspecialchars($savedPixKey, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+        <input type="text" <?= $pixLocked ? 'disabled' : 'name="pix_chave"' ?> x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
            :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Cole sua chave'"
            :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100"
-           class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2" required>
+           class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+        <?php if ($pixLocked): ?>
+          <p class="text-[11px] text-zinc-500 mt-1">Usando a chave PIX salva no seu cadastro aprovado.</p>
+        <?php endif; ?>
       </div>
 
       <div>

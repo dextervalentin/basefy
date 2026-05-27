@@ -47,6 +47,86 @@ function walletPortalTableColumns($conn, string $table): array
     return $cols;
 }
 
+function walletNormalizePixType(string $type): string
+{
+    $type = mb_strtolower(trim($type));
+    return match ($type) {
+        'cpf' => 'CPF',
+        'cnpj' => 'CNPJ',
+        'email', 'e-mail' => 'Email',
+        'telefone', 'phone', 'celular' => 'Telefone',
+        'aleatoria', 'aleatória', 'evp', 'random', 'chave aleatoria', 'chave aleatória' => 'Aleatoria',
+        default => '',
+    };
+}
+
+function walletInferPixKeyType(string $pixKey): string
+{
+    $pixKey = trim($pixKey);
+    if ($pixKey === '') return '';
+    if (filter_var($pixKey, FILTER_VALIDATE_EMAIL)) return 'Email';
+
+    $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
+    $len = strlen($digits);
+    if ($len === 14) return 'CNPJ';
+    if ($len === 11 && (str_contains($pixKey, '(') || str_starts_with($pixKey, '+'))) return 'Telefone';
+    if ($len === 11) return 'CPF';
+    if ($len === 10 || $len === 13) return 'Telefone';
+
+    return 'Aleatoria';
+}
+
+function walletSavedPixData($conn, int $userId): array
+{
+    $empty = ['key' => '', 'type' => ''];
+    if ($userId <= 0) return $empty;
+
+    $sources = [
+        ['table' => 'seller_profiles', 'user_col' => 'user_id', 'keys' => ['chave_pix', 'pix_key', 'pix_chave'], 'types' => ['tipo_chave', 'pix_key_type', 'tipo_chave_pix']],
+        ['table' => 'users', 'user_col' => 'id', 'keys' => ['chave_pix', 'pix_key', 'pix_chave'], 'types' => ['tipo_chave', 'pix_key_type', 'tipo_chave_pix']],
+    ];
+
+    foreach ($sources as $source) {
+        $table = (string)$source['table'];
+        $cols = walletPortalTableColumns($conn, $table);
+        if (!$cols) continue;
+
+        $keyCol = '';
+        foreach ($source['keys'] as $candidate) {
+            if (in_array($candidate, $cols, true)) {
+                $keyCol = $candidate;
+                break;
+            }
+        }
+        if ($keyCol === '') continue;
+
+        $typeSelect = "'' AS pix_type";
+        foreach ($source['types'] as $candidate) {
+            if (in_array($candidate, $cols, true)) {
+                $typeSelect = "`{$candidate}` AS pix_type";
+                break;
+            }
+        }
+
+        try {
+            $sql = "SELECT `{$keyCol}` AS pix_key, {$typeSelect} FROM `{$table}` WHERE `{$source['user_col']}` = ? LIMIT 1";
+            $st = $conn->prepare($sql);
+            if (!$st) continue;
+            $st->bind_param('i', $userId);
+            $st->execute();
+            $row = $st->get_result()->fetch_assoc() ?: [];
+            $st->close();
+
+            $key = trim((string)($row['pix_key'] ?? ''));
+            if ($key === '') continue;
+            $type = walletNormalizePixType((string)($row['pix_type'] ?? '')) ?: walletInferPixKeyType($key);
+            return ['key' => $key, 'type' => $type];
+        } catch (Throwable $e) {}
+    }
+
+    return $empty;
+}
+
 function walletResumoFinanceiroUsuario($conn, int $userId): array
 {
     $resumo = [
@@ -395,7 +475,9 @@ function walletGerarTrxId(): string
 function walletSolicitarSaque($conn, int $userId, float $valor, string $pixKey, string $observacao = '', string $tipoChave = ''): array
 {
     _walletEnsureTipoChave($conn);
-    if ($userId <= 0 || $valor <= 0 || trim($pixKey) === '' || trim($tipoChave) === '') {
+    $pixKey = trim($pixKey);
+    $tipoChave = walletNormalizePixType($tipoChave) ?: walletInferPixKeyType($pixKey);
+    if ($userId <= 0 || $valor <= 0 || $pixKey === '' || $tipoChave === '') {
         return [false, 'Dados inválidos. Preencha o tipo de chave e a chave PIX.'];
     }
 
@@ -420,8 +502,6 @@ function walletSolicitarSaque($conn, int $userId, float $valor, string $pixKey, 
         }
 
         $trxId = walletGerarTrxId();
-        $tipoChave = trim($tipoChave);
-
         $ins = $conn->prepare("INSERT INTO wallet_withdrawals (user_id, valor, status, chave_pix, tipo_chave, observacao, transaction_id)
                               VALUES (?, ?, 'pendente', ?, ?, ?, ?)");
         $ins->bind_param('idssss', $userId, $valor, $pixKey, $tipoChave, $observacao, $trxId);
@@ -619,7 +699,9 @@ function walletListarSaquesPorStatus($conn, array $statuses, int $limit = 100): 
 function walletSaqueImediatoAdmin($conn, int $adminUserId, float $valor, string $pixKey, string $observacao = '', string $tipoChave = ''): array
 {
     _walletEnsureTipoChave($conn);
-    if ($adminUserId <= 0 || $valor <= 0 || trim($pixKey) === '' || trim($tipoChave) === '') {
+    $pixKey = trim($pixKey);
+    $tipoChave = walletNormalizePixType($tipoChave) ?: walletInferPixKeyType($pixKey);
+    if ($adminUserId <= 0 || $valor <= 0 || $pixKey === '' || $tipoChave === '') {
         return [false, 'Dados inválidos. Preencha o tipo de chave e a chave PIX.'];
     }
 
@@ -696,7 +778,6 @@ function walletSaqueImediatoAdmin($conn, int $adminUserId, float $valor, string 
         $up->execute();
 
         $trxId = walletGerarTrxId();
-        $tipoChave = trim($tipoChave);
         $ins = $conn->prepare('INSERT INTO wallet_withdrawals (user_id, valor, status, chave_pix, tipo_chave, observacao, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
         $ins->bind_param('idsssss', $adminUserId, $valor, $internalStatus, $pixKey, $tipoChave, $obsFinal, $trxId);
         $ins->execute();

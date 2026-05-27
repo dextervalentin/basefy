@@ -185,9 +185,6 @@ function salvarProduto($conn, int $id, int $vendedorId, int $categoriaId, string
     $productFeeOverrideInt = $productFeeOverrideEnabled ? 1 : 0;
     $autoDeliveryItemsJson = sfAutoDeliveryItemsJson($autoDeliveryItems);
     $hasAutoDeliveryConfig = sfAutoDeliveryConfiguredCount($conn, $id, $autoDeliveryItems) > 0;
-    if ($autoDeliveryEnabled && !$hasAutoDeliveryConfig) {
-        return [false, 'Adicione pelo menos 1 item na entrega automática ou configure o Estoque Automático antes de ativar.'];
-    }
     $autoDeliveryInt = ($autoDeliveryEnabled && $hasAutoDeliveryConfig) ? 1 : 0;
     if ($autoDeliveryInt === 1) {
         $prazoEntregaDias = null;

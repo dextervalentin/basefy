@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/auth.php';
 require_once __DIR__ . '/../src/db.php';
+require_once __DIR__ . '/../src/wallet_portal.php';
 
 exigirLogin();
 
 $conn = (new Database())->connect();
 $uid  = (int)($_SESSION['user_id'] ?? 0);
+$savedPixData = walletSavedPixData($conn, $uid);
+$savedPixKey = (string)($savedPixData['key'] ?? '');
+$savedTipoChave = (string)($savedPixData['type'] ?? '');
+$pixLocked = $savedPixKey !== '';
 
 /* ── Verification gate ── */
 if (!contaVerificada($uid)) {
@@ -44,9 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pix = trim((string)($_POST['pix_chave'] ?? ''));
     $obs = trim((string)($_POST['observacao'] ?? ''));
     $tipoChave = trim((string)($_POST['tipo_chave'] ?? ''));
+    if ($pix === '') $pix = $savedPixKey;
+    $tipoChave = walletNormalizePixType($tipoChave) ?: $savedTipoChave ?: walletInferPixKeyType($pix);
 
     if ($valor <= 0) {
         $erro = 'Informe um valor válido.';
+    } elseif ($pix === '' || $tipoChave === '') {
+      $erro = 'Dados inválidos. Preencha o tipo de chave e a chave PIX.';
     } else {
         $colsList     = 'user_id, valor, status';
         $placeholders = '?, ?, \'pendente\'';
@@ -114,7 +123,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       </div>
     <?php endif; ?>
 
-    <form method="post" class="space-y-4" x-data="{ tipoChave: '', pixKey: '' }">
+    <form method="post" class="space-y-4" x-data="{ tipoChave: <?= htmlspecialchars(json_encode($savedTipoChave, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, pixKey: <?= htmlspecialchars(json_encode($savedPixKey, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?> }">
       <div>
         <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1">Valor do saque</label>
         <input type="text" name="valor" id="saqueValor" inputmode="numeric" placeholder="R$ 0,00" required
@@ -123,7 +132,8 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 
       <div>
         <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1">Tipo de chave PIX <span class="text-red-400">*</span></label>
-        <select name="tipo_chave" x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition" required>
+        <?php if ($pixLocked): ?><input type="hidden" name="tipo_chave" value="<?= htmlspecialchars($savedTipoChave, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+        <select <?= $pixLocked ? 'disabled' : 'name="tipo_chave"' ?> x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
           <option value="">Selecione o tipo</option>
           <option value="CPF">CPF</option>
           <option value="CNPJ">CNPJ</option>
@@ -135,10 +145,14 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
 
       <div>
         <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1">Chave PIX <span class="text-red-400">*</span></label>
-        <input type="text" name="pix_chave" x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
+        <?php if ($pixLocked): ?><input type="hidden" name="pix_chave" value="<?= htmlspecialchars($savedPixKey, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+        <input type="text" <?= $pixLocked ? 'disabled' : 'name="pix_chave"' ?> x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
                :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Cole sua chave'"
                :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100"
-               class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition" required>
+               class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+        <?php if ($pixLocked): ?>
+          <p class="text-[11px] text-zinc-500 mt-1">Usando a chave PIX salva no seu cadastro aprovado.</p>
+        <?php endif; ?>
       </div>
 
       <div>

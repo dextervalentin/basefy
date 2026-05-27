@@ -75,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 'draft' => true,
                 'has_config' => $hasConfig,
                 'effective_enabled' => $enabledRequested && $hasConfig,
+                'msg' => !$hasConfig && $enabledRequested ? 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.' : '',
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -93,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 'draft' => true,
                 'has_config' => $hasConfig,
                 'effective_enabled' => $enabledRequested && $hasConfig,
-                'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+                'msg' => !$hasConfig && $enabledRequested ? 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.' : '',
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -124,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             'ok' => (bool)$ok,
             'has_config' => $hasConfig,
             'effective_enabled' => (bool)$enabledInt,
-            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+            'msg' => !$hasConfig && $enabledRequested ? 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.' : '',
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -147,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             'ok' => (bool)$ok,
             'has_config' => $hasConfig,
             'effective_enabled' => (bool)$enabledInt,
-            'msg' => !$hasConfig && $enabledRequested ? 'Adicione pelo menos 1 item para ativar a entrega automática.' : '',
+            'msg' => !$hasConfig && $enabledRequested ? 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.' : '',
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -183,8 +184,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $customSlug = trim((string)($_POST['slug'] ?? ''));
     $variantes = trim((string)($_POST['variantes'] ?? '')) !== '' ? (string)$_POST['variantes'] : null;
     $autoDeliveryEnabled = !empty($_POST['auto_delivery_enabled']);
-    $autoDeliveryItems = trim((string)($_POST['auto_delivery_items'] ?? ''));
-    if ($idPost <= 0 && $autoDeliveryItems === '' && isset($draft['items'])) {
+    $autoDeliveryItemsPosted = array_key_exists('auto_delivery_items', $_POST);
+    $autoDeliveryItems = $autoDeliveryItemsPosted ? trim((string)$_POST['auto_delivery_items']) : (string)($produto['auto_delivery_items'] ?? '');
+    if ($idPost <= 0 && !$autoDeliveryItemsPosted && $autoDeliveryItems === '' && isset($draft['items'])) {
         $autoDeliveryItems = (string)$draft['items'];
     }
     if ($autoDeliveryItems === '') {
@@ -497,13 +499,7 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
             <p class="text-xs text-zinc-500 mb-4">Quando ativada, o conteúdo do item é entregue automaticamente ao comprador após pagamento aprovado.</p>
 
             <div x-show="adEnabled" x-transition x-cloak>
-                <label class="block text-sm mb-1.5 text-zinc-400 font-medium">Itens da entrega automática</label>
-                <textarea name="auto_delivery_items" x-model="adItems" @input.debounce.700ms="saveAutoDeliveryItems()" :disabled="!adEnabled" rows="6" class="w-full rounded-xl bg-blackx border border-blackx3 px-3.5 py-2.5 focus:border-greenx outline-none transition-colors" placeholder="Um item por linha&#10;Ex:&#10;login:usuario@email.com&#10;senha:123456"></textarea>
-                <p class="text-xs text-zinc-500 mt-2">Cada linha é 1 item para entrega automática.</p>
-                <p x-show="adAjaxSaving" class="text-xs mt-1 text-amber-300">Salvando automaticamente...</p>
-                <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-1"></p>
-
-                <div class="mt-4 flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15">
+                <div class="flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                         <i data-lucide="settings" class="w-4 h-4 text-amber-400"></i>
                     </div>
@@ -520,17 +516,22 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
                     Gerenciar Estoque Automático
                 </a>
                 <?php else: ?>
-                <div class="mt-4 flex items-center gap-2 text-xs text-zinc-500">
-                    <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
-                    Após salvar o produto, o botão Gerenciar Estoque Automático ficará disponível.
+                <div class="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <button type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm opacity-60 cursor-not-allowed shadow-lg shadow-greenx/10">
+                        <i data-lucide="boxes" class="w-4 h-4"></i>
+                        Gerenciar Estoque Automático
+                    </button>
+                    <span class="text-xs text-zinc-500">Salve o produto para liberar o gerenciamento avançado.</span>
                 </div>
                 <?php endif; ?>
+                <p x-show="adAjaxSaving" class="text-xs mt-3 text-amber-300">Atualizando...</p>
+                <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-3"></p>
             </div>
 
             <div x-show="!adEnabled" x-transition x-cloak>
                 <div class="flex items-center gap-2 text-xs text-zinc-500">
                     <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
-                    Ative para exibir e preencher os itens sem precisar recarregar.
+                    Ative para liberar o gerenciamento da entrega automática.
                 </div>
             </div>
         </div>
@@ -707,11 +708,6 @@ function produtoForm() {
             this.adAjaxMsg = '';
             this.adAjaxError = false;
             if (!enabled && !this.productId && !this.draftToken) return;
-            if (enabled && !this.adHasConfig && !this.hasAutoDeliveryItems()) {
-                this.adAjaxError = true;
-                this.adAjaxMsg = 'Preencha ao menos 1 item para ativar a entrega automática.';
-                return;
-            }
 
             this.adAjaxSaving = true;
 
@@ -722,8 +718,9 @@ function produtoForm() {
                 if (!data || !data.ok) throw new Error((data && data.msg) ? data.msg : 'Falha ao salvar.');
                 this.adHasConfig = !!data.has_config;
                 if (enabled && data.effective_enabled === false) {
-                    this.adAjaxError = true;
-                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                    this.adAjaxMsg = data.msg || 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.';
+                } else if (enabled) {
+                    this.adAjaxMsg = data.draft ? 'Rascunho atualizado.' : 'Entrega automática ativada.';
                 } else if (!enabled) {
                     this.adAjaxMsg = data.draft ? 'Rascunho atualizado.' : 'Entrega automática desativada.';
                 }
@@ -749,7 +746,7 @@ function produtoForm() {
                 this.adHasConfig = !!data.has_config;
                 if (this.adEnabled && data.effective_enabled === false) {
                     this.adAjaxError = true;
-                    this.adAjaxMsg = data.msg || 'Preencha ao menos 1 item para ativar a entrega automática.';
+                    this.adAjaxMsg = data.msg || 'Use o botão Gerenciar Estoque Automático para cadastrar os itens antes de ativar.';
                 } else {
                     this.adAjaxMsg = data.draft ? 'Rascunho salvo automaticamente.' : 'Itens salvos automaticamente.';
                 }

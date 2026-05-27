@@ -1,6 +1,41 @@
 <?php
 declare(strict_types=1);
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+const VERIF_DOC_MAX_BYTES = 10485760;
+
+function verifIniSizeToBytes(string $value): int {
+  $value = trim($value);
+  if ($value === '') return 0;
+  $unit = strtolower(substr($value, -1));
+  $number = (float)$value;
+  return match ($unit) {
+    'g' => (int)($number * 1024 * 1024 * 1024),
+    'm' => (int)($number * 1024 * 1024),
+    'k' => (int)($number * 1024),
+    default => (int)$number,
+  };
+}
+
+function verifBytesLabel(int $bytes): string {
+  if ($bytes >= 1024 * 1024) return (string)round($bytes / 1024 / 1024) . ' MB';
+  if ($bytes >= 1024) return (string)round($bytes / 1024) . ' KB';
+  return $bytes . ' bytes';
+}
+
+$verifPostTooLarge = false;
+$verifPostLimitLabel = '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+  $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+  $postMaxBytes = verifIniSizeToBytes((string)ini_get('post_max_size'));
+  if ($postMaxBytes > 0 && $contentLength > $postMaxBytes) {
+    $verifPostTooLarge = true;
+    $verifPostLimitLabel = verifBytesLabel($postMaxBytes);
+  }
+}
+
 require_once __DIR__ . '/../src/db.php';
 require_once __DIR__ . '/../src/auth.php';
 require_once __DIR__ . '/../src/upload_paths.php';
@@ -147,7 +182,10 @@ $docTypes = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = (string)($_POST['action'] ?? '');
+  if ($verifPostTooLarge) {
+    $err = 'O envio ultrapassou o limite do servidor' . ($verifPostLimitLabel !== '' ? ' (' . $verifPostLimitLabel . ')' : '') . '. Envie arquivos menores ou selecione menos documentos por vez.';
+  } else {
+  $action = (string)($_POST['action'] ?? '');
 
     if ($action === 'dados') {
         $nome     = trim((string)($_POST['nome'] ?? ''));
@@ -255,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $uploadErrors[] = 'Formato inválido em ' . $docMeta['label'] . '. Use JPG, PNG, WEBP ou PDF.';
                 continue;
             }
-            if ($size > 10 * 1024 * 1024) {
+            if ($size > VERIF_DOC_MAX_BYTES) {
                 $uploadErrors[] = 'Arquivo muito grande em ' . $docMeta['label'] . ' (máx 10 MB).';
                 continue;
             }
@@ -338,6 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $err = (string)$result;
         }
+    }
     }
 }
 
@@ -641,6 +680,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
   // Real-time CPF/Phone uniqueness check
   var userId = <?= (int)$uid ?>;
   var basePath = <?= json_encode(rtrim(BASE_PATH, '/')) ?>;
+  var maxDocBytes = <?= VERIF_DOC_MAX_BYTES ?>;
   var debounceTimers = {};
 
   function createFeedback(input) {
@@ -727,6 +767,17 @@ function docUpload_<?= $dk ?>() {
       this.processFile(f);
     },
     processFile(f) {
+      var validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (validTypes.indexOf(f.type) === -1) {
+        alert('Formato inválido. Use JPG, PNG, WEBP ou PDF.');
+        this.$refs.fileInput_<?= $dk ?>.value = '';
+        return;
+      }
+      if (f.size > <?= VERIF_DOC_MAX_BYTES ?>) {
+        alert('Arquivo muito grande. O máximo por documento é 10 MB.');
+        this.$refs.fileInput_<?= $dk ?>.value = '';
+        return;
+      }
       this.fileName = f.name;
       this.isImage = f.type.startsWith('image/');
       if (this.isImage) {

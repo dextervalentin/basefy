@@ -206,9 +206,6 @@ function salvarMeuProduto($c, int $uid, int $id, int $categoriaId, string $nome,
 
     $autoDeliveryItemsJson = sfAutoDeliveryItemsJson($autoDeliveryItems);
     $hasAutoDeliveryConfig = sfAutoDeliveryConfiguredCount($c, $id, $autoDeliveryItems) > 0;
-    if ($autoDeliveryEnabled && !$hasAutoDeliveryConfig) {
-        return [false, 'Adicione pelo menos 1 item na entrega automática ou configure o Estoque Automático antes de ativar.'];
-    }
 
     $autoDeliveryItems = $autoDeliveryItemsJson;
     $autoDeliveryInt = ($autoDeliveryEnabled && $hasAutoDeliveryConfig) ? 1 : 0;

@@ -9,6 +9,10 @@ exigirUsuario();
 
 $conn = (new Database())->connect();
 $uid = (int)($_SESSION['user_id'] ?? 0);
+$savedPixData = walletSavedPixData($conn, $uid);
+$savedPixKey = (string)($savedPixData['key'] ?? '');
+$savedTipoChave = (string)($savedPixData['type'] ?? '');
+$pixLocked = $savedPixKey !== '';
 
 $msg = '';
 $err = '';
@@ -44,8 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'withdraw') {
     $valor = parseMoneyBRL((string)($_POST['valor'] ?? '0'));
         $pix = trim((string)($_POST['pix_key'] ?? ''));
+      $tipoChave = trim((string)($_POST['tipo_chave'] ?? ''));
         $obs = trim((string)($_POST['observacao'] ?? ''));
-        [$ok, $m] = walletSolicitarSaque($conn, $uid, $valor, $pix, $obs);
+      if ($pix === '') $pix = $savedPixKey;
+      $tipoChave = walletNormalizePixType($tipoChave) ?: $savedTipoChave ?: walletInferPixKeyType($pix);
+      [$ok, $m] = walletSolicitarSaque($conn, $uid, $valor, $pix, $obs, $tipoChave);
         if ($ok) $msg = $m; else $err = $m;
     }
 }
@@ -101,11 +108,22 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       <?php endif; ?>
     </form>
 
-    <form method="post" class="bg-blackx2 border border-blackx3 rounded-xl p-4 space-y-3">
+    <form method="post" class="bg-blackx2 border border-blackx3 rounded-xl p-4 space-y-3" x-data="{ tipoChave: <?= htmlspecialchars(json_encode($savedTipoChave, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>, pixKey: <?= htmlspecialchars(json_encode($savedPixKey, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?> }">
       <input type="hidden" name="action" value="withdraw">
       <h3 class="font-semibold">Solicitar saque</h3>
       <input type="text" name="valor" placeholder="R$ 0,00" class="js-money w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2" required>
-      <input type="text" name="pix_key" placeholder="Chave PIX" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2" required>
+      <?php if ($pixLocked): ?><input type="hidden" name="tipo_chave" value="<?= htmlspecialchars($savedTipoChave, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+      <select <?= $pixLocked ? 'disabled' : 'name="tipo_chave"' ?> x-model="tipoChave" @change="pixKey = ''" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+        <option value="">Tipo de chave PIX</option>
+        <option value="CPF">CPF</option>
+        <option value="CNPJ">CNPJ</option>
+        <option value="Email">Email</option>
+        <option value="Telefone">Telefone</option>
+        <option value="Aleatoria">Chave aleatória</option>
+      </select>
+      <?php if ($pixLocked): ?><input type="hidden" name="pix_key" value="<?= htmlspecialchars($savedPixKey, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+      <input type="text" <?= $pixLocked ? 'disabled' : 'name="pix_key"' ?> x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)" :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Chave PIX'" :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+      <?php if ($pixLocked): ?><p class="text-[11px] text-zinc-500">Usando a chave PIX salva no seu cadastro aprovado.</p><?php endif; ?>
       <input type="text" name="observacao" placeholder="Observação (opcional)" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2">
       <button class="rounded-lg bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2">Solicitar saque</button>
     </form>
@@ -149,6 +167,14 @@ include __DIR__ . '/../views/partials/footer.php';
 
 ?>
 <script>
+  function applyPixMask(tipo, val) {
+    const d = (val || '').replace(/\D/g, '');
+    if (tipo === 'CPF') return d.replace(/(\d{3})(\d{0,3})(\d{0,3})(\d{0,2})/, function(_, a, b, c, e) { return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '-' + e : ''); });
+    if (tipo === 'CNPJ') return d.replace(/(\d{2})(\d{0,3})(\d{0,3})(\d{0,4})(\d{0,2})/, function(_, a, b, c, e, f) { return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '/' + e : '') + (f ? '-' + f : ''); });
+    if (tipo === 'Telefone') return d.replace(/(\d{2})(\d{0,5})(\d{0,4})/, function(_, a, b, c) { return '(' + a + ')' + (b ? ' ' + b : '') + (c ? '-' + c : ''); });
+    return val;
+  }
+
   (function () {
     const modal = document.getElementById('topupModal');
     const openBtn = document.getElementById('openTopupModal');
