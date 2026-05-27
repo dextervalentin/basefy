@@ -12,7 +12,7 @@ $uid = (int)($_SESSION['user_id'] ?? 0);
 $savedPixData = walletSavedPixData($conn, $uid);
 $savedPixKey = (string)($savedPixData['key'] ?? '');
 $savedTipoChave = (string)($savedPixData['type'] ?? '');
-$pixLocked = $savedPixKey !== '';
+$pixLocked = $savedPixKey !== '' && $savedTipoChave !== '';
 
 $msg = '';
 $err = '';
@@ -113,7 +113,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       <h3 class="font-semibold">Solicitar saque</h3>
       <input type="text" name="valor" placeholder="R$ 0,00" class="js-money w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2" required>
       <?php if ($pixLocked): ?><input type="hidden" name="tipo_chave" value="<?= htmlspecialchars($savedTipoChave, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
-      <select <?= $pixLocked ? 'disabled' : 'name="tipo_chave"' ?> x-model="tipoChave" @change="pixKey = ''" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+      <select disabled x-model="tipoChave" @change="pixKey = ''" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 opacity-60 cursor-not-allowed" required>
         <option value="">Tipo de chave PIX</option>
         <option value="CPF">CPF</option>
         <option value="CNPJ">CNPJ</option>
@@ -122,10 +122,10 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
         <option value="Aleatoria">Chave aleatória</option>
       </select>
       <?php if ($pixLocked): ?><input type="hidden" name="pix_key" value="<?= htmlspecialchars($savedPixKey, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
-      <input type="text" <?= $pixLocked ? 'disabled' : 'name="pix_key"' ?> x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)" :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Chave PIX'" :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
-      <?php if ($pixLocked): ?><p class="text-[11px] text-zinc-500">Usando a chave PIX salva no seu cadastro aprovado.</p><?php endif; ?>
+      <input type="text" disabled x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)" :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Chave PIX'" :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2 opacity-60 cursor-not-allowed" required>
+      <?php if ($pixLocked): ?><p class="text-[11px] text-zinc-500">Usando a chave PIX salva no seu cadastro aprovado.</p><?php else: ?><p class="text-[11px] text-orange-300">Cadastre sua chave PIX no cadastro aprovado antes de solicitar saque.</p><?php endif; ?>
       <input type="text" name="observacao" placeholder="Observação (opcional)" class="w-full rounded-lg bg-blackx border border-blackx3 px-3 py-2">
-      <button class="rounded-lg bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2">Solicitar saque</button>
+      <button <?= !$pixLocked ? 'disabled' : '' ?> class="rounded-lg bg-greenx hover:bg-greenx2 text-white font-semibold px-4 py-2 <?= !$pixLocked ? 'opacity-50 cursor-not-allowed' : '' ?>">Solicitar saque</button>
     </form>
   </div>
 

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 require_once dirname(__DIR__, 2) . '/src/db.php';
+require_once dirname(__DIR__, 2) . '/src/admin_alerts.php';
 
 $activeMenu  = (string)($activeMenu ?? '');
 $pageTitle   = (string)($pageTitle ?? 'Admin');
 $topActions  = is_array($topActions ?? null) ? $topActions : [];
 $subnavItems = is_array($subnavItems ?? null) ? $subnavItems : [];
 $adminWalletSaldo = 0.0;
+$adminAlertCounts = ['products_pending' => 0, 'kyc_pending' => 0, 'support_unread' => 0, 'tickets_pending' => 0, 'reports_pending' => 0, 'support_total' => 0, 'total' => 0];
 
 $adminUid = (int)($_SESSION['user_id'] ?? 0);
 if ($adminUid > 0) {
@@ -22,6 +24,7 @@ if ($adminUid > 0) {
     $adminWalletSaldo = (float)($saldoRow['wallet_saldo'] ?? 0);
     $stSaldo->close();
   }
+  $adminAlertCounts = adminAlertsCounts($connSaldo, $adminUid);
 }
 
 // Dashboard is always visible (no dropdown)
@@ -31,18 +34,20 @@ $menuFixed = [
 
 $menuGroups = [
     ['label' => 'Gerenciar Produtos', 'icon' => 'shopping-bag', 'items' => [
-      ['key' => 'catalogo', 'label' => 'Gerenciar Produtos', 'href' => 'produtos', 'icon' => 'shopping-bag'],
+      ['key' => 'catalogo', 'label' => 'Gerenciar Produtos', 'href' => 'produtos', 'icon' => 'shopping-bag', 'badge' => $adminAlertCounts['products_pending']],
     ]],
     ['label' => 'Pessoas', 'icon' => 'users', 'items' => [
         ['key' => 'admins', 'label' => 'Administradores', 'href' => 'admins', 'icon' => 'shield-check'],
         ['key' => 'usuarios', 'label' => 'Usuários', 'href' => 'usuarios', 'icon' => 'users'],
-        ['key' => 'verificacoes', 'label' => 'KYC', 'href' => 'verificacoes', 'icon' => 'shield-check'],
+        ['key' => 'verificacoes', 'label' => 'KYC', 'href' => 'verificacoes', 'icon' => 'shield-check', 'badge' => $adminAlertCounts['kyc_pending']],
     ]],
     ['label' => 'Financeiro', 'icon' => 'landmark', 'items' => [
       ['key' => 'financeiro', 'label' => 'Financeiro', 'href' => 'vendas', 'icon' => 'landmark'],
     ]],
     ['label' => 'Suporte', 'icon' => 'headphones', 'items' => [
-      ['key' => 'suporte', 'label' => 'Suporte', 'href' => 'chat', 'icon' => 'headphones'],
+      ['key' => 'suporte', 'label' => 'Suporte', 'href' => 'chat', 'icon' => 'headphones', 'badge' => $adminAlertCounts['support_unread']],
+      ['key' => 'suporte_tickets', 'label' => 'Tickets', 'href' => 'tickets', 'icon' => 'ticket', 'badge' => $adminAlertCounts['tickets_pending']],
+      ['key' => 'suporte_denuncias', 'label' => 'Denúncias', 'href' => 'denuncias', 'icon' => 'flag', 'badge' => $adminAlertCounts['reports_pending']],
     ]],
     ['label' => 'Afiliados', 'icon' => 'share-2', 'items' => [
         ['key' => 'afiliados', 'label' => 'Afiliados', 'href' => 'afiliados', 'icon' => 'share-2'],
@@ -97,8 +102,12 @@ $menuGroups = [
           // Auto-open if active item is in this group
           $groupHasActive = false;
           foreach ($group['items'] as $item) {
-              if ($activeMenu === (string)$item['key']) { $groupHasActive = true; break; }
+              $itemKey = (string)$item['key'];
+              if ($activeMenu === $itemKey) { $groupHasActive = true; break; }
+              if ($activeMenu === 'suporte' && isset($adminSupportTab) && ($itemKey === 'suporte_' . (string)$adminSupportTab || ($itemKey === 'suporte' && (string)$adminSupportTab === 'chat'))) { $groupHasActive = true; break; }
           }
+          $groupBadge = 0;
+          foreach ($group['items'] as $item) $groupBadge += (int)($item['badge'] ?? 0);
           $groupClosedClass = in_array((string)$group['label'], ['Pessoas', 'Sistema'], true) ? 'text-white hover:text-white' : 'text-zinc-500 hover:text-zinc-300';
         ?>
           <?php if (count($group['items']) === 1):
@@ -110,7 +119,8 @@ $menuGroups = [
               <a href="<?= htmlspecialchars((string)$solo['href'], ENT_QUOTES, 'UTF-8') ?>"
                  class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border-l-2 transition <?= $soloActive ? 'bg-greenx/15 border-greenx text-greenx' : 'border-transparent hover:bg-blackx hover:border-greenx text-zinc-200' ?>">
                 <i data-lucide="<?= htmlspecialchars((string)($group['icon'] ?? $solo['icon'] ?? 'folder'), ENT_QUOTES, 'UTF-8') ?>" class="w-4 h-4"></i>
-                <span><?= htmlspecialchars((string)$group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                <span class="flex-1"><?= htmlspecialchars((string)$group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                <?= adminAlertsBadgeHtml((int)($solo['badge'] ?? 0)) ?>
               </a>
             </div>
           <?php else: ?>
@@ -120,15 +130,23 @@ $menuGroups = [
                   :class="open ? 'text-greenx' : '<?= $groupClosedClass ?>'">
               <i data-lucide="<?= htmlspecialchars((string)($group['icon'] ?? 'folder'), ENT_QUOTES, 'UTF-8') ?>" class="w-3.5 h-3.5"></i>
               <span class="flex-1 text-left"><?= htmlspecialchars((string)$group['label'], ENT_QUOTES, 'UTF-8') ?></span>
+              <?= adminAlertsBadgeHtml($groupBadge, 'ml-2') ?>
               <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
             </button>
             <div x-show="open" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="space-y-0.5 mt-0.5">
               <?php foreach ($group['items'] as $item): ?>
-                <?php $isActive = $activeMenu === (string)$item['key']; ?>
+                <?php
+                  $itemKey = (string)$item['key'];
+                  $isActive = $activeMenu === $itemKey;
+                  if ($activeMenu === 'suporte' && isset($adminSupportTab)) {
+                    $isActive = $itemKey === 'suporte_' . (string)$adminSupportTab || ($itemKey === 'suporte' && (string)$adminSupportTab === 'chat');
+                  }
+                ?>
                  <a href="<?= htmlspecialchars((string)$item['href'], ENT_QUOTES, 'UTF-8') ?>"
                    class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm border-l-2 transition <?= $isActive ? 'bg-greenx/15 border-greenx text-greenx' : 'border-transparent hover:bg-blackx hover:border-greenx text-zinc-200' ?>">
                   <i data-lucide="<?= htmlspecialchars((string)$item['icon'], ENT_QUOTES, 'UTF-8') ?>" class="w-4 h-4"></i>
-                  <span><?= htmlspecialchars((string)$item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                  <span class="flex-1"><?= htmlspecialchars((string)$item['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                  <?= adminAlertsBadgeHtml((int)($item['badge'] ?? 0)) ?>
                 </a>
               <?php endforeach; ?>
             </div>
@@ -141,8 +159,9 @@ $menuGroups = [
     <div class="flex-1 min-w-0">
       <header class="h-16 sticky top-0 z-[80] w-full max-w-full bg-blackx/90 backdrop-blur border-b border-blackx3 px-3 sm:px-4 md:px-5 flex items-center gap-2 sm:gap-3">
         <div class="min-w-0 flex flex-1 items-center gap-2 sm:gap-3">
-          <button id="btnAdminOpenSidebar" class="md:hidden shrink-0 rounded-lg border border-blackx3 bg-blackx2 px-2.5 py-1.5 text-zinc-400 hover:text-white transition">
+          <button id="btnAdminOpenSidebar" class="relative md:hidden shrink-0 rounded-lg border border-blackx3 bg-blackx2 px-2.5 py-1.5 text-zinc-400 hover:text-white transition">
             <i data-lucide="menu" class="w-4 h-4"></i>
+            <?= adminAlertsBadgeHtml((int)$adminAlertCounts['total'], 'absolute -top-2 -right-2') ?>
           </button>
           <h1 class="min-w-0 flex-1 text-sm sm:text-base md:text-xl font-semibold truncate"><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h1>
         </div>

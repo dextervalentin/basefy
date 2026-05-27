@@ -46,50 +46,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $raw = str_replace(',', '.', $raw);
     $valor = (float)$raw;
 
-    $pix = trim((string)($_POST['pix_chave'] ?? ''));
+    $pix = $savedPixKey;
     $obs = trim((string)($_POST['observacao'] ?? ''));
-    $tipoChave = trim((string)($_POST['tipo_chave'] ?? ''));
-    if ($pix === '') $pix = $savedPixKey;
-    $tipoChave = walletNormalizePixType($tipoChave) ?: $savedTipoChave ?: walletInferPixKeyType($pix);
+    $tipoChave = $savedTipoChave ?: walletInferPixKeyType($pix);
 
     if ($valor <= 0) {
         $erro = 'Informe um valor válido.';
+    } elseif (!$pixLocked || $tipoChave === '') {
+      $erro = 'Cadastre sua chave PIX no cadastro aprovado antes de solicitar saque.';
     } elseif ($pix === '' || $tipoChave === '') {
       $erro = 'Dados inválidos. Preencha o tipo de chave e a chave PIX.';
     } else {
-        $colsList     = 'user_id, valor, status';
-        $placeholders = '?, ?, \'pendente\'';
-        $types        = 'id';
-        $params       = [$uid, $valor];
-
-        if ($pixCol) {
-            $colsList     .= ", `{$pixCol}`";
-            $placeholders .= ', ?';
-            $types        .= 's';
-            $params[]      = $pix;
-        }
-        if ($tipoChaveCol && $tipoChave !== '') {
-            $colsList     .= ", `{$tipoChaveCol}`";
-            $placeholders .= ', ?';
-            $types        .= 's';
-            $params[]      = $tipoChave;
-        }
-        $colsList     .= ', observacao';
-        $placeholders .= ', ?';
-        $types        .= 's';
-        $params[]      = $obs;
-
-        $sql = "INSERT INTO wallet_withdrawals ({$colsList}) VALUES ({$placeholders})";
-        $st  = $conn->prepare($sql);
-        $st->bind_param($types, ...$params);
-
-        if ($st->execute()) {
+      [$okSaque, $msgSaque] = walletSolicitarSaque($conn, $uid, $valor, $pix, $obs, $tipoChave);
+      if ($okSaque) {
             $_SESSION['flash_success'] = 'Saque solicitado com sucesso. Aguarde a análise do administrador.';
             header('Location: ' . BASE_PATH . '/saques');
             exit;
         }
-        $erro = 'Não foi possível solicitar o saque.';
-        $st->close();
+      $erro = $msgSaque ?: 'Não foi possível solicitar o saque.';
     }
 }
 
@@ -133,7 +107,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       <div>
         <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1">Tipo de chave PIX <span class="text-red-400">*</span></label>
         <?php if ($pixLocked): ?><input type="hidden" name="tipo_chave" value="<?= htmlspecialchars($savedTipoChave, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
-        <select <?= $pixLocked ? 'disabled' : 'name="tipo_chave"' ?> x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+        <select disabled x-model="tipoChave" @change="pixKey = ''" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition opacity-60 cursor-not-allowed" required>
           <option value="">Selecione o tipo</option>
           <option value="CPF">CPF</option>
           <option value="CNPJ">CNPJ</option>
@@ -146,12 +120,14 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       <div>
         <label class="block text-[11px] font-medium text-zinc-500 uppercase tracking-wider mb-1">Chave PIX <span class="text-red-400">*</span></label>
         <?php if ($pixLocked): ?><input type="hidden" name="pix_chave" value="<?= htmlspecialchars($savedPixKey, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
-        <input type="text" <?= $pixLocked ? 'disabled' : 'name="pix_chave"' ?> x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
+        <input type="text" disabled x-model="pixKey" @input="pixKey = applyPixMask(tipoChave, $event.target.value)"
                :placeholder="tipoChave === 'CPF' ? '000.000.000-00' : tipoChave === 'CNPJ' ? '00.000.000/0000-00' : tipoChave === 'Email' ? 'email@exemplo.com' : tipoChave === 'Telefone' ? '(00) 00000-0000' : 'Cole sua chave'"
                :maxlength="tipoChave === 'CPF' ? 14 : tipoChave === 'CNPJ' ? 18 : tipoChave === 'Telefone' ? 15 : 100"
-               class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $pixLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" required>
+               class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition opacity-60 cursor-not-allowed" required>
         <?php if ($pixLocked): ?>
           <p class="text-[11px] text-zinc-500 mt-1">Usando a chave PIX salva no seu cadastro aprovado.</p>
+        <?php else: ?>
+          <p class="text-[11px] text-orange-300 mt-1">Cadastre sua chave PIX no cadastro aprovado antes de solicitar saque.</p>
         <?php endif; ?>
       </div>
 
@@ -169,7 +145,7 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
       </template>
 
       <div class="flex gap-3 pt-2">
-        <button type="submit" class="flex-1 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-semibold px-5 py-3 transition-all flex items-center justify-center gap-2">
+        <button type="submit" <?= !$pixLocked ? 'disabled' : '' ?> class="flex-1 rounded-xl bg-gradient-to-r from-greenx to-greenxd hover:from-greenx2 hover:to-greenxd text-white font-semibold px-5 py-3 transition-all flex items-center justify-center gap-2 <?= !$pixLocked ? 'opacity-50 cursor-not-allowed' : '' ?>">
           <i data-lucide="send" class="w-4 h-4"></i> Solicitar saque
         </button>
         <a href="<?= BASE_PATH ?>/saques" class="rounded-xl border border-blackx3 hover:border-zinc-600 px-5 py-3 text-sm flex items-center transition">Cancelar</a>

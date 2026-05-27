@@ -77,6 +77,7 @@ try {
 // Auto-migrate: ensure telefone and cpf columns exist in users
 try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS telefone VARCHAR(20) DEFAULT NULL"); } catch (\Throwable $e) {}
 try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cpf VARCHAR(20) DEFAULT NULL"); } catch (\Throwable $e) {}
+try { $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS chave_pix VARCHAR(255) DEFAULT NULL"); } catch (\Throwable $e) {}
 
 function verifStatus(object $conn, mixed $uid, string $tipo): array {
     $uid = (int)$uid;
@@ -148,13 +149,14 @@ function pickCol(array $cols, array $candidates): ?string {
     return null;
 }
 
-function loadUser(object $conn, mixed $uid, ?string $nameCol, ?string $emailCol, ?string $phoneCol, ?string $docCol): array {
+function loadUser(object $conn, mixed $uid, ?string $nameCol, ?string $emailCol, ?string $phoneCol, ?string $docCol, ?string $pixCol): array {
     $uid = (int)$uid;
     $sel = ['id'];
     if ($nameCol)  $sel[] = $nameCol . ' AS nome';
     if ($emailCol) $sel[] = $emailCol . ' AS email';
     if ($phoneCol) $sel[] = $phoneCol . ' AS telefone';
     if ($docCol)   $sel[] = $docCol . ' AS documento';
+  if ($pixCol)   $sel[] = $pixCol . ' AS chave_pix';
 
     $st = $conn->prepare('SELECT ' . implode(', ', $sel) . ' FROM users WHERE id = ? LIMIT 1');
     $st->bind_param('i', $uid);
@@ -169,8 +171,9 @@ $nameCol  = pickCol($cols, ['nome', 'name']);
 $emailCol = pickCol($cols, ['email']);
 $phoneCol = pickCol($cols, ['telefone', 'phone']);
 $docCol   = pickCol($cols, ['cpf', 'documento']);
+$pixCol   = pickCol($cols, ['chave_pix', 'pix_key', 'pix_chave']);
 
-$user = loadUser($conn, $uid, $nameCol, $emailCol, $phoneCol, $docCol);
+$user = loadUser($conn, $uid, $nameCol, $emailCol, $phoneCol, $docCol, $pixCol);
 
 $msg = '';
 $err = '';
@@ -194,9 +197,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email    = trim((string)($_POST['email'] ?? ''));
         // Save phone with mask
         $telefone = trim((string)($_POST['telefone'] ?? ''));
+        $chavePix = trim((string)($_POST['chave_pix'] ?? ($user['chave_pix'] ?? '')));
 
         if ($nome === '' || $cpfRaw === '' || strlen($cpfRaw) !== 11) {
             $err = 'Preencha nome completo e CPF corretamente.';
+        } elseif ($chavePix === '') {
+          $err = 'Informe sua chave PIX para liberar saques após a aprovação.';
         } else {
             if (userCpfJaExiste($conn, $cpfRaw, $uid)) {
               $err = 'Este CPF já está cadastrado em outra conta.';
@@ -223,6 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($docCol)   { $sets[] = $docCol . ' = ?'; $types .= 's'; $vals[] = $cpf; }
             if ($emailCol) { $sets[] = $emailCol . ' = ?'; $types .= 's'; $vals[] = $email; }
             if ($phoneCol) { $sets[] = $phoneCol . ' = ?'; $types .= 's'; $vals[] = $telefone; }
+            if ($pixCol)   { $sets[] = $pixCol . ' = ?'; $types .= 's'; $vals[] = $chavePix; }
 
             if (!$sets) {
                 $err = 'Não foi possível detectar os campos da conta para salvar seus dados.';
@@ -247,19 +254,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'cpf' => $cpf,
                             'email' => $email,
                             'telefone' => $telefone,
+                            'chave_pix' => $chavePix,
                             'updated' => date('Y-m-d H:i:s'),
                         ]));
 
                         $_SESSION['user']['nome'] = $nome;
                         if ($email !== '') $_SESSION['user']['email'] = $email;
 
-                        $user = loadUser($conn, $uid, $nameCol, $emailCol, $phoneCol, $docCol);
+                        $user = loadUser($conn, $uid, $nameCol, $emailCol, $phoneCol, $docCol, $pixCol);
                         $msg = 'Dados pessoais salvos com sucesso!';
                     }
                 }
             }
         }
     }
+
+              if ($action === 'chave_pix') {
+                $chavePix = trim((string)($_POST['chave_pix'] ?? ''));
+                if ($chavePix === '') {
+                  $err = 'Informe sua chave PIX para liberar saques após a aprovação.';
+                } elseif (!$pixCol) {
+                  $err = 'Não foi possível detectar o campo de chave PIX da conta.';
+                } else {
+                  $upPix = $conn->prepare('UPDATE users SET ' . $pixCol . ' = ? WHERE id = ?');
+                  if (!$upPix) {
+                    $err = 'Erro ao preparar atualização da chave PIX.';
+                  } else {
+                    $upPix->bind_param('si', $chavePix, $uid);
+                    $okPix = $upPix->execute();
+                    $upPix->close();
+
+                    if (!$okPix) {
+                      $err = 'Falha ao salvar a chave PIX.';
+                    } else {
+                      $vDadosAtual = verifStatus($conn, $uid, 'dados');
+                      $dadosPix = json_decode((string)($vDadosAtual['dados'] ?? ''), true) ?: [];
+                      $dadosPix['chave_pix'] = $chavePix;
+                      $dadosPix['updated_pix'] = date('Y-m-d H:i:s');
+                      $statusAtual = (string)($vDadosAtual['status'] ?? 'pendente');
+                      if ($statusAtual === '' || $statusAtual === 'nao_enviado') $statusAtual = 'pendente';
+                      verifUpsert($conn, $uid, 'dados', $statusAtual, json_encode($dadosPix));
+                      $user = loadUser($conn, $uid, $nameCol, $emailCol, $phoneCol, $docCol, $pixCol);
+                      $msg = 'Chave PIX salva e bloqueada para proteger seus saques.';
+                    }
+                  }
+                }
+              }
 
     if ($action === 'documentos_lote') {
         $missing = [];
@@ -471,6 +511,8 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
             $valCpf   = (string)(($user['documento'] ?? '') ?: ($dadosPayload['cpf']      ?? ''));
             $valEmail = (string)(($user['email']      ?? '') ?: ($dadosPayload['email']    ?? ''));
             $valTel   = (string)(($user['telefone']   ?? '') ?: ($dadosPayload['telefone'] ?? ''));
+            $valPix   = (string)(($user['chave_pix']  ?? '') ?: ($dadosPayload['chave_pix'] ?? ''));
+            $pixCadastroBloqueado = trim($valPix) !== '';
           ?>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -485,6 +527,12 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
             <div>
               <input name="telefone" id="verifTel" value="<?= htmlspecialchars($valTel, ENT_QUOTES, 'UTF-8') ?>" placeholder="Telefone" maxlength="15" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $dadosLocked ? 'opacity-60 cursor-not-allowed' : '' ?>" <?= $dadosLocked ? 'readonly disabled' : '' ?>>
             </div>
+            <?php if (!$dadosLocked || $pixCadastroBloqueado): ?>
+            <div class="sm:col-span-2">
+              <input <?= $pixCadastroBloqueado ? 'disabled' : 'name="chave_pix"' ?> value="<?= htmlspecialchars($valPix, ENT_QUOTES, 'UTF-8') ?>" required placeholder="Chave PIX" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition <?= $pixCadastroBloqueado ? 'opacity-60 cursor-not-allowed' : '' ?>">
+              <?php if ($pixCadastroBloqueado): ?><p class="text-[11px] text-zinc-500 mt-1">Chave PIX cadastrada e bloqueada para proteger seus saques.</p><?php endif; ?>
+            </div>
+            <?php endif; ?>
           </div>
           <?php if ($vDados['status'] === 'verificado'): ?>
             <div class="rounded-xl border border-greenx/20 bg-greenx/[0.06] px-4 py-2.5 text-xs text-greenx flex items-center gap-2">
@@ -532,6 +580,16 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
           </button>
           <?php endif; ?>
         </form>
+        <?php if ($dadosLocked && !$pixCadastroBloqueado): ?>
+        <form method="post" class="mt-3 rounded-2xl border border-orange-500/20 bg-orange-500/[0.06] p-3 space-y-3">
+          <input type="hidden" name="action" value="chave_pix">
+          <p class="text-xs text-orange-300">Cadastre sua chave PIX para liberar solicitações de saque. Depois de salva, ela ficará bloqueada.</p>
+          <input name="chave_pix" required placeholder="CPF, e-mail, telefone ou chave aleatória" class="w-full bg-blackx border border-blackx3 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-greenx/50 transition">
+          <button class="rounded-xl bg-greenx hover:bg-greenx2 text-white font-semibold px-6 py-2.5 text-sm transition inline-flex items-center gap-2">
+            <i data-lucide="save" class="w-4 h-4"></i> Salvar chave PIX
+          </button>
+        </form>
+        <?php endif; ?>
       </div>
     </div>
 

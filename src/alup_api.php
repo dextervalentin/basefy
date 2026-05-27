@@ -429,16 +429,18 @@ function alupBuildBasefyVariants(array $payload, int $defaultCostCents, float $m
 
 function alupInferBasefyType(array $payload, array $variants): string
 {
+    $deliveryType = alupNormalizedDeliveryType($payload);
     $text = mb_strtolower(implode(' ', array_filter([
         (string)($payload['type'] ?? ''),
         (string)($payload['product_type'] ?? ''),
         (string)($payload['category'] ?? ''),
         (string)($payload['category_name'] ?? ''),
-        (string)($payload['delivery_type'] ?? ''),
+        $deliveryType,
     ])));
+    if ($deliveryType === 'automatic') return 'dinamico';
     if (str_contains($text, 'servico') || str_contains($text, 'serviço') || str_contains($text, 'service')) return 'servico';
-    if ((string)($payload['delivery_type'] ?? '') === 'automatic' || count($variants) > 1 || str_contains($text, 'dynamic') || str_contains($text, 'dinamico')) return 'dinamico';
-    if ((string)($payload['delivery_type'] ?? '') === 'manual') return 'servico';
+    if (count($variants) > 1 || str_contains($text, 'dynamic') || str_contains($text, 'dinamico')) return 'dinamico';
+    if ($deliveryType === 'manual') return 'servico';
     return 'produto';
 }
 
@@ -452,6 +454,13 @@ function alupProductIsOfficial(array $payload): bool
     return alupProductStoreId($payload) === ALUP_OFFICIAL_STORE_ID;
 }
 
+function alupNormalizedDeliveryType(array $payload): string
+{
+    if (alupProductIsOfficial($payload)) return 'automatic';
+    $deliveryType = mb_strtolower(trim((string)($payload['delivery_type'] ?? '')));
+    return in_array($deliveryType, ['automatic', 'manual'], true) ? $deliveryType : '';
+}
+
 function alupProductOriginLabel(array $payload): string
 {
     return alupProductIsOfficial($payload) ? 'Loja oficial AlUp' : 'Vendedor AlUp';
@@ -459,7 +468,7 @@ function alupProductOriginLabel(array $payload): string
 
 function alupProductDeliveryLabel(array $payload): string
 {
-    return match ((string)($payload['delivery_type'] ?? '')) {
+    return match (alupNormalizedDeliveryType($payload)) {
         'automatic' => 'Automática',
         'manual' => 'Manual',
         default => 'Não informado',

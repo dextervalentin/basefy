@@ -394,6 +394,7 @@ function sfGetProductBySlug($conn, string $slug): ?array
     if ($cols['approval_status'] !== null) {
         $whereActive .= " AND COALESCE(p." . $cols['approval_status'] . ", 'aprovado') = 'aprovado'";
     }
+    $externalAutoDeliveryExpr = sfExternalAutoDeliverySelect($conn);
 
     $sql = "SELECT p.id, p.nome, p.descricao, p.preco, {$imageExpr} AS imagem,
                    p.slug, p.variantes,
@@ -403,7 +404,8 @@ function sfGetProductBySlug($conn, string $slug): ?array
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
                  COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
-                 p.auto_delivery_items
+                p.auto_delivery_items,
+                {$externalAutoDeliveryExpr}
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . "
@@ -783,6 +785,15 @@ function sfProductColumns($conn): array
     ];
 }
 
+function sfExternalAutoDeliverySelect($conn): string
+{
+    $mappingCols = sfTableColumns($conn, 'external_product_mappings');
+    if (!in_array('product_id', $mappingCols, true) || !in_array('provider', $mappingCols, true) || !in_array('external_payload', $mappingCols, true)) {
+        return 'FALSE AS external_auto_delivery';
+    }
+    return "CASE WHEN EXISTS (SELECT 1 FROM external_product_mappings em WHERE em.product_id = p.id AND em.provider = 'alup' AND COALESCE(em.external_payload, '') LIKE '%8b80f8fd-9f02-48da-9ee1-d3bae135f96c%') THEN TRUE ELSE FALSE END AS external_auto_delivery";
+}
+
 function sfListCategories($conn, string $tipo = '', bool $featuredOnly = false, int $limit = 0): array
 {
     _sfBackfillCategorySlugs($conn);
@@ -922,6 +933,7 @@ function sfListProducts($conn, array $filters = []): array
 
     $imageExpr = $cols['image'] ? ('p.' . $cols['image']) : "''";
     $featuredExpr = $cols['featured'] ? ('COALESCE(p.' . $cols['featured'] . ', FALSE)') : 'FALSE';
+    $externalAutoDeliveryExpr = sfExternalAutoDeliverySelect($conn);
     [$where, $types, $params] = sfProductFilterParts($filters, $cols);
     $limit = max(1, min(100, (int)($filters['limit'] ?? 24)));
     $offset = max(0, (int)($filters['offset'] ?? 0));
@@ -956,7 +968,8 @@ function sfListProducts($conn, array $filters = []): array
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
                  COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
-                 p.auto_delivery_items{$salesSelect}
+                  p.auto_delivery_items,
+                  {$externalAutoDeliveryExpr}{$salesSelect}
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . $salesJoin;
@@ -1021,6 +1034,7 @@ function sfGetProductById($conn, int $productId): ?array
     if ($cols['approval_status'] !== null) {
         $whereActive .= " AND COALESCE(p." . $cols['approval_status'] . ", 'aprovado') = 'aprovado'";
     }
+    $externalAutoDeliveryExpr = sfExternalAutoDeliverySelect($conn);
 
     $sql = "SELECT p.id, p.nome, p.descricao, p.preco, {$imageExpr} AS imagem,
                    p.slug, p.variantes, {$featuredExpr} AS destaque,
@@ -1030,7 +1044,8 @@ function sfGetProductById($conn, int $productId): ?array
                    COALESCE(p.quantidade, 0) AS quantidade,
                    p.prazo_entrega_dias, p.data_entrega,
                  COALESCE(p.auto_delivery_enabled, FALSE) AS auto_delivery_enabled,
-                 p.auto_delivery_items
+                p.auto_delivery_items,
+                {$externalAutoDeliveryExpr}
             FROM products p
             LEFT JOIN categories c ON c.id = p." . $cols['category'] . "
             LEFT JOIN users u ON u.id = p." . $cols['vendor'] . "

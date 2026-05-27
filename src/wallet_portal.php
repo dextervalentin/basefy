@@ -475,10 +475,14 @@ function walletGerarTrxId(): string
 function walletSolicitarSaque($conn, int $userId, float $valor, string $pixKey, string $observacao = '', string $tipoChave = ''): array
 {
     _walletEnsureTipoChave($conn);
-    $pixKey = trim($pixKey);
-    $tipoChave = walletNormalizePixType($tipoChave) ?: walletInferPixKeyType($pixKey);
-    if ($userId <= 0 || $valor <= 0 || $pixKey === '' || $tipoChave === '') {
+    if ($userId <= 0 || $valor <= 0) {
         return [false, 'Dados inválidos. Preencha o tipo de chave e a chave PIX.'];
+    }
+    $savedPix = walletSavedPixData($conn, $userId);
+    $pixKey = trim((string)($savedPix['key'] ?? ''));
+    $tipoChave = walletNormalizePixType((string)($savedPix['type'] ?? '')) ?: walletInferPixKeyType($pixKey);
+    if ($pixKey === '' || $tipoChave === '') {
+        return [false, 'Cadastre sua chave PIX no cadastro aprovado antes de solicitar saque.'];
     }
 
     $conn->begin_transaction();

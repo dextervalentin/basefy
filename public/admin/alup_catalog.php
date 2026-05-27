@@ -141,7 +141,7 @@ foreach ($catalog as $p) {
     $extId = (string)($p['id'] ?? $p['external_id'] ?? '');
     if ($extId !== '' && isset($mappedExternalIds[$extId])) $stats['linked']++;
     if (alupProductIsOfficial($p)) $stats['official']++; else $stats['vendor']++;
-    $delivery = (string)($p['delivery_type'] ?? '');
+    $delivery = alupNormalizedDeliveryType($p);
     if ($delivery === 'automatic') $stats['automatic']++;
     if ($delivery === 'manual') $stats['manual']++;
     $storeId = alupProductStoreId($p) ?: 'sem-store-id';
@@ -169,7 +169,7 @@ $filtered = array_values(array_filter($catalog, function (array $p) use ($needle
     if ($originFilter === 'official' && !$isOfficial) return false;
     if ($originFilter === 'vendor' && $isOfficial) return false;
 
-    $delivery = (string)($p['delivery_type'] ?? '');
+    $delivery = alupNormalizedDeliveryType($p);
     if ($deliveryFilter !== 'all' && $delivery !== $deliveryFilter) return false;
 
     $stockRaw = $p['stock_quantity'] ?? null;
@@ -745,6 +745,12 @@ function alupSetText(id, value) {
   if (el) el.textContent = value === undefined || value === null || value === '' ? '—' : String(value);
 }
 
+function alupDeliveryType(product) {
+  const storeId = String(product && product.store_id ? product.store_id : '');
+  if (storeId === ALUP_OFFICIAL_STORE_ID_JS) return 'automatic';
+  return String(product && product.delivery_type ? product.delivery_type : '');
+}
+
 function alupDeliveryLabel(type) {
   if (type === 'automatic') return 'Automática';
   if (type === 'manual') return 'Manual';
@@ -825,7 +831,7 @@ function alupApplyDetails(product, meta) {
   alupSetText('alupDetailId', product.id ? `ID: ${product.id}` : 'ID não informado');
   alupSetText('alupDetailPrice', alupFormatBRLFromCents(price));
   alupSetText('alupDetailCompare', alupFormatBRLFromCents(compare));
-  alupSetText('alupDetailDelivery', alupDeliveryLabel(product.delivery_type));
+  alupSetText('alupDetailDelivery', alupDeliveryLabel(alupDeliveryType(product)));
   alupSetText('alupDetailStock', product.stock_quantity !== undefined && product.stock_quantity !== null && product.stock_quantity !== '' ? product.stock_quantity : 'sem info');
   alupSetText('alupDetailDescription', product.description || 'Sem descrição.');
   alupSetText('alupDetailDescriptionMeta', meta || '');
@@ -896,7 +902,7 @@ function alupOpenLinkModal(button) {
   alupSetText('alupLinkId', extId ? ('ID: ' + extId) : '');
   alupSetText('alupLinkOrigin', storeId === ALUP_OFFICIAL_STORE_ID_JS ? 'Loja oficial AlUp' : 'Vendedor AlUp');
   alupSetText('alupLinkPrice', alupFormatBRLFromCents(cost));
-  alupSetText('alupLinkDelivery', alupDeliveryLabel(product.delivery_type));
+  alupSetText('alupLinkDelivery', alupDeliveryLabel(alupDeliveryType(product)));
   alupSetText('alupLinkStock', (product.stock_quantity !== undefined && product.stock_quantity !== null && product.stock_quantity !== '') ? product.stock_quantity : 'sem info');
   alupSetText('alupLinkStore', storeId ? (storeId.slice(0, 8) + '…' + storeId.slice(-4)) : '—');
 

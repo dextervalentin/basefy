@@ -431,8 +431,10 @@ include __DIR__ . '/../views/partials/storefront_nav.php';
                     $_variantesRaw = $produto['variantes'] ?? null;
                     $variantesArr = ($_tipoProd === 'dinamico' && $_variantesRaw) ? json_decode($_variantesRaw, true) : [];
                     if (!is_array($variantesArr)) $variantesArr = [];
-                    $_autoDeliveryConfigured = stockBoolValue($produto['auto_delivery_enabled'] ?? false)
+                    $_externalAutoDelivery = stockBoolValue($produto['external_auto_delivery'] ?? false);
+                    $_localAutoDeliveryConfigured = stockBoolValue($produto['auto_delivery_enabled'] ?? false)
                         && sfAutoDeliveryConfiguredCount($conn, (int)($produto['id'] ?? 0), (string)($produto['auto_delivery_items'] ?? '')) > 0;
+                    $_autoDeliveryConfigured = $_localAutoDeliveryConfigured || $_externalAutoDelivery;
                     if (stockBoolValue($produto['auto_delivery_enabled'] ?? false) && (int)($produto['id'] ?? 0) > 0) {
                         $_dispQtd = $_autoDeliveryConfigured
                             ? sfAutoDeliveryAvailableCount($conn, (int)($produto['id'] ?? 0), $_tipoProd, null, (string)($produto['auto_delivery_items'] ?? ''))
