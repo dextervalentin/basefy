@@ -312,6 +312,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
           <thead>
             <tr class="text-zinc-400 border-b border-blackx3">
               <th class="text-left py-3 pr-3">Usuário</th>
+              <th class="text-left py-3 pr-3">Geral</th>
               <th class="text-left py-3 pr-3">Dados</th>
               <th class="text-left py-3 pr-3">Documentos</th>
               <th class="text-left py-3 pr-3">Atualizado</th>
@@ -321,7 +322,19 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
           <tbody>
           <?php foreach ($itens as $idx => $row):
             $dSt = mb_strtolower((string)$row['dados_status']);
+            $eSt = mb_strtolower((string)$row['email_status']);
             $docSt = mb_strtolower((string)$row['docs_status']);
+            $combinedSt = 'pendente';
+            if ($dSt === 'verificado' && $eSt === 'verificado' && $docSt === 'verificado') {
+                $combinedSt = 'verificado';
+            } elseif ($dSt === 'rejeitado' || $eSt === 'rejeitado' || $docSt === 'rejeitado') {
+                $combinedSt = 'rejeitado';
+            }
+            $combinedClass = match($combinedSt) {
+                'verificado' => 'bg-greenx/20 border-greenx/40 text-greenx',
+                'rejeitado'  => 'bg-red-600/20 border-red-500/40 text-red-300',
+                default      => 'bg-orange-500/20 border-orange-400/40 text-orange-300',
+            };
             $dClass = match($dSt) {
                 'verificado' => 'bg-greenx/20 border-greenx/40 text-greenx',
                 'rejeitado'  => 'bg-red-600/20 border-red-500/40 text-red-300',
@@ -341,6 +354,9 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                   <p class="font-medium"><?= htmlspecialchars((string)$row['nome']) ?></p>
                   <p class="text-[11px] text-zinc-500"><?= htmlspecialchars((string)$row['email']) ?> · #<?= (int)$row['user_id'] ?></p>
                 </div>
+              </td>
+              <td class="py-3 pr-3">
+                <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-medium <?= $combinedClass ?>"><?= ucfirst($combinedSt) ?></span>
               </td>
               <td class="py-3 pr-3">
                 <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-medium <?= $dClass ?>"><?= ucfirst($dSt) ?></span>
