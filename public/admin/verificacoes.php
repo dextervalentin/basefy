@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['verif_flash'] = ['type' => 'error', 'msg' => 'Parâmetros inválidos.'];
     } elseif ($postAction === 'aprovar') {
         try {
-        $stDocCount = $conn->prepare("SELECT COUNT(*) AS qtd FROM user_verification_docs WHERE user_id = ? AND COALESCE(TRIM(arquivo), '') <> ''");
+        $stDocCount = $conn->prepare("SELECT COUNT(DISTINCT tipo_doc) AS qtd FROM user_verification_docs WHERE user_id = ? AND COALESCE(TRIM(arquivo), '') <> '' AND LOWER(COALESCE(status, '')) <> 'rejeitado'");
         $stDocCount->bind_param('i', $postUserId);
         $stDocCount->execute();
         $docCount = (int)($stDocCount->get_result()->fetch_assoc()['qtd'] ?? 0);

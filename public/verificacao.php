@@ -113,6 +113,28 @@ function verifDocStatus(object $conn, mixed $uid, string $tipoDoc): array {
     return $row ?: ['status' => 'pendente', 'arquivo' => null, 'observacao' => null];
 }
 
+function verifClearPendingObservation(object $conn, mixed $uid, string $tipo): void {
+  $uid = (int)$uid;
+  $st = $conn->prepare("UPDATE user_verifications SET observacao = NULL WHERE user_id = ? AND tipo = ? AND status = 'pendente'");
+  if ($st) {
+    $st->bind_param('is', $uid, $tipo);
+    $st->execute();
+    $st->close();
+  }
+}
+
+function verifOpenNewAttempt(object $conn, mixed $uid): int {
+  $uid = (int)$uid;
+  $obsRetry = 'Rejeitado anteriormente. Corrija e reenvie.';
+  $st = $conn->prepare("UPDATE user_verifications SET status = 'pendente', observacao = ?, atualizado = CURRENT_TIMESTAMP WHERE user_id = ? AND tipo IN ('dados', 'email', 'documentos') AND status = 'rejeitado'");
+  if (!$st) return 0;
+  $st->bind_param('si', $obsRetry, $uid);
+  $st->execute();
+  $affected = (int)$st->affected_rows;
+  $st->close();
+  return $affected;
+}
+
 function listUserColumns(object $conn): array {
     $cols = [];
 
@@ -190,6 +212,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   } else {
   $action = (string)($_POST['action'] ?? '');
 
+    if ($action === 'reenviar_kyc') {
+      try {
+        $affected = verifOpenNewAttempt($conn, $uid);
+        if ($affected > 0) {
+          $msg = 'Nova tentativa de KYC iniciada. Atualize os dados e reenvie os documentos para nova análise.';
+        } else {
+          $msg = 'Seu KYC já está em andamento para análise.';
+        }
+      } catch (\Throwable $e) {
+        $err = 'Não foi possível iniciar nova tentativa: ' . $e->getMessage();
+      }
+    }
+
     if ($action === 'dados') {
         $nome     = trim((string)($_POST['nome'] ?? ''));
         $cpfRaw   = identityDigits(trim((string)($_POST['cpf'] ?? '')));
@@ -257,6 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'chave_pix' => $chavePix,
                             'updated' => date('Y-m-d H:i:s'),
                         ]));
+                        verifClearPendingObservation($conn, $uid, 'dados');
 
                         $_SESSION['user']['nome'] = $nome;
                         if ($email !== '') $_SESSION['user']['email'] = $email;
@@ -401,6 +437,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'uploaded_now' => $uploaded,
                 'all_sent' => $allSent,
             ]));
+            verifOpenNewAttempt($conn, $uid);
+            verifClearPendingObservation($conn, $uid, 'documentos');
 
             if ($allSent) {
                 $msg = 'Todos os documentos enviados! Aguarde a análise do administrador.';
@@ -415,6 +453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'enviar_email') {
         $result = enviarEmailVerificacao($conn, $uid);
         if ($result === true) {
+        verifClearPendingObservation($conn, $uid, 'email');
             $msg = 'E-mail de verificação enviado! Verifique sua caixa de entrada (e spam).';
         } else {
             $err = (string)$result;
@@ -448,6 +487,16 @@ $dadosRejectedHint = strtolower((string)$vDados['status']) === 'rejeitado' || (s
 $docsObs = (string)($vDocumentos['observacao'] ?? '');
 $docsRejectedHint = strtolower((string)$vDocumentos['status']) === 'rejeitado' || (stripos($docsObs, 'rejeitad') !== false);
 
+$hasRejectedKyc = $dadosRejectedHint || $docsRejectedHint || strtolower((string)$vEmail['status']) === 'rejeitado';
+if (!$hasRejectedKyc) {
+  foreach ($docStatus as $docInfo) {
+    if (strtolower((string)($docInfo['status'] ?? '')) === 'rejeitado') {
+      $hasRejectedKyc = true;
+      break;
+    }
+  }
+}
+
 $docUploadOpen = false;
 foreach ($docStatus as $s) {
     $st = strtolower((string)($s['status'] ?? 'pendente'));
@@ -476,6 +525,22 @@ include __DIR__ . '/../views/partials/user_layout_start.php';
     <div class="rounded-2xl border border-red-500/30 bg-red-600/[0.08] px-5 py-3.5 text-sm text-red-300 flex items-center gap-3">
       <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
       <span><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?></span>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($hasRejectedKyc): ?>
+    <div class="rounded-2xl border border-orange-500/30 bg-orange-500/[0.08] px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="text-sm text-orange-300">
+        <p class="font-semibold">Seu KYC foi rejeitado anteriormente.</p>
+        <p class="text-xs text-orange-200/90 mt-1">Clique em "Nova tentativa" para liberar um novo pedido e reenviar os documentos corrigidos.</p>
+      </div>
+      <form method="post" class="shrink-0">
+        <input type="hidden" name="action" value="reenviar_kyc">
+        <button class="inline-flex items-center gap-2 rounded-xl bg-orange-500/20 border border-orange-400/40 px-4 py-2.5 text-xs font-semibold text-orange-200 hover:bg-orange-500/30 transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          Nova tentativa
+        </button>
+      </form>
     </div>
   <?php endif; ?>
 
