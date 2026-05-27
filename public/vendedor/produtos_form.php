@@ -636,7 +636,7 @@ $adHasConfig = $produto
             </div>
             <p class="text-xs text-zinc-500 mb-4">Quando ativada, o produto é entregue automaticamente ao comprador assim que o pagamento é confirmado. Ideal para chaves, códigos, contas e links de download.</p>
 
-            <div class="mb-4">
+            <div class="mb-4" x-show="adEnabled" x-transition x-cloak>
                 <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
                 <a href="<?= BASE_PATH ?>/vendedor/estoque?id=<?= (int)$produto['id'] ?>"
                    class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
