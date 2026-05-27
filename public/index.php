@@ -212,7 +212,7 @@ function homeCatalogStockMap($conn, array $products): array
 {
     $autoIds = [];
     foreach ($products as $product) {
-        if (!empty($product['auto_delivery_enabled'])) {
+        if (stockBoolValue($product['auto_delivery_enabled'] ?? false)) {
             $autoIds[(int)$product['id']] = true;
         }
     }
@@ -245,7 +245,7 @@ function homeCatalogStockOf(array $product, array $stockMap): array
     $typeKey = mb_strtolower(trim((string)($product['tipo'] ?? 'produto')));
     $legacyCount = $typeKey === 'dinamico' ? 0 : count(sfAutoDeliveryItemsList((string)($product['auto_delivery_items'] ?? '')));
     $autoQuantity = (int)($stockMap[$productId] ?? 0) + $legacyCount;
-    if (!empty($product['auto_delivery_enabled'])) {
+    if (stockBoolValue($product['auto_delivery_enabled'] ?? false)) {
         if ($autoQuantity > 0) {
             return ['qty' => $autoQuantity, 'auto' => true];
         }

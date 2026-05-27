@@ -154,7 +154,7 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
             <td class="py-3 pr-3">
               <?php if ($rowTipo === 'servico'): ?>
                 <span class="text-zinc-600">-</span>
-              <?php elseif (!empty($row['auto_delivery_enabled'])): ?>
+              <?php elseif (stockBoolValue($row['auto_delivery_enabled'] ?? false)): ?>
                 <?php
                   $autoConfigured = sfAutoDeliveryConfiguredCount($conn, (int)$row['id'], (string)($row['auto_delivery_items'] ?? '')) > 0;
                   $autoQtd = $autoConfigured
@@ -204,6 +204,11 @@ include __DIR__ . '/../../views/partials/admin_layout_start.php';
                 <a href="produtos_form?id=<?= (int)$row['id'] ?>" class="inline-flex items-center gap-1 rounded-lg bg-blackx border border-blackx3 hover:border-greenx px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white transition">
                   <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editar
                 </a>
+                <?php if ($rowTipo !== 'servico'): ?>
+                <a href="estoque?id=<?= (int)$row['id'] ?>" class="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-400/30 hover:border-amber-300 px-2.5 py-1.5 text-xs text-amber-200 hover:text-white transition" title="Gerenciar estoque automático">
+                  <i data-lucide="boxes" class="w-3.5 h-3.5"></i> Estoque
+                </a>
+                <?php endif; ?>
                 <button type="button"
                   class="js-prod-toggle relative inline-flex h-6 w-11 items-center rounded-full transition <?= $isAtivo ? 'bg-greenx' : 'bg-zinc-600' ?>"
                   data-id="<?= (int)$row['id'] ?>"

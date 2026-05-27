@@ -72,7 +72,7 @@ function sfAutoDeliveryAvailableCount($conn, int $productId, string $type = 'pro
 
 function sfProductAutoDeliveryEnabledEffective($conn, array $product): bool
 {
-    if (empty($product['auto_delivery_enabled'])) {
+    if (!stockBoolValue($product['auto_delivery_enabled'] ?? false)) {
         return false;
     }
 
@@ -90,7 +90,7 @@ function sfProductAvailableQuantity($conn, array $product): int
         return 1;
     }
 
-    if (!empty($product['auto_delivery_enabled'])) {
+    if (stockBoolValue($product['auto_delivery_enabled'] ?? false)) {
         return sfAutoDeliveryAvailableCount(
             $conn,
             (int)($product['id'] ?? 0),
@@ -1248,7 +1248,7 @@ function sfCreateOrderFromCart($conn, int $userId, bool $useWallet): array
         // e disponíveis, seja no estoque automático ou no pool legado JSON.
         try {
             $pidCk = (int)($ck['id'] ?? 0);
-            if ($pidCk > 0 && !empty($ck['auto_delivery_enabled'])) {
+            if ($pidCk > 0 && stockBoolValue($ck['auto_delivery_enabled'] ?? false)) {
                 $varForStock = $tipoCk === 'dinamico' ? (string)($ck['variante_nome'] ?? '') : null;
                 $avail = sfAutoDeliveryAvailableCount(
                     $conn,

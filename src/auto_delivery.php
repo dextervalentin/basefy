@@ -61,7 +61,7 @@ function autoDeliveryProcessOrder($conn, int $orderId): int
         if (!empty($item['delivery_content'])) continue;
 
         // Skip if auto-delivery not enabled for this product
-        if (empty($item['auto_delivery_enabled'])) continue;
+        if (!stockBoolValue($item['auto_delivery_enabled'] ?? false)) continue;
 
         $productId = (int)($item['product_id'] ?? 0);
         $itemId = (int)$item['item_id'];

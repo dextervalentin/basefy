@@ -12,6 +12,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 
+function stockBoolValue(mixed $value): bool
+{
+    if (is_bool($value)) return $value;
+    if (is_int($value) || is_float($value)) return ((int)$value) === 1;
+    $normalized = strtolower(trim((string)$value));
+    return in_array($normalized, ['1', 'true', 't', 'yes', 'y', 'on'], true);
+}
+
 function stockEnsureTables(object $conn): void
 {
     static $done = false;
@@ -290,7 +298,7 @@ function stockGetDeliveryConfig(object $conn, mixed $productId): array
     $st->close();
 
     return [
-        'enabled' => !empty($row['auto_delivery_enabled']),
+        'enabled' => stockBoolValue($row['auto_delivery_enabled'] ?? false),
         'intro' => (string)($row['auto_delivery_intro'] ?? ''),
         'conclusion' => (string)($row['auto_delivery_conclusion'] ?? ''),
     ];

@@ -502,6 +502,29 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
                 <p class="text-xs text-zinc-500 mt-2">Cada linha é 1 item para entrega automática.</p>
                 <p x-show="adAjaxSaving" class="text-xs mt-1 text-amber-300">Salvando automaticamente...</p>
                 <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-1"></p>
+
+                <div class="mt-4 flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i data-lucide="settings" class="w-4 h-4 text-amber-400"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold text-amber-300 mb-1">Configuração avançada</p>
+                        <p class="text-xs text-zinc-400 leading-relaxed">Gerencie estoque por item, variantes, mensagens de introdução/conclusão e status de cada entrega automática.</p>
+                    </div>
+                </div>
+
+                <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
+                <a href="<?= BASE_PATH ?>/admin/estoque?id=<?= (int)$produto['id'] ?>"
+                   class="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx2 hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
+                    <i data-lucide="boxes" class="w-4 h-4"></i>
+                    Gerenciar Estoque Automático
+                </a>
+                <?php else: ?>
+                <div class="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-amber-400"></i>
+                    Após salvar o produto, o botão Gerenciar Estoque Automático ficará disponível.
+                </div>
+                <?php endif; ?>
             </div>
 
             <div x-show="!adEnabled" x-transition x-cloak>
