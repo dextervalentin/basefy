@@ -158,6 +158,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['open_stock_manager'])) {
+        $idPost = (int)($_POST['id'] ?? 0);
+        if ($idPost > 0) {
+            header('Location: ' . BASE_PATH . '/admin/estoque?id=' . $idPost);
+            exit;
+        }
+
+        $vendedorDraft = (int)($_POST['vendedor_id'] ?? 0);
+        if ($vendedorDraft <= 0 && !empty($vendedores)) {
+            $vendedorDraft = (int)($vendedores[0]['id'] ?? 0);
+        }
+        $categoriaDraft = (int)($_POST['categoria_id'] ?? 0);
+        if ($categoriaDraft <= 0 && !empty($categorias)) {
+            $categoriaDraft = (int)($categorias[0]['id'] ?? 0);
+        }
+
+        $nomeDraft = trim((string)($_POST['nome'] ?? ''));
+        if ($nomeDraft === '') {
+            $nomeDraft = 'Rascunho estoque automático ' . date('d/m/Y H:i');
+        }
+
+        $descricaoDraft = trim((string)($_POST['descricao'] ?? ''));
+        if ($descricaoDraft === '') {
+            $descricaoDraft = 'Rascunho criado automaticamente para liberar o gerenciamento avançado de estoque.';
+        }
+
+        if ($vendedorDraft <= 0 || $categoriaDraft <= 0) {
+            $erro = 'Selecione vendedor e categoria para abrir o gerenciamento avançado.';
+        } else {
+            [$okDraft, $msgDraft] = salvarProduto(
+                $conn,
+                0,
+                $vendedorDraft,
+                $categoriaDraft,
+                $nomeDraft,
+                $descricaoDraft,
+                0.0,
+                'draft:auto-delivery',
+                'produto',
+                1,
+                null,
+                null,
+                '',
+                null,
+                false,
+                false,
+                null,
+                false,
+                null
+            );
+
+            if ($okDraft) {
+                $lastRow = $conn->query("SELECT MAX(id) AS last_id FROM products")->fetch_assoc();
+                $newId = (int)($lastRow['last_id'] ?? 0);
+                if ($newId > 0) {
+                    header('Location: ' . BASE_PATH . '/admin/estoque?id=' . $newId);
+                    exit;
+                }
+                $erro = 'Rascunho criado, mas não foi possível abrir o gerenciamento avançado.';
+            } else {
+                $erro = $msgDraft !== '' ? $msgDraft : 'Não foi possível abrir o gerenciamento avançado.';
+            }
+        }
+    }
+
     $idPost = (int)($_POST['id'] ?? 0);
     $draftToken = (string)($_POST['auto_delivery_draft_token'] ?? ($_SESSION['admin_product_form_token'] ?? ''));
     $draft = is_array($_SESSION['admin_auto_delivery_drafts'][$draftToken] ?? null) ? $_SESSION['admin_auto_delivery_drafts'][$draftToken] : [];
@@ -498,6 +563,21 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
             </div>
             <p class="text-xs text-zinc-500 mb-4">Quando ativada, o conteúdo do item é entregue automaticamente ao comprador após pagamento aprovado.</p>
 
+            <div class="mb-4">
+                <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
+                <a href="<?= BASE_PATH ?>/admin/estoque?id=<?= (int)$produto['id'] ?>"
+                   class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx2 hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
+                    <i data-lucide="boxes" class="w-4 h-4"></i>
+                    Gerenciar Estoque Automático
+                </a>
+                <?php else: ?>
+                <button type="submit" name="open_stock_manager" value="1" formnovalidate class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx2 hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
+                    <i data-lucide="boxes" class="w-4 h-4"></i>
+                    Gerenciar Estoque Automático
+                </button>
+                <?php endif; ?>
+            </div>
+
             <div x-show="adEnabled" x-transition x-cloak>
                 <div class="flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -508,22 +588,6 @@ $productFeePercentAtual = $produto['product_fee_percent'] ?? '';
                         <p class="text-xs text-zinc-400 leading-relaxed">Gerencie estoque por item, variantes, mensagens de introdução/conclusão e status de cada entrega automática.</p>
                     </div>
                 </div>
-
-                <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
-                <a href="<?= BASE_PATH ?>/admin/estoque?id=<?= (int)$produto['id'] ?>"
-                   class="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx2 hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
-                    <i data-lucide="boxes" class="w-4 h-4"></i>
-                    Gerenciar Estoque Automático
-                </a>
-                <?php else: ?>
-                <div class="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                    <button type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm opacity-60 cursor-not-allowed shadow-lg shadow-greenx/10">
-                        <i data-lucide="boxes" class="w-4 h-4"></i>
-                        Gerenciar Estoque Automático
-                    </button>
-                    <span class="text-xs text-zinc-500">Salve o produto para liberar o gerenciamento avançado.</span>
-                </div>
-                <?php endif; ?>
                 <p x-show="adAjaxSaving" class="text-xs mt-3 text-amber-300">Atualizando...</p>
                 <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-3"></p>
             </div>

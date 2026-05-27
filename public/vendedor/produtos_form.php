@@ -158,6 +158,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = (string)($_POST['form_token'] ?? '');
     $sessionToken = (string)($_SESSION['vendor_product_form_token'] ?? '');
+
+    if (isset($_POST['open_stock_manager'])) {
+        $idPost = (int)($_POST['id'] ?? 0);
+        if ($idPost > 0) {
+            header('Location: ' . BASE_PATH . '/vendedor/estoque?id=' . $idPost);
+            exit;
+        }
+
+        $categoriaDraft = (int)($_POST['categoria_id'] ?? 0);
+        if ($categoriaDraft <= 0 && !empty($categorias)) {
+            $categoriaDraft = (int)($categorias[0]['id'] ?? 0);
+        }
+
+        $nomeDraft = trim((string)($_POST['nome'] ?? ''));
+        if ($nomeDraft === '') {
+            $nomeDraft = 'Rascunho estoque automático ' . date('d/m/Y H:i');
+        }
+
+        $descricaoDraft = trim((string)($_POST['descricao'] ?? ''));
+        if ($descricaoDraft === '') {
+            $descricaoDraft = 'Rascunho criado automaticamente para liberar o gerenciamento avançado de estoque.';
+        }
+
+        if ($categoriaDraft <= 0) {
+            $erro = 'Selecione uma categoria para abrir o gerenciamento avançado.';
+        } else {
+            [$okDraft, $msgDraft] = salvarMeuProduto(
+                $conn,
+                $uid,
+                0,
+                $categoriaDraft,
+                $nomeDraft,
+                $descricaoDraft,
+                0.0,
+                'draft:auto-delivery',
+                'produto',
+                1,
+                null,
+                null,
+                '',
+                null,
+                false,
+                null
+            );
+
+            if ($okDraft) {
+                $lastRow = $conn->query("SELECT MAX(id) AS last_id FROM products")->fetch_assoc();
+                $newId = (int)($lastRow['last_id'] ?? 0);
+                if ($newId > 0) {
+                    header('Location: ' . BASE_PATH . '/vendedor/estoque?id=' . $newId);
+                    exit;
+                }
+                $erro = 'Rascunho criado, mas não foi possível abrir o gerenciamento avançado.';
+            } else {
+                $erro = $msgDraft !== '' ? $msgDraft : 'Não foi possível abrir o gerenciamento avançado.';
+            }
+        }
+    }
+
     if ($sessionToken === '' || $token === '' || !hash_equals($sessionToken, $token)) {
         $erro = 'Envio duplicado ou inválido. Atualize a página e tente novamente.';
     } else {
@@ -577,6 +636,21 @@ $adHasConfig = $produto
             </div>
             <p class="text-xs text-zinc-500 mb-4">Quando ativada, o produto é entregue automaticamente ao comprador assim que o pagamento é confirmado. Ideal para chaves, códigos, contas e links de download.</p>
 
+            <div class="mb-4">
+                <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
+                <a href="<?= BASE_PATH ?>/vendedor/estoque?id=<?= (int)$produto['id'] ?>"
+                   class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                    Gerenciar Estoque Automático
+                </a>
+                <?php else: ?>
+                <button type="submit" name="open_stock_manager" value="1" formnovalidate class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
+                    <i data-lucide="boxes" class="w-4 h-4"></i>
+                    Gerenciar Estoque Automático
+                </button>
+                <?php endif; ?>
+            </div>
+
             <div x-show="adEnabled" x-transition x-cloak x-init="$watch('adEnabled', v => { if(v) $nextTick(() => { if(window.lucide) lucide.createIcons() }) })">
                 <div class="flex items-start gap-3 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 mb-5">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -587,22 +661,6 @@ $adHasConfig = $produto
                         <p class="text-xs text-zinc-400 leading-relaxed">Gerencie os itens de entrega automática na página de <strong class="text-white">Estoque Automático</strong>. Cada compra consumirá <strong class="text-white">1 item</strong> do estoque automaticamente. Você pode cadastrar itens por variante, definir mensagens de introdução e conclusão, e acompanhar o status de cada item.</p>
                     </div>
                 </div>
-
-                <?php if ($produto && (int)($produto['id'] ?? 0) > 0): ?>
-                <a href="<?= BASE_PATH ?>/vendedor/estoque?id=<?= (int)$produto['id'] ?>"
-                   class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm hover:from-greenx hover:to-greenxd transition-all shadow-lg shadow-greenx/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-                    Gerenciar Estoque Automático
-                </a>
-                <?php else: ?>
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <button type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-greenx to-greenxd text-white font-semibold px-5 py-2.5 text-sm opacity-60 cursor-not-allowed shadow-lg shadow-greenx/10">
-                        <i data-lucide="boxes" class="w-4 h-4"></i>
-                        Gerenciar Estoque Automático
-                    </button>
-                    <span class="text-xs text-zinc-500">Salve o produto para liberar o gerenciamento avançado.</span>
-                </div>
-                <?php endif; ?>
                 <p x-show="adAjaxSaving" class="text-xs mt-3 text-amber-300">Atualizando...</p>
                 <p x-show="adAjaxMsg" x-text="adAjaxMsg" :class="adAjaxError ? 'text-red-400' : 'text-greenx'" class="text-xs mt-3"></p>
             </div>
