@@ -161,7 +161,29 @@ if ($pageDescription === '') {
 if (mb_strlen($pageDescription) > 180) {
     $pageDescription = mb_substr($pageDescription, 0, 177) . '...';
 }
-$pageImage = trim((string)($produto['imagem'] ?? '')) !== '' ? sfImageUrl((string)$produto['imagem']) : (BASE_PATH . '/assets/img/02.png');
+$pageImage = '';
+$coverRaw = trim((string)($produto['imagem'] ?? ''));
+if ($coverRaw !== '') {
+    $pageImage = sfImageUrl($coverRaw);
+}
+if ($pageImage === '' || str_contains($pageImage, 'placehold.co/1200x800')) {
+    $galleryRows = is_array($produto['gallery'] ?? null) ? $produto['gallery'] : [];
+    foreach ($galleryRows as $gImg) {
+        $gUrl = '';
+        if (!empty($gImg['id'])) {
+            $gUrl = mediaUrl((int)$gImg['id']);
+        } elseif (!empty($gImg['arquivo'])) {
+            $gUrl = mediaResolveUrl((string)$gImg['arquivo']);
+        }
+        if ($gUrl !== '') {
+            $pageImage = $gUrl;
+            break;
+        }
+    }
+}
+if ($pageImage === '' || str_contains($pageImage, 'placehold.co/1200x800')) {
+    $pageImage = BASE_PATH . '/assets/img/02.png';
+}
 $pageUrl = sfProductUrl($produto);
 $pageType = 'product';
 include __DIR__ . '/../views/partials/header.php';
