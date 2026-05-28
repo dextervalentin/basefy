@@ -113,6 +113,8 @@ function homeSearchLevelUpRuleProducts($conn, array $rule, int $vendorId = 0): a
     $filters = ['limit' => 20, 'q' => $query];
     if ($vendorId > 0) $filters['vendor_id'] = $vendorId;
     return sfListProducts($conn, $filters);
+
+  
 }
 
 function homeListLevelUpBestSellers($conn, int $vendorId, int $limit = 10): array
